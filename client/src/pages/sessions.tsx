@@ -31,6 +31,9 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  UserCheck,
+  Monitor,
+  Layers,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,13 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Session, InsertSession, Program, Trainer } from "@shared/schema";
-
-const sessionStatuses = [
-  { value: "planned", label: "Planifiée" },
-  { value: "ongoing", label: "En cours" },
-  { value: "completed", label: "Terminée" },
-  { value: "cancelled", label: "Annulée" },
-];
+import { SESSION_STATUSES, MODALITIES } from "@shared/schema";
 
 function SessionStatusBadge({ status }: { status: string }) {
   const variants: Record<string, string> = {
@@ -54,13 +51,47 @@ function SessionStatusBadge({ status }: { status: string }) {
     completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     cancelled: "bg-destructive/10 text-destructive",
   };
-  const labels: Record<string, string> = {
-    planned: "Planifiée",
-    ongoing: "En cours",
-    completed: "Terminée",
-    cancelled: "Annulée",
-  };
+  const labels: Record<string, string> = {};
+  SESSION_STATUSES.forEach((s) => { labels[s.value] = s.label; });
   return <Badge variant="outline" className={variants[status] || ""}>{labels[status] || status}</Badge>;
+}
+
+function CapacityBadge({ enrolled, max }: { enrolled: number; max: number }) {
+  const remaining = max - enrolled;
+  const isFull = remaining <= 0;
+  return (
+    <Badge
+      variant="outline"
+      className={
+        isFull
+          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs gap-1"
+          : remaining <= 3
+            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs gap-1"
+            : "text-xs gap-1"
+      }
+      data-testid="badge-capacity"
+    >
+      <Users className="w-3 h-3" />
+      {isFull ? "Complet" : `${remaining} place${remaining > 1 ? "s" : ""} restante${remaining > 1 ? "s" : ""}`}
+    </Badge>
+  );
+}
+
+function ModalityIcon({ modality }: { modality: string }) {
+  const icons: Record<string, typeof Monitor> = {
+    presentiel: MapPin,
+    distanciel: Monitor,
+    blended: Layers,
+  };
+  const labels: Record<string, string> = {};
+  MODALITIES.forEach((m) => { labels[m.value] = m.label; });
+  const Icon = icons[modality] || MapPin;
+  return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      <Icon className="w-3.5 h-3.5 shrink-0" />
+      {labels[modality] || modality}
+    </span>
+  );
 }
 
 function SessionForm({
@@ -82,6 +113,7 @@ function SessionForm({
   const [startDate, setStartDate] = useState(session?.startDate || "");
   const [endDate, setEndDate] = useState(session?.endDate || "");
   const [location, setLocation] = useState(session?.location || "");
+  const [modality, setModality] = useState(session?.modality || "presentiel");
   const [maxParticipants, setMaxParticipants] = useState(session?.maxParticipants?.toString() || "12");
   const [status, setStatus] = useState(session?.status || "planned");
   const [notes, setNotes] = useState(session?.notes || "");
@@ -95,6 +127,7 @@ function SessionForm({
       startDate,
       endDate,
       location: location || null,
+      modality,
       maxParticipants: parseInt(maxParticipants) || 12,
       status,
       notes: notes || null,
@@ -105,21 +138,12 @@ function SessionForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="session-title">Titre de la session</Label>
-        <Input
-          id="session-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ex: Session Mars 2026"
-          required
-          data-testid="input-session-title"
-        />
+        <Input id="session-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Session Mars 2026" required data-testid="input-session-title" />
       </div>
       <div className="space-y-2">
-        <Label>Formation associée</Label>
+        <Label>Formation associ\u00e9e</Label>
         <Select value={programId} onValueChange={setProgramId} required>
-          <SelectTrigger data-testid="select-session-program">
-            <SelectValue placeholder="Sélectionner une formation" />
-          </SelectTrigger>
+          <SelectTrigger data-testid="select-session-program"><SelectValue placeholder="S\u00e9lectionner une formation" /></SelectTrigger>
           <SelectContent>
             {programs.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
@@ -130,9 +154,7 @@ function SessionForm({
       <div className="space-y-2">
         <Label>Formateur</Label>
         <Select value={trainerId} onValueChange={setTrainerId}>
-          <SelectTrigger data-testid="select-session-trainer">
-            <SelectValue placeholder="Sélectionner un formateur" />
-          </SelectTrigger>
+          <SelectTrigger data-testid="select-session-trainer"><SelectValue placeholder="S\u00e9lectionner un formateur" /></SelectTrigger>
           <SelectContent>
             {trainers.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
@@ -142,59 +164,41 @@ function SessionForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="start-date">Date de début</Label>
-          <Input
-            id="start-date"
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            required
-            data-testid="input-session-start"
-          />
+          <Label htmlFor="start-date">Date de d\u00e9but</Label>
+          <Input id="start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required data-testid="input-session-start" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="end-date">Date de fin</Label>
-          <Input
-            id="end-date"
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            required
-            data-testid="input-session-end"
-          />
+          <Input id="end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required data-testid="input-session-end" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="location">Lieu</Label>
-          <Input
-            id="location"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="Ex: Paris, en ligne..."
-            data-testid="input-session-location"
-          />
+          <Label>Modalit\u00e9</Label>
+          <Select value={modality} onValueChange={setModality}>
+            <SelectTrigger data-testid="select-session-modality"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {MODALITIES.map((m) => (
+                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="max-participants">Places max</Label>
-          <Input
-            id="max-participants"
-            type="number"
-            value={maxParticipants}
-            onChange={(e) => setMaxParticipants(e.target.value)}
-            min="1"
-            data-testid="input-session-max"
-          />
+          <Input id="max-participants" type="number" value={maxParticipants} onChange={(e) => setMaxParticipants(e.target.value)} min="1" data-testid="input-session-max" />
         </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="location">Lieu</Label>
+        <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex: Paris, CHU Bordeaux..." data-testid="input-session-location" />
       </div>
       <div className="space-y-2">
         <Label>Statut</Label>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger data-testid="select-session-status">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger data-testid="select-session-status"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {sessionStatuses.map((s) => (
+            {SESSION_STATUSES.map((s) => (
               <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
             ))}
           </SelectContent>
@@ -202,18 +206,11 @@ function SessionForm({
       </div>
       <div className="space-y-2">
         <Label htmlFor="notes">Notes</Label>
-        <Textarea
-          id="notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notes supplémentaires..."
-          className="resize-none"
-          data-testid="input-session-notes"
-        />
+        <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes suppl\u00e9mentaires..." className="resize-none" data-testid="input-session-notes" />
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending} data-testid="button-session-submit">
-          {isPending ? "Enregistrement..." : session ? "Modifier" : "Créer"}
+          {isPending ? "Enregistrement..." : session ? "Modifier" : "Cr\u00e9er"}
         </Button>
       </div>
     </form>
@@ -235,15 +232,29 @@ export default function Sessions() {
   const { data: trainers } = useQuery<Trainer[]>({
     queryKey: ["/api/trainers"],
   });
+  const { data: enrollmentCounts } = useQuery<Record<string, number>>({
+    queryKey: ["/api/enrollment-counts"],
+    queryFn: async () => {
+      const res = await fetch("/api/enrollments");
+      const enrollments = await res.json();
+      const counts: Record<string, number> = {};
+      for (const e of enrollments) {
+        if (e.status !== "cancelled") {
+          counts[e.sessionId] = (counts[e.sessionId] || 0) + 1;
+        }
+      }
+      return counts;
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: (data: InsertSession) => apiRequest("POST", "/api/sessions", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       setDialogOpen(false);
-      toast({ title: "Session créée avec succès" });
+      toast({ title: "Session cr\u00e9\u00e9e avec succ\u00e8s" });
     },
-    onError: () => toast({ title: "Erreur lors de la création", variant: "destructive" }),
+    onError: () => toast({ title: "Erreur lors de la cr\u00e9ation", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -253,7 +264,7 @@ export default function Sessions() {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       setDialogOpen(false);
       setEditSession(undefined);
-      toast({ title: "Session modifiée avec succès" });
+      toast({ title: "Session modifi\u00e9e avec succ\u00e8s" });
     },
     onError: () => toast({ title: "Erreur lors de la modification", variant: "destructive" }),
   });
@@ -262,7 +273,7 @@ export default function Sessions() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/sessions/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      toast({ title: "Session supprimée" });
+      toast({ title: "Session supprim\u00e9e" });
     },
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
@@ -278,12 +289,9 @@ export default function Sessions() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-sessions-title">Sessions</h1>
-          <p className="text-muted-foreground mt-1">Planifiez et gérez vos sessions de formation</p>
+          <p className="text-muted-foreground mt-1">Planifiez et g\u00e9rez vos sessions de formation</p>
         </div>
-        <Button
-          onClick={() => { setEditSession(undefined); setDialogOpen(true); }}
-          data-testid="button-create-session"
-        >
+        <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
           <Plus className="w-4 h-4 mr-2" />
           Nouvelle session
         </Button>
@@ -291,26 +299,13 @@ export default function Sessions() {
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher une session..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-sessions"
-        />
+        <Input placeholder="Rechercher une session..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-sessions" />
       </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-5">
-                <Skeleton className="h-5 w-3/4 mb-3" />
-                <Skeleton className="h-4 w-full mb-2" />
-                <Skeleton className="h-4 w-1/2 mb-4" />
-                <Skeleton className="h-6 w-20" />
-              </CardContent>
-            </Card>
+            <Card key={i}><CardContent className="p-5"><Skeleton className="h-5 w-3/4 mb-3" /><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-1/2 mb-4" /><Skeleton className="h-6 w-20" /></CardContent></Card>
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -318,12 +313,12 @@ export default function Sessions() {
           <Calendar className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
           <h3 className="text-lg font-medium mb-1">Aucune session</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun résultat pour votre recherche" : "Créez votre première session de formation"}
+            {search ? "Aucun r\u00e9sultat pour votre recherche" : "Cr\u00e9ez votre premi\u00e8re session de formation"}
           </p>
           {!search && (
             <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-session">
               <Plus className="w-4 h-4 mr-2" />
-              Créer une session
+              Cr\u00e9er une session
             </Button>
           )}
         </div>
@@ -332,6 +327,7 @@ export default function Sessions() {
           {filtered.map((session) => {
             const program = programs?.find((p) => p.id === session.programId);
             const trainer = trainers?.find((t) => t.id === session.trainerId);
+            const enrolledCount = enrollmentCounts?.[session.id] || 0;
             return (
               <Card key={session.id} className="hover-elevate" data-testid={`card-session-${session.id}`}>
                 <CardContent className="p-5">
@@ -339,7 +335,7 @@ export default function Sessions() {
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold truncate">{session.title}</h3>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {program?.title || "Formation non trouvée"}
+                        {program?.title || "Formation non trouv\u00e9e"}
                       </p>
                     </div>
                     <DropdownMenu>
@@ -349,16 +345,11 @@ export default function Sessions() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => { setEditSession(session); setDialogOpen(true); }}
-                        >
+                        <DropdownMenuItem onClick={() => { setEditSession(session); setDialogOpen(true); }} data-testid={`button-edit-session-${session.id}`}>
                           <Pencil className="w-4 h-4 mr-2" />
                           Modifier
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => deleteMutation.mutate(session.id)}
-                        >
+                        <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(session.id)} data-testid={`button-delete-session-${session.id}`}>
                           <Trash2 className="w-4 h-4 mr-2" />
                           Supprimer
                         </DropdownMenuItem>
@@ -367,6 +358,7 @@ export default function Sessions() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <SessionStatusBadge status={session.status} />
+                    <CapacityBadge enrolled={enrolledCount} max={session.maxParticipants} />
                   </div>
                   <div className="space-y-1.5 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
@@ -375,6 +367,7 @@ export default function Sessions() {
                         {new Date(session.startDate).toLocaleDateString("fr-FR")} - {new Date(session.endDate).toLocaleDateString("fr-FR")}
                       </span>
                     </div>
+                    <ModalityIcon modality={session.modality} />
                     {session.location && (
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 shrink-0" />
@@ -383,13 +376,13 @@ export default function Sessions() {
                     )}
                     {trainer && (
                       <div className="flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5 shrink-0" />
+                        <UserCheck className="w-3.5 h-3.5 shrink-0" />
                         <span>{trainer.firstName} {trainer.lastName}</span>
                       </div>
                     )}
                     <div className="flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 shrink-0" />
-                      <span>{session.maxParticipants} places max</span>
+                      <span>{enrolledCount}/{session.maxParticipants} inscrits</span>
                     </div>
                   </div>
                 </CardContent>

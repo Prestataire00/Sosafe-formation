@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -31,6 +32,11 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  Award,
+  RefreshCw,
+  Monitor,
+  MapPin,
+  Layers,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,28 +45,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Program, InsertProgram } from "@shared/schema";
-
-const categories = [
-  "Développement web",
-  "Design",
-  "Marketing digital",
-  "Management",
-  "Bureautique",
-  "Langues",
-  "Sécurité",
-  "Data & IA",
-];
+import { PROGRAM_CATEGORIES, MODALITIES } from "@shared/schema";
 
 const levels = [
-  { value: "beginner", label: "Débutant" },
-  { value: "intermediate", label: "Intermédiaire" },
-  { value: "advanced", label: "Avancé" },
+  { value: "beginner", label: "D\u00e9butant" },
+  { value: "intermediate", label: "Interm\u00e9diaire" },
+  { value: "advanced", label: "Avanc\u00e9" },
 ];
 
 const statusOptions = [
   { value: "draft", label: "Brouillon" },
-  { value: "published", label: "Publié" },
-  { value: "archived", label: "Archivé" },
+  { value: "published", label: "Publi\u00e9" },
+  { value: "archived", label: "Archiv\u00e9" },
 ];
 
 function ProgramStatusBadge({ status }: { status: string }) {
@@ -71,19 +67,39 @@ function ProgramStatusBadge({ status }: { status: string }) {
   };
   const labels: Record<string, string> = {
     draft: "Brouillon",
-    published: "Publié",
-    archived: "Archivé",
+    published: "Publi\u00e9",
+    archived: "Archiv\u00e9",
   };
   return <Badge variant="outline" className={variants[status] || ""}>{labels[status] || status}</Badge>;
 }
 
 function LevelBadge({ level }: { level: string }) {
   const labels: Record<string, string> = {
-    beginner: "Débutant",
-    intermediate: "Intermédiaire",
-    advanced: "Avancé",
+    beginner: "D\u00e9butant",
+    intermediate: "Interm\u00e9diaire",
+    advanced: "Avanc\u00e9",
   };
   return <Badge variant="secondary" className="text-xs">{labels[level] || level}</Badge>;
+}
+
+function ModalityBadge({ modality }: { modality: string }) {
+  const icons: Record<string, typeof Monitor> = {
+    presentiel: MapPin,
+    distanciel: Monitor,
+    blended: Layers,
+  };
+  const labels: Record<string, string> = {
+    presentiel: "Pr\u00e9sentiel",
+    distanciel: "Distanciel",
+    blended: "Blended",
+  };
+  const Icon = icons[modality] || MapPin;
+  return (
+    <Badge variant="outline" className="text-xs gap-1">
+      <Icon className="w-3 h-3" />
+      {labels[modality] || modality}
+    </Badge>
+  );
 }
 
 function ProgramForm({
@@ -97,12 +113,16 @@ function ProgramForm({
 }) {
   const [title, setTitle] = useState(program?.title || "");
   const [description, setDescription] = useState(program?.description || "");
-  const [category, setCategory] = useState(program?.category || categories[0]);
+  const [category, setCategory] = useState(program?.category || PROGRAM_CATEGORIES[0]);
   const [duration, setDuration] = useState(program?.duration?.toString() || "14");
-  const [price, setPrice] = useState(program?.price?.toString() || "1500");
+  const [price, setPrice] = useState(program?.price?.toString() || "500");
   const [level, setLevel] = useState(program?.level || "beginner");
   const [objectives, setObjectives] = useState(program?.objectives || "");
+  const [prerequisites, setPrerequisites] = useState(program?.prerequisites || "");
+  const [modality, setModality] = useState(program?.modality || "presentiel");
   const [status, setStatus] = useState(program?.status || "draft");
+  const [certifying, setCertifying] = useState(program?.certifying || false);
+  const [recyclingMonths, setRecyclingMonths] = useState(program?.recyclingMonths?.toString() || "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +134,11 @@ function ProgramForm({
       price: parseInt(price) || 0,
       level,
       objectives: objectives || null,
+      prerequisites: prerequisites || null,
+      modality,
       status,
+      certifying,
+      recyclingMonths: recyclingMonths ? parseInt(recyclingMonths) : null,
     });
   };
 
@@ -122,35 +146,21 @@ function ProgramForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="title">Titre de la formation</Label>
-        <Input
-          id="title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ex: Formation React Avancé"
-          required
-          data-testid="input-program-title"
-        />
+        <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: AFGSU Niveau 1" required data-testid="input-program-title" />
       </div>
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description de la formation..."
-          className="resize-none"
-          data-testid="input-program-description"
-        />
+        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description de la formation..." className="resize-none" data-testid="input-program-description" />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Catégorie</Label>
+          <Label>Cat\u00e9gorie</Label>
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger data-testid="select-program-category">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {categories.map((c) => (
+              {PROGRAM_CATEGORIES.map((c) => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
             </SelectContent>
@@ -172,55 +182,63 @@ function ProgramForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="duration">Durée (heures)</Label>
-          <Input
-            id="duration"
-            type="number"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            min="1"
-            data-testid="input-program-duration"
-          />
+          <Label>Modalit\u00e9</Label>
+          <Select value={modality} onValueChange={setModality}>
+            <SelectTrigger data-testid="select-program-modality">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MODALITIES.map((m) => (
+                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Statut</Label>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger data-testid="select-program-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="duration">Dur\u00e9e (heures)</Label>
+          <Input id="duration" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} min="1" data-testid="input-program-duration" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="price">Prix (EUR)</Label>
-          <Input
-            id="price"
-            type="number"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            min="0"
-            data-testid="input-program-price"
-          />
+          <Input id="price" type="number" value={price} onChange={(e) => setPrice(e.target.value)} min="0" data-testid="input-program-price" />
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="objectives">Objectifs pédagogiques</Label>
-        <Textarea
-          id="objectives"
-          value={objectives}
-          onChange={(e) => setObjectives(e.target.value)}
-          placeholder="Les objectifs de cette formation..."
-          className="resize-none"
-          data-testid="input-program-objectives"
-        />
+        <Label htmlFor="objectives">Objectifs p\u00e9dagogiques</Label>
+        <Textarea id="objectives" value={objectives} onChange={(e) => setObjectives(e.target.value)} placeholder="Les objectifs de cette formation..." className="resize-none" data-testid="input-program-objectives" />
       </div>
       <div className="space-y-2">
-        <Label>Statut</Label>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger data-testid="select-program-status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {statusOptions.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label htmlFor="prerequisites">Pr\u00e9requis</Label>
+        <Input id="prerequisites" value={prerequisites} onChange={(e) => setPrerequisites(e.target.value)} placeholder="Ex: Aucun pr\u00e9requis" data-testid="input-program-prerequisites" />
       </div>
+      <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
+        <Switch id="certifying" checked={certifying} onCheckedChange={setCertifying} data-testid="switch-program-certifying" />
+        <Label htmlFor="certifying" className="text-sm cursor-pointer">Formation certifiante</Label>
+      </div>
+      {certifying && (
+        <div className="space-y-2">
+          <Label htmlFor="recycling">D\u00e9lai de recyclage (mois)</Label>
+          <Input id="recycling" type="number" value={recyclingMonths} onChange={(e) => setRecyclingMonths(e.target.value)} placeholder="Ex: 48 pour AFGSU" data-testid="input-program-recycling" />
+        </div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending} data-testid="button-program-submit">
-          {isPending ? "Enregistrement..." : program ? "Modifier" : "Créer"}
+          {isPending ? "Enregistrement..." : program ? "Modifier" : "Cr\u00e9er"}
         </Button>
       </div>
     </form>
@@ -242,9 +260,9 @@ export default function Programs() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
       setDialogOpen(false);
-      toast({ title: "Formation créée avec succès" });
+      toast({ title: "Formation cr\u00e9\u00e9e avec succ\u00e8s" });
     },
-    onError: () => toast({ title: "Erreur lors de la création", variant: "destructive" }),
+    onError: () => toast({ title: "Erreur lors de la cr\u00e9ation", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -254,7 +272,7 @@ export default function Programs() {
       queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
       setDialogOpen(false);
       setEditProgram(undefined);
-      toast({ title: "Formation modifiée avec succès" });
+      toast({ title: "Formation modifi\u00e9e avec succ\u00e8s" });
     },
     onError: () => toast({ title: "Erreur lors de la modification", variant: "destructive" }),
   });
@@ -263,7 +281,7 @@ export default function Programs() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/programs/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
-      toast({ title: "Formation supprimée" });
+      toast({ title: "Formation supprim\u00e9e" });
     },
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
@@ -279,12 +297,9 @@ export default function Programs() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-programs-title">Formations</h1>
-          <p className="text-muted-foreground mt-1">Gérez votre catalogue de formations</p>
+          <p className="text-muted-foreground mt-1">Catalogue des formations SO'SAFE</p>
         </div>
-        <Button
-          onClick={() => { setEditProgram(undefined); setDialogOpen(true); }}
-          data-testid="button-create-program"
-        >
+        <Button onClick={() => { setEditProgram(undefined); setDialogOpen(true); }} data-testid="button-create-program">
           <Plus className="w-4 h-4 mr-2" />
           Nouvelle formation
         </Button>
@@ -292,26 +307,13 @@ export default function Programs() {
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher une formation..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-programs"
-        />
+        <Input placeholder="Rechercher une formation..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-programs" />
       </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-5">
-                <Skeleton className="h-5 w-3/4 mb-3" />
-                <Skeleton className="h-4 w-full mb-2" />
-                <Skeleton className="h-4 w-2/3 mb-4" />
-                <Skeleton className="h-6 w-20" />
-              </CardContent>
-            </Card>
+            <Card key={i}><CardContent className="p-5"><Skeleton className="h-5 w-3/4 mb-3" /><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-2/3 mb-4" /><Skeleton className="h-6 w-20" /></CardContent></Card>
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -319,12 +321,12 @@ export default function Programs() {
           <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
           <h3 className="text-lg font-medium mb-1">Aucune formation</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun résultat pour votre recherche" : "Commencez par créer votre première formation"}
+            {search ? "Aucun r\u00e9sultat pour votre recherche" : "Commencez par cr\u00e9er votre premi\u00e8re formation"}
           </p>
           {!search && (
             <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-program">
               <Plus className="w-4 h-4 mr-2" />
-              Créer une formation
+              Cr\u00e9er une formation
             </Button>
           )}
         </div>
@@ -345,18 +347,11 @@ export default function Programs() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => { setEditProgram(program); setDialogOpen(true); }}
-                        data-testid={`button-edit-program-${program.id}`}
-                      >
+                      <DropdownMenuItem onClick={() => { setEditProgram(program); setDialogOpen(true); }} data-testid={`button-edit-program-${program.id}`}>
                         <Pencil className="w-4 h-4 mr-2" />
                         Modifier
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onClick={() => deleteMutation.mutate(program.id)}
-                        data-testid={`button-delete-program-${program.id}`}
-                      >
+                      <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(program.id)} data-testid={`button-delete-program-${program.id}`}>
                         <Trash2 className="w-4 h-4 mr-2" />
                         Supprimer
                       </DropdownMenuItem>
@@ -369,8 +364,15 @@ export default function Programs() {
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <LevelBadge level={program.level} />
                   <ProgramStatusBadge status={program.status} />
+                  <ModalityBadge modality={program.modality} />
+                  {program.certifying && (
+                    <Badge variant="outline" className="text-xs gap-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                      <Award className="w-3 h-3" />
+                      Certifiante
+                    </Badge>
+                  )}
                 </div>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
                     {program.duration}h
@@ -379,6 +381,12 @@ export default function Programs() {
                     <Euro className="w-3.5 h-3.5" />
                     {program.price.toLocaleString("fr-FR")} EUR
                   </span>
+                  {program.recyclingMonths && (
+                    <span className="flex items-center gap-1">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      {program.recyclingMonths} mois
+                    </span>
+                  )}
                 </div>
               </CardContent>
             </Card>

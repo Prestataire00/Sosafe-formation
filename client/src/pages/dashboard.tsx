@@ -11,8 +11,12 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  Building2,
+  Award,
+  UserCheck,
 } from "lucide-react";
-import type { Program, Session, Trainer, Trainee } from "@shared/schema";
+import type { Program, Session, Trainer, Trainee, Enterprise, Enrollment } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 
 function StatCard({
   title,
@@ -43,9 +47,7 @@ function StatCard({
         ) : (
           <>
             <div className="text-2xl font-bold" data-testid={`${testId}-value`}>{value}</div>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
-            )}
+            {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
           </>
         )}
       </CardContent>
@@ -55,16 +57,18 @@ function StatCard({
 
 function SessionStatusBadge({ status }: { status: string }) {
   const variants: Record<string, { label: string; className: string }> = {
-    planned: { label: "Planifiée", className: "bg-accent text-accent-foreground" },
+    planned: { label: "Planifi\u00e9e", className: "bg-accent text-accent-foreground" },
     ongoing: { label: "En cours", className: "bg-primary/10 text-primary dark:bg-primary/20" },
-    completed: { label: "Terminée", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-    cancelled: { label: "Annulée", className: "bg-destructive/10 text-destructive" },
+    completed: { label: "Termin\u00e9e", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+    cancelled: { label: "Annul\u00e9e", className: "bg-destructive/10 text-destructive" },
   };
   const v = variants[status] || variants.planned;
   return <Badge variant="outline" className={v.className}>{v.label}</Badge>;
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
+
   const { data: programs, isLoading: loadingPrograms } = useQuery<Program[]>({
     queryKey: ["/api/programs"],
   });
@@ -77,22 +81,36 @@ export default function Dashboard() {
   const { data: trainees, isLoading: loadingTrainees } = useQuery<Trainee[]>({
     queryKey: ["/api/trainees"],
   });
+  const { data: enterprises, isLoading: loadingEnterprises } = useQuery<Enterprise[]>({
+    queryKey: ["/api/enterprises"],
+  });
+  const { data: enrollments, isLoading: loadingEnrollments } = useQuery<Enrollment[]>({
+    queryKey: ["/api/enrollments"],
+  });
 
-  const loading = loadingPrograms || loadingSessions || loadingTrainers || loadingTrainees;
+  const loading = loadingPrograms || loadingSessions || loadingTrainers || loadingTrainees || loadingEnterprises || loadingEnrollments;
 
-  const activeSessions = sessions?.filter(
-    (s) => s.status === "ongoing" || s.status === "planned"
-  ) || [];
+  const activeSessions = sessions?.filter((s) => s.status === "ongoing" || s.status === "planned") || [];
+  const certifyingPrograms = programs?.filter((p) => p.certifying) || [];
+  const activeEnrollments = enrollments?.filter((e) => e.status !== "cancelled") || [];
 
   const recentSessions = sessions
     ?.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
     .slice(0, 5) || [];
 
+  const greeting = user ? `Bonjour, ${user.firstName}` : "Tableau de bord";
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">Tableau de bord</h1>
-        <p className="text-muted-foreground mt-1">Vue d'ensemble de votre activité de formation</p>
+        <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">{greeting}</h1>
+        <p className="text-muted-foreground mt-1">
+          {user?.role === "admin"
+            ? "Vue d'ensemble de l'activit\u00e9 SO'SAFE"
+            : user?.role === "trainer"
+              ? "Vos sessions et formations"
+              : "Votre espace de formation"}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -100,48 +118,57 @@ export default function Dashboard() {
           title="Formations"
           value={programs?.length ?? 0}
           icon={BookOpen}
-          subtitle="Programmes actifs"
+          subtitle={`${certifyingPrograms.length} certifiante${certifyingPrograms.length > 1 ? "s" : ""}`}
           loading={loading}
           testId="card-stat-programs"
         />
         <StatCard
-          title="Sessions"
+          title="Sessions actives"
           value={activeSessions.length}
           icon={Calendar}
-          subtitle="En cours / Planifiées"
+          subtitle="En cours / Planifi\u00e9es"
           loading={loading}
           testId="card-stat-sessions"
         />
         <StatCard
-          title="Stagiaires"
-          value={trainees?.length ?? 0}
-          icon={GraduationCap}
-          subtitle="Inscrits"
+          title="Inscriptions"
+          value={activeEnrollments.length}
+          icon={UserCheck}
+          subtitle="Stagiaires inscrits"
           loading={loading}
-          testId="card-stat-trainees"
+          testId="card-stat-enrollments"
         />
-        <StatCard
-          title="Formateurs"
-          value={trainers?.length ?? 0}
-          icon={Users}
-          subtitle="Disponibles"
-          loading={loading}
-          testId="card-stat-trainers"
-        />
+        {user?.role === "admin" ? (
+          <StatCard
+            title="Entreprises"
+            value={enterprises?.length ?? 0}
+            icon={Building2}
+            subtitle="Clients actifs"
+            loading={loading}
+            testId="card-stat-enterprises"
+          />
+        ) : (
+          <StatCard
+            title="Formateurs"
+            value={trainers?.length ?? 0}
+            icon={Users}
+            subtitle="Disponibles"
+            loading={loading}
+            testId="card-stat-trainers"
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base font-semibold">Sessions récentes</CardTitle>
+            <CardTitle className="text-base font-semibold">Sessions r\u00e9centes</CardTitle>
             <Clock className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-14 w-full" />
-                ))}
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
               </div>
             ) : recentSessions.length === 0 ? (
               <div className="text-center py-8">
@@ -152,16 +179,13 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {recentSessions.map((session) => {
                   const program = programs?.find((p) => p.id === session.programId);
+                  const enrolledCount = enrollments?.filter((e) => e.sessionId === session.id && e.status !== "cancelled").length || 0;
                   return (
-                    <div
-                      key={session.id}
-                      className="flex items-center justify-between gap-3 p-3 rounded-md bg-accent/30"
-                      data-testid={`card-session-${session.id}`}
-                    >
+                    <div key={session.id} className="flex items-center justify-between gap-3 p-3 rounded-md bg-accent/30" data-testid={`dashboard-session-${session.id}`}>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{session.title}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {program?.title} &middot; {new Date(session.startDate).toLocaleDateString("fr-FR")}
+                          {program?.title} &middot; {new Date(session.startDate).toLocaleDateString("fr-FR")} &middot; {enrolledCount}/{session.maxParticipants} inscrits
                         </p>
                       </div>
                       <SessionStatusBadge status={session.status} />
@@ -175,7 +199,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base font-semibold">Activité</CardTitle>
+            <CardTitle className="text-base font-semibold">Activit\u00e9</CardTitle>
             <TrendingUp className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -185,7 +209,7 @@ export default function Dashboard() {
                   <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Sessions terminées</p>
+                  <p className="text-sm font-medium">Sessions termin\u00e9es</p>
                   <p className="text-xs text-muted-foreground">
                     {sessions?.filter((s) => s.status === "completed").length ?? 0} sessions
                   </p>
@@ -207,20 +231,20 @@ export default function Dashboard() {
                   <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Sessions planifiées</p>
+                  <p className="text-sm font-medium">Sessions planifi\u00e9es</p>
                   <p className="text-xs text-muted-foreground">
                     {sessions?.filter((s) => s.status === "planned").length ?? 0} sessions
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
-                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-accent">
-                  <BookOpen className="w-4 h-4 text-foreground" />
+                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-amber-100 dark:bg-amber-900/30">
+                  <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Formations publiées</p>
+                  <p className="text-sm font-medium">Formations certifiantes</p>
                   <p className="text-xs text-muted-foreground">
-                    {programs?.filter((p) => p.status === "published").length ?? 0} formations
+                    {certifyingPrograms.length} formations
                   </p>
                 </div>
               </div>
