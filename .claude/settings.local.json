@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(psql:*)",
+      "Bash(curl:*)",
+      "Bash(node -e:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:app.digiforma.com)",
+      "Bash(wc:*)",
+      "WebSearch",
+      "WebFetch(domain:www.digiforma.com)",
+      "WebFetch(domain:help.digiforma.com)"
+    ]
+  }
+}

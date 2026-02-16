@@ -42,12 +42,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (username: string, password: string) => {
     const res = await apiRequest("POST", "/api/auth/login", { username, password });
     const data = await res.json();
+    if (!data || !data.id) {
+      throw new Error("Réponse invalide du serveur");
+    }
     setUser(data);
   }, []);
 
   const register = useCallback(async (data: { username: string; password: string; role: string; firstName: string; lastName: string; email?: string }) => {
     const res = await apiRequest("POST", "/api/auth/register", data);
     const userData = await res.json();
+    if (!userData || !userData.id) {
+      throw new Error("Réponse invalide du serveur");
+    }
     setUser(userData);
   }, []);
 

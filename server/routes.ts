@@ -5,7 +5,16 @@ import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole } f
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
   insertSessionSchema, insertEnrollmentSchema, insertEnterpriseSchema,
+  insertEmailTemplateSchema, insertEmailLogSchema,
+  insertDocumentTemplateSchema, insertGeneratedDocumentSchema,
+  insertProspectSchema, insertQuoteSchema, insertInvoiceSchema, insertPaymentSchema,
+  insertElearningModuleSchema, insertElearningBlockSchema, insertQuizQuestionSchema, insertLearnerProgressSchema,
+  insertSurveyTemplateSchema, insertSurveyResponseSchema,
+  insertQualityActionSchema,
+  insertAttendanceSheetSchema, insertAttendanceRecordSchema,
+  insertAutomationRuleSchema, insertOrganizationSettingSchema,
   loginSchema, registerSchema,
+  TEMPLATE_VARIABLES,
 } from "@shared/schema";
 
 export async function registerRoutes(
@@ -14,6 +23,10 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   setupAuth(app);
+
+  // ============================================================
+  // AUTH ROUTES
+  // ============================================================
 
   app.post("/api/auth/register", async (req, res) => {
     const parsed = registerSchema.safeParse(req.body);
@@ -67,6 +80,10 @@ export async function registerRoutes(
     res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email });
   });
 
+  // ============================================================
+  // ENTERPRISES
+  // ============================================================
+
   app.get("/api/enterprises", async (_req, res) => {
     const result = await storage.getEnterprises();
     res.json(result);
@@ -97,6 +114,10 @@ export async function registerRoutes(
     await storage.deleteEnterprise(req.params.id);
     res.status(204).send();
   });
+
+  // ============================================================
+  // TRAINERS
+  // ============================================================
 
   app.get("/api/trainers", async (_req, res) => {
     const result = await storage.getTrainers();
@@ -129,6 +150,10 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // ============================================================
+  // TRAINEES
+  // ============================================================
+
   app.get("/api/trainees", async (_req, res) => {
     const result = await storage.getTrainees();
     res.json(result);
@@ -160,6 +185,10 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // ============================================================
+  // PROGRAMS
+  // ============================================================
+
   app.get("/api/programs", async (_req, res) => {
     const result = await storage.getPrograms();
     res.json(result);
@@ -190,6 +219,10 @@ export async function registerRoutes(
     await storage.deleteProgram(req.params.id);
     res.status(204).send();
   });
+
+  // ============================================================
+  // SESSIONS
+  // ============================================================
 
   app.get("/api/sessions", async (_req, res) => {
     const result = await storage.getSessions();
@@ -227,6 +260,10 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // ============================================================
+  // ENROLLMENTS
+  // ============================================================
+
   app.get("/api/enrollments", async (req, res) => {
     const sessionId = req.query.sessionId as string | undefined;
     const result = await storage.getEnrollments(sessionId);
@@ -251,6 +288,762 @@ export async function registerRoutes(
   app.delete("/api/enrollments/:id", async (req, res) => {
     await storage.deleteEnrollment(req.params.id);
     res.status(204).send();
+  });
+
+  // ============================================================
+  // EMAIL TEMPLATES
+  // ============================================================
+
+  app.get("/api/email-templates", async (_req, res) => {
+    const result = await storage.getEmailTemplates();
+    res.json(result);
+  });
+
+  app.get("/api/email-templates/:id", async (req, res) => {
+    const template = await storage.getEmailTemplate(req.params.id);
+    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    res.json(template);
+  });
+
+  app.post("/api/email-templates", async (req, res) => {
+    const parsed = insertEmailTemplateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.createEmailTemplate(parsed.data);
+    res.status(201).json(template);
+  });
+
+  app.patch("/api/email-templates/:id", async (req, res) => {
+    const parsed = insertEmailTemplateSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.updateEmailTemplate(req.params.id, parsed.data);
+    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    res.json(template);
+  });
+
+  app.delete("/api/email-templates/:id", async (req, res) => {
+    await storage.deleteEmailTemplate(req.params.id);
+    res.status(204).send();
+  });
+
+  app.post("/api/email-templates/:id/preview", async (req, res) => {
+    const template = await storage.getEmailTemplate(req.params.id);
+    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+
+    const exampleValues: Record<string, string> = {
+      "{learner_name}": "Jean Dupont",
+      "{learner_first_name}": "Jean",
+      "{learner_last_name}": "Dupont",
+      "{learner_email}": "jean.dupont@example.com",
+      "{learner_company}": "H\u00f4pital Saint-Louis",
+      "{session_title}": "AFGSU Niveau 1 - Session Mars",
+      "{start_date}": "15/03/2026",
+      "{end_date}": "17/03/2026",
+      "{location}": "Paris - Centre de formation",
+      "{modality}": "Pr\u00e9sentiel",
+      "{program_title}": "AFGSU Niveau 1",
+      "{program_duration}": "14 heures",
+      "{program_price}": "500 EUR",
+      "{program_objectives}": "Ma\u00eetriser les gestes d'urgence",
+      "{org_name}": "SO'SAFE Formation",
+      "{org_address}": "12 rue de la Sant\u00e9, 75013 Paris",
+      "{org_siret}": "123 456 789 00012",
+      "{org_email}": "contact@sosafe.fr",
+      "{org_phone}": "01 23 45 67 89",
+    };
+
+    let renderedSubject = template.subject;
+    let renderedBody = template.body;
+    for (const [key, value] of Object.entries(exampleValues)) {
+      renderedSubject = renderedSubject.replaceAll(key, value);
+      renderedBody = renderedBody.replaceAll(key, value);
+    }
+
+    res.json({ subject: renderedSubject, body: renderedBody });
+  });
+
+  // ============================================================
+  // EMAIL LOGS
+  // ============================================================
+
+  app.get("/api/email-logs", async (_req, res) => {
+    const result = await storage.getEmailLogs();
+    res.json(result);
+  });
+
+  app.post("/api/email-logs", async (req, res) => {
+    const parsed = insertEmailLogSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const log = await storage.createEmailLog(parsed.data);
+    res.status(201).json(log);
+  });
+
+  // ============================================================
+  // DOCUMENT TEMPLATES
+  // ============================================================
+
+  app.get("/api/document-templates", async (_req, res) => {
+    const result = await storage.getDocumentTemplates();
+    res.json(result);
+  });
+
+  app.get("/api/document-templates/:id", async (req, res) => {
+    const template = await storage.getDocumentTemplate(req.params.id);
+    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    res.json(template);
+  });
+
+  app.post("/api/document-templates", async (req, res) => {
+    const parsed = insertDocumentTemplateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.createDocumentTemplate(parsed.data);
+    res.status(201).json(template);
+  });
+
+  app.patch("/api/document-templates/:id", async (req, res) => {
+    const parsed = insertDocumentTemplateSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.updateDocumentTemplate(req.params.id, parsed.data);
+    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    res.json(template);
+  });
+
+  app.delete("/api/document-templates/:id", async (req, res) => {
+    await storage.deleteDocumentTemplate(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // GENERATED DOCUMENTS
+  // ============================================================
+
+  app.get("/api/generated-documents", async (_req, res) => {
+    const result = await storage.getGeneratedDocuments();
+    res.json(result);
+  });
+
+  app.post("/api/documents/generate", async (req, res) => {
+    const { templateId, sessionId, traineeId } = req.body;
+    if (!templateId) return res.status(400).json({ message: "templateId requis" });
+
+    const template = await storage.getDocumentTemplate(templateId);
+    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+
+    let content = template.content;
+    const replacements: Record<string, string> = {};
+
+    if (sessionId) {
+      const session = await storage.getSession(sessionId);
+      if (session) {
+        const program = await storage.getProgram(session.programId);
+        replacements["{session_title}"] = session.title;
+        replacements["{start_date}"] = new Date(session.startDate).toLocaleDateString("fr-FR");
+        replacements["{end_date}"] = new Date(session.endDate).toLocaleDateString("fr-FR");
+        replacements["{location}"] = session.location || "";
+        replacements["{modality}"] = session.modality;
+        if (program) {
+          replacements["{program_title}"] = program.title;
+          replacements["{program_duration}"] = `${program.duration} heures`;
+          replacements["{program_price}"] = `${program.price} EUR`;
+          replacements["{program_objectives}"] = program.objectives || "";
+        }
+      }
+    }
+
+    if (traineeId) {
+      const trainee = await storage.getTrainee(traineeId);
+      if (trainee) {
+        replacements["{learner_name}"] = `${trainee.firstName} ${trainee.lastName}`;
+        replacements["{learner_first_name}"] = trainee.firstName;
+        replacements["{learner_last_name}"] = trainee.lastName;
+        replacements["{learner_email}"] = trainee.email;
+        replacements["{learner_company}"] = trainee.company || "";
+      }
+    }
+
+    const settings = await storage.getOrganizationSettings();
+    const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
+    replacements["{org_name}"] = settingsMap["org_name"] || "SO'SAFE Formation";
+    replacements["{org_address}"] = settingsMap["org_address"] || "";
+    replacements["{org_siret}"] = settingsMap["org_siret"] || "";
+    replacements["{org_email}"] = settingsMap["org_email"] || "";
+    replacements["{org_phone}"] = settingsMap["org_phone"] || "";
+
+    for (const [key, value] of Object.entries(replacements)) {
+      content = content.replaceAll(key, value);
+    }
+
+    const doc = await storage.createGeneratedDocument({
+      templateId,
+      sessionId: sessionId || null,
+      traineeId: traineeId || null,
+      title: template.name,
+      type: template.type,
+      content,
+      status: "generated",
+    });
+
+    res.status(201).json(doc);
+  });
+
+  app.delete("/api/generated-documents/:id", async (req, res) => {
+    await storage.deleteGeneratedDocument(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // PROSPECTS
+  // ============================================================
+
+  app.get("/api/prospects", async (_req, res) => {
+    const result = await storage.getProspects();
+    res.json(result);
+  });
+
+  app.get("/api/prospects/:id", async (req, res) => {
+    const prospect = await storage.getProspect(req.params.id);
+    if (!prospect) return res.status(404).json({ message: "Prospect non trouv\u00e9" });
+    res.json(prospect);
+  });
+
+  app.post("/api/prospects", async (req, res) => {
+    const parsed = insertProspectSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const prospect = await storage.createProspect(parsed.data);
+    res.status(201).json(prospect);
+  });
+
+  app.patch("/api/prospects/:id", async (req, res) => {
+    const parsed = insertProspectSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const prospect = await storage.updateProspect(req.params.id, parsed.data);
+    if (!prospect) return res.status(404).json({ message: "Prospect non trouv\u00e9" });
+    res.json(prospect);
+  });
+
+  app.delete("/api/prospects/:id", async (req, res) => {
+    await storage.deleteProspect(req.params.id);
+    res.status(204).send();
+  });
+
+  app.post("/api/prospects/:id/convert", async (req, res) => {
+    const prospect = await storage.getProspect(req.params.id);
+    if (!prospect) return res.status(404).json({ message: "Prospect non trouv\u00e9" });
+
+    const enterprise = await storage.createEnterprise({
+      name: prospect.companyName,
+      contactName: prospect.contactName,
+      contactEmail: prospect.contactEmail,
+      contactPhone: prospect.contactPhone,
+      status: "active",
+      siret: null,
+      address: null,
+      city: null,
+      postalCode: null,
+      sector: null,
+    });
+
+    await storage.updateProspect(req.params.id, { status: "won" });
+    res.status(201).json(enterprise);
+  });
+
+  // ============================================================
+  // QUOTES
+  // ============================================================
+
+  app.get("/api/quotes", async (_req, res) => {
+    const result = await storage.getQuotes();
+    res.json(result);
+  });
+
+  app.get("/api/quotes/next-number", async (_req, res) => {
+    const number = await storage.getNextQuoteNumber();
+    res.json({ number });
+  });
+
+  app.get("/api/quotes/:id", async (req, res) => {
+    const quote = await storage.getQuote(req.params.id);
+    if (!quote) return res.status(404).json({ message: "Devis non trouv\u00e9" });
+    res.json(quote);
+  });
+
+  app.post("/api/quotes", async (req, res) => {
+    const parsed = insertQuoteSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const quote = await storage.createQuote(parsed.data);
+    res.status(201).json(quote);
+  });
+
+  app.patch("/api/quotes/:id", async (req, res) => {
+    const parsed = insertQuoteSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const quote = await storage.updateQuote(req.params.id, parsed.data);
+    if (!quote) return res.status(404).json({ message: "Devis non trouv\u00e9" });
+    res.json(quote);
+  });
+
+  app.delete("/api/quotes/:id", async (req, res) => {
+    await storage.deleteQuote(req.params.id);
+    res.status(204).send();
+  });
+
+  app.post("/api/quotes/:id/convert-to-invoice", async (req, res) => {
+    const quote = await storage.getQuote(req.params.id);
+    if (!quote) return res.status(404).json({ message: "Devis non trouv\u00e9" });
+
+    const invoiceNumber = await storage.getNextInvoiceNumber();
+    const invoice = await storage.createInvoice({
+      number: invoiceNumber,
+      title: quote.title,
+      quoteId: quote.id,
+      enterpriseId: quote.enterpriseId,
+      sessionId: null,
+      lineItems: quote.lineItems,
+      subtotal: quote.subtotal,
+      taxRate: quote.taxRate,
+      taxAmount: quote.taxAmount,
+      total: quote.total,
+      paidAmount: 0,
+      status: "draft",
+      dueDate: null,
+      notes: quote.notes,
+    });
+
+    await storage.updateQuote(req.params.id, { status: "accepted" });
+    res.status(201).json(invoice);
+  });
+
+  // ============================================================
+  // INVOICES
+  // ============================================================
+
+  app.get("/api/invoices", async (_req, res) => {
+    const result = await storage.getInvoices();
+    res.json(result);
+  });
+
+  app.get("/api/invoices/next-number", async (_req, res) => {
+    const number = await storage.getNextInvoiceNumber();
+    res.json({ number });
+  });
+
+  app.get("/api/invoices/stats", async (_req, res) => {
+    const allInvoices = await storage.getInvoices();
+    const total = allInvoices.reduce((sum, inv) => sum + inv.total, 0);
+    const paid = allInvoices.filter(i => i.status === "paid").reduce((sum, inv) => sum + inv.total, 0);
+    const pending = allInvoices.filter(i => i.status === "sent" || i.status === "partial").reduce((sum, inv) => sum + inv.total - inv.paidAmount, 0);
+    const overdue = allInvoices.filter(i => i.status === "overdue").reduce((sum, inv) => sum + inv.total - inv.paidAmount, 0);
+    res.json({ total, paid, pending, overdue, count: allInvoices.length });
+  });
+
+  app.get("/api/invoices/:id", async (req, res) => {
+    const invoice = await storage.getInvoice(req.params.id);
+    if (!invoice) return res.status(404).json({ message: "Facture non trouv\u00e9e" });
+    res.json(invoice);
+  });
+
+  app.post("/api/invoices", async (req, res) => {
+    const parsed = insertInvoiceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const invoice = await storage.createInvoice(parsed.data);
+    res.status(201).json(invoice);
+  });
+
+  app.patch("/api/invoices/:id", async (req, res) => {
+    const parsed = insertInvoiceSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const invoice = await storage.updateInvoice(req.params.id, parsed.data);
+    if (!invoice) return res.status(404).json({ message: "Facture non trouv\u00e9e" });
+    res.json(invoice);
+  });
+
+  app.delete("/api/invoices/:id", async (req, res) => {
+    await storage.deleteInvoice(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // PAYMENTS
+  // ============================================================
+
+  app.get("/api/payments", async (req, res) => {
+    const invoiceId = req.query.invoiceId as string | undefined;
+    const result = await storage.getPayments(invoiceId);
+    res.json(result);
+  });
+
+  app.post("/api/payments", async (req, res) => {
+    const parsed = insertPaymentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const payment = await storage.createPayment(parsed.data);
+
+    // Update invoice paid amount
+    const invoice = await storage.getInvoice(parsed.data.invoiceId);
+    if (invoice) {
+      const allPayments = await storage.getPayments(invoice.id);
+      const totalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0);
+      const newStatus = totalPaid >= invoice.total ? "paid" : "partial";
+      await storage.updateInvoice(invoice.id, { paidAmount: totalPaid, status: newStatus });
+    }
+
+    res.status(201).json(payment);
+  });
+
+  // ============================================================
+  // E-LEARNING MODULES
+  // ============================================================
+
+  app.get("/api/elearning-modules", async (req, res) => {
+    const sessionId = req.query.sessionId as string | undefined;
+    const result = await storage.getElearningModules(sessionId);
+    res.json(result);
+  });
+
+  app.get("/api/elearning-modules/:id", async (req, res) => {
+    const module = await storage.getElearningModule(req.params.id);
+    if (!module) return res.status(404).json({ message: "Module non trouv\u00e9" });
+    res.json(module);
+  });
+
+  app.post("/api/elearning-modules", async (req, res) => {
+    const parsed = insertElearningModuleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const module = await storage.createElearningModule(parsed.data);
+    res.status(201).json(module);
+  });
+
+  app.patch("/api/elearning-modules/:id", async (req, res) => {
+    const parsed = insertElearningModuleSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const module = await storage.updateElearningModule(req.params.id, parsed.data);
+    if (!module) return res.status(404).json({ message: "Module non trouv\u00e9" });
+    res.json(module);
+  });
+
+  app.delete("/api/elearning-modules/:id", async (req, res) => {
+    await storage.deleteElearningModule(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // E-LEARNING BLOCKS
+  // ============================================================
+
+  app.get("/api/elearning-blocks", async (req, res) => {
+    const moduleId = req.query.moduleId as string;
+    if (!moduleId) return res.status(400).json({ message: "moduleId requis" });
+    const result = await storage.getElearningBlocks(moduleId);
+    res.json(result);
+  });
+
+  app.post("/api/elearning-blocks", async (req, res) => {
+    const parsed = insertElearningBlockSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const block = await storage.createElearningBlock(parsed.data);
+    res.status(201).json(block);
+  });
+
+  app.patch("/api/elearning-blocks/:id", async (req, res) => {
+    const parsed = insertElearningBlockSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const block = await storage.updateElearningBlock(req.params.id, parsed.data);
+    if (!block) return res.status(404).json({ message: "Bloc non trouv\u00e9" });
+    res.json(block);
+  });
+
+  app.delete("/api/elearning-blocks/:id", async (req, res) => {
+    await storage.deleteElearningBlock(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // QUIZ QUESTIONS
+  // ============================================================
+
+  app.get("/api/quiz-questions", async (req, res) => {
+    const blockId = req.query.blockId as string;
+    if (!blockId) return res.status(400).json({ message: "blockId requis" });
+    const result = await storage.getQuizQuestions(blockId);
+    res.json(result);
+  });
+
+  app.post("/api/quiz-questions", async (req, res) => {
+    const parsed = insertQuizQuestionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const question = await storage.createQuizQuestion(parsed.data);
+    res.status(201).json(question);
+  });
+
+  app.patch("/api/quiz-questions/:id", async (req, res) => {
+    const parsed = insertQuizQuestionSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const question = await storage.updateQuizQuestion(req.params.id, parsed.data);
+    if (!question) return res.status(404).json({ message: "Question non trouv\u00e9e" });
+    res.json(question);
+  });
+
+  app.delete("/api/quiz-questions/:id", async (req, res) => {
+    await storage.deleteQuizQuestion(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // LEARNER PROGRESS
+  // ============================================================
+
+  app.get("/api/learner-progress", async (req, res) => {
+    const traineeId = req.query.traineeId as string;
+    const moduleId = req.query.moduleId as string | undefined;
+    if (!traineeId) return res.status(400).json({ message: "traineeId requis" });
+    const result = await storage.getLearnerProgress(traineeId, moduleId);
+    res.json(result);
+  });
+
+  app.post("/api/learner-progress", async (req, res) => {
+    const parsed = insertLearnerProgressSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const progress = await storage.createLearnerProgress(parsed.data);
+    res.status(201).json(progress);
+  });
+
+  app.patch("/api/learner-progress/:id", async (req, res) => {
+    const parsed = insertLearnerProgressSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const progress = await storage.updateLearnerProgress(req.params.id, parsed.data);
+    if (!progress) return res.status(404).json({ message: "Progression non trouv\u00e9e" });
+    res.json(progress);
+  });
+
+  // ============================================================
+  // SURVEY TEMPLATES
+  // ============================================================
+
+  app.get("/api/survey-templates", async (_req, res) => {
+    const result = await storage.getSurveyTemplates();
+    res.json(result);
+  });
+
+  app.get("/api/survey-templates/:id", async (req, res) => {
+    const template = await storage.getSurveyTemplate(req.params.id);
+    if (!template) return res.status(404).json({ message: "Enqu\u00eate non trouv\u00e9e" });
+    res.json(template);
+  });
+
+  app.post("/api/survey-templates", async (req, res) => {
+    const parsed = insertSurveyTemplateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.createSurveyTemplate(parsed.data);
+    res.status(201).json(template);
+  });
+
+  app.patch("/api/survey-templates/:id", async (req, res) => {
+    const parsed = insertSurveyTemplateSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.updateSurveyTemplate(req.params.id, parsed.data);
+    if (!template) return res.status(404).json({ message: "Enqu\u00eate non trouv\u00e9e" });
+    res.json(template);
+  });
+
+  app.delete("/api/survey-templates/:id", async (req, res) => {
+    await storage.deleteSurveyTemplate(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // SURVEY RESPONSES
+  // ============================================================
+
+  app.get("/api/survey-responses", async (req, res) => {
+    const surveyId = req.query.surveyId as string | undefined;
+    const sessionId = req.query.sessionId as string | undefined;
+    const result = await storage.getSurveyResponses(surveyId, sessionId);
+    res.json(result);
+  });
+
+  app.get("/api/survey-responses/stats", async (req, res) => {
+    const sessionId = req.query.sessionId as string | undefined;
+    const responses = await storage.getSurveyResponses(undefined, sessionId);
+    const ratings = responses.filter(r => r.rating != null).map(r => r.rating!);
+    const avgRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
+    res.json({ totalResponses: responses.length, averageRating: Math.round(avgRating * 10) / 10, ratingsCount: ratings.length });
+  });
+
+  app.post("/api/survey-responses", async (req, res) => {
+    const parsed = insertSurveyResponseSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const response = await storage.createSurveyResponse(parsed.data);
+    res.status(201).json(response);
+  });
+
+  // ============================================================
+  // QUALITY ACTIONS
+  // ============================================================
+
+  app.get("/api/quality-actions", async (_req, res) => {
+    const result = await storage.getQualityActions();
+    res.json(result);
+  });
+
+  app.get("/api/quality-actions/:id", async (req, res) => {
+    const action = await storage.getQualityAction(req.params.id);
+    if (!action) return res.status(404).json({ message: "Action non trouv\u00e9e" });
+    res.json(action);
+  });
+
+  app.post("/api/quality-actions", async (req, res) => {
+    const parsed = insertQualityActionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const action = await storage.createQualityAction(parsed.data);
+    res.status(201).json(action);
+  });
+
+  app.patch("/api/quality-actions/:id", async (req, res) => {
+    const parsed = insertQualityActionSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const action = await storage.updateQualityAction(req.params.id, parsed.data);
+    if (!action) return res.status(404).json({ message: "Action non trouv\u00e9e" });
+    res.json(action);
+  });
+
+  app.delete("/api/quality-actions/:id", async (req, res) => {
+    await storage.deleteQualityAction(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // ATTENDANCE SHEETS
+  // ============================================================
+
+  app.get("/api/attendance-sheets", async (req, res) => {
+    const sessionId = req.query.sessionId as string | undefined;
+    const result = await storage.getAttendanceSheets(sessionId);
+    res.json(result);
+  });
+
+  app.post("/api/attendance-sheets", async (req, res) => {
+    const parsed = insertAttendanceSheetSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const sheet = await storage.createAttendanceSheet(parsed.data);
+    res.status(201).json(sheet);
+  });
+
+  app.patch("/api/attendance-sheets/:id", async (req, res) => {
+    const parsed = insertAttendanceSheetSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const sheet = await storage.updateAttendanceSheet(req.params.id, parsed.data);
+    if (!sheet) return res.status(404).json({ message: "Feuille non trouv\u00e9e" });
+    res.json(sheet);
+  });
+
+  app.delete("/api/attendance-sheets/:id", async (req, res) => {
+    await storage.deleteAttendanceSheet(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // ATTENDANCE RECORDS
+  // ============================================================
+
+  app.get("/api/attendance-records", async (req, res) => {
+    const sheetId = req.query.sheetId as string | undefined;
+    const result = await storage.getAttendanceRecords(sheetId);
+    res.json(result);
+  });
+
+  app.get("/api/attendance-records/report", async (req, res) => {
+    const sessionId = req.query.sessionId as string;
+    if (!sessionId) return res.status(400).json({ message: "sessionId requis" });
+    const sheets = await storage.getAttendanceSheets(sessionId);
+    const allRecords: Array<{ sheetId: string; traineeId: string; status: string; signedAt: Date | null }> = [];
+    for (const sheet of sheets) {
+      const records = await storage.getAttendanceRecords(sheet.id);
+      allRecords.push(...records.map(r => ({ sheetId: r.sheetId, traineeId: r.traineeId, status: r.status, signedAt: r.signedAt })));
+    }
+    const total = allRecords.length;
+    const present = allRecords.filter(r => r.status === "present").length;
+    const absent = allRecords.filter(r => r.status === "absent").length;
+    const late = allRecords.filter(r => r.status === "late").length;
+    res.json({ total, present, absent, late, rate: total > 0 ? Math.round((present / total) * 100) : 0, sheets: sheets.length });
+  });
+
+  app.post("/api/attendance-records", async (req, res) => {
+    const parsed = insertAttendanceRecordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const record = await storage.createAttendanceRecord(parsed.data);
+    res.status(201).json(record);
+  });
+
+  app.patch("/api/attendance-records/:id", async (req, res) => {
+    const parsed = insertAttendanceRecordSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const record = await storage.updateAttendanceRecord(req.params.id, parsed.data);
+    if (!record) return res.status(404).json({ message: "Enregistrement non trouv\u00e9" });
+    res.json(record);
+  });
+
+  // ============================================================
+  // AUTOMATION RULES
+  // ============================================================
+
+  app.get("/api/automation-rules", async (_req, res) => {
+    const result = await storage.getAutomationRules();
+    res.json(result);
+  });
+
+  app.post("/api/automation-rules", async (req, res) => {
+    const parsed = insertAutomationRuleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const rule = await storage.createAutomationRule(parsed.data);
+    res.status(201).json(rule);
+  });
+
+  app.patch("/api/automation-rules/:id", async (req, res) => {
+    const parsed = insertAutomationRuleSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const rule = await storage.updateAutomationRule(req.params.id, parsed.data);
+    if (!rule) return res.status(404).json({ message: "R\u00e8gle non trouv\u00e9e" });
+    res.json(rule);
+  });
+
+  app.delete("/api/automation-rules/:id", async (req, res) => {
+    await storage.deleteAutomationRule(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // ORGANIZATION SETTINGS
+  // ============================================================
+
+  app.get("/api/settings", async (_req, res) => {
+    const result = await storage.getOrganizationSettings();
+    const settingsMap = Object.fromEntries(result.map(s => [s.key, s.value]));
+    res.json(settingsMap);
+  });
+
+  app.patch("/api/settings", async (req, res) => {
+    const settings = req.body as Record<string, string>;
+    for (const [key, value] of Object.entries(settings)) {
+      await storage.upsertOrganizationSetting({ key, value });
+    }
+    const result = await storage.getOrganizationSettings();
+    const settingsMap = Object.fromEntries(result.map(s => [s.key, s.value]));
+    res.json(settingsMap);
+  });
+
+  // ============================================================
+  // USERS (for admin settings page)
+  // ============================================================
+
+  app.get("/api/users", async (_req, res) => {
+    const result = await storage.getUsers();
+    res.json(result.map(u => ({ id: u.id, username: u.username, role: u.role, firstName: u.firstName, lastName: u.lastName, email: u.email })));
+  });
+
+  app.patch("/api/users/:id/role", async (req, res) => {
+    const { role } = req.body;
+    if (!role) return res.status(400).json({ message: "role requis" });
+    const user = await storage.updateUser(req.params.id, { role });
+    if (!user) return res.status(404).json({ message: "Utilisateur non trouv\u00e9" });
+    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName });
   });
 
   return httpServer;
