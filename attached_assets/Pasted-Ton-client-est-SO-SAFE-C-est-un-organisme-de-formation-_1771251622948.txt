@@ -1,0 +1,213 @@
+Ton client est :
+👉 SO' SAFE
+
+C’est un organisme de formation qui utilise actuellement Digiforma, mais souhaite le remplacer par son propre LMS sur mesure, intégré à son site web :
+👉 so-safe.fr
+
+Ils utilisent aussi :
+
+MyPonto → pour le rapprochement bancaire
+
+Lexpersona → pour la signature électronique
+
+Brevo → pour les emails / SMS
+
+2️⃣ Quelle est sa demande EXACTEMENT ?
+
+Ils veulent :
+
+👉 Créer un LMS complet, personnalisé et automatisé, qui :
+
+Remplace Digiforma
+
+Centralise tout (clients, apprenants, formateurs, documents, factures…)
+
+Automatise tous les process administratifs
+
+Soit conforme Qualiopi
+
+Soit connecté à leur site web
+
+Gère présentiel + distanciel + blended learning
+
+Intègre signature électronique, paiement, émargement, évaluations
+
+Automatise les relances (recyclage AFGSU, certificats, etc.)
+
+Génère tous les documents automatiquement
+
+Conserve l’historique sur +10 ans
+
+En résumé :
+👉 Créer un ERP + LMS + CRM + GED tout-en-un pour un organisme de formation.
+
+3️⃣ À quel public s’adresse la plateforme ?
+
+La plateforme devra gérer 4 grands types d’utilisateurs :
+
+🏢 1. Entreprises clientes
+
+Ex : hôpitaux, cliniques, structures de santé
+Ils doivent pouvoir :
+
+Inscrire leurs salariés
+
+Voir leurs factures
+
+Voir les attestations
+
+Gérer les recyclages
+
+Réinscrire facilement
+
+👨‍⚕️ 2. Apprenants
+
+Ex : infirmiers, professionnels de santé, libéraux
+
+Ils doivent pouvoir :
+
+S’inscrire
+
+Déposer leurs diplômes
+
+Signer les documents
+
+Émarger
+
+Faire les évaluations
+
+Accéder aux cours en ligne
+
+Certaines formations sont très spécifiques :
+
+AFGSU
+
+Certibiocide
+
+Certificat de décès
+
+VAE
+
+Blended learning
+
+👩‍🏫 3. Formateurs
+
+Ils doivent :
+
+Signer leurs contrats
+
+Déposer factures et notes de frais
+
+Faire l’émargement
+
+Voir leurs sessions
+
+Être évalués
+
+👨‍💼 4. Administrateurs (équipe SO’ SAFE)
+
+Ils doivent :
+
+Tout piloter
+
+Générer documents
+
+Modifier réponses si erreur
+
+Voir statistiques
+
+Gérer qualité / incidents
+
+Suivre indicateurs Qualiopi
+
+4️⃣ Ce que TU dois produire concrètement
+
+Si on simplifie ta mission, tu dois concevoir :
+
+🧩 1. Architecture fonctionnelle
+
+Gestion utilisateurs (4 rôles)
+
+Catalogue formation
+
+Sessions
+
+Inscriptions centralisées
+
+Workflow automatisé
+
+GED (gestion documentaire)
+
+Émargement multi-mode
+
+Évaluations
+
+CRM / Marketing
+
+Facturation + paiement
+
+Reporting
+
+Intégrations API
+
+🔁 2. Automatisation intelligente
+
+Exemple de workflow demandé :
+
+Devis signé
+➜ Convention envoyée automatiquement
+
+Convention signée
+➜ Convocation + Facture envoyées
+
+Fin de formation
+➜ Attestation + Émargement envoyés
+
+Recyclage AFGSU
+➜ Relance à 10 mois / 6 mois / 2 mois
+
+Validation IA des dates sur attestations
+
+📂 3. Système documentaire dynamique
+
+Génération automatique PDF
+
+PDF remplissables (FIFPL)
+
+Balises dynamiques
+
+Branding
+
+Archivage 10 ans
+
+🌐 4. Intégration site web
+
+Affichage catalogue en temps réel
+
+Places restantes
+
+Mention "Complet"
+
+SEO préservé
+
+Connexion SSO
+
+5️⃣ Le niveau du projet
+
+Ce n’est PAS un simple LMS.
+
+C’est :
+
+Un LMS
+
+Un CRM
+
+Un ERP administratif
+
+Un système qualité Qualiopi
+
+Un outil marketing
+
+Un outil comptable connecté
+
+👉 C’est un projet complexe, structurant, stratégique.
