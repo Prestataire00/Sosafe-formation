@@ -24,14 +24,16 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-// Redirect legacy /uploads/:filename URLs to Supabase Storage
 app.get("/uploads/:filename", (req, res) => {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  if (!supabaseUrl) {
-    return res.status(404).json({ message: "File not found" });
+  const { default: path } = require("path");
+  const { existsSync } = require("fs");
+  const localPath = path.resolve(process.cwd(), "uploads", req.params.filename);
+
+  if (existsSync(localPath)) {
+    return res.sendFile(localPath);
   }
-  const publicUrl = `${supabaseUrl}/storage/v1/object/public/uploads/${req.params.filename}`;
-  res.redirect(301, publicUrl);
+
+  return res.status(404).json({ message: "File not found" });
 });
 
 export function log(message: string, source = "express") {

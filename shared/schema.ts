@@ -470,6 +470,29 @@ export const expenseNotes = pgTable("expense_notes", {
 });
 
 // ============================================================
+// NEW TABLES - TRAINER INVOICES
+// ============================================================
+
+export const trainerInvoices = pgTable("trainer_invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  trainerId: varchar("trainer_id").notNull(),
+  number: text("number").notNull(),
+  title: text("title").notNull(),
+  amount: integer("amount").notNull(),
+  taxRate: integer("tax_rate").notNull().default(2000),
+  taxAmount: integer("tax_amount").notNull().default(0),
+  totalTtc: integer("total_ttc").notNull().default(0),
+  fileUrl: text("file_url"),
+  status: text("status").notNull().default("submitted"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  paidAt: timestamp("paid_at"),
+  notes: text("notes"),
+  reviewedBy: varchar("reviewed_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ============================================================
 // INSERT SCHEMAS
 // ============================================================
 
@@ -506,6 +529,7 @@ export const insertTrainerEvaluationSchema = createInsertSchema(trainerEvaluatio
 export const insertUserDocumentSchema = createInsertSchema(userDocuments).omit({ id: true, uploadedAt: true });
 export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: true, signedAt: true });
 export const insertExpenseNoteSchema = createInsertSchema(expenseNotes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTrainerInvoiceSchema = createInsertSchema(trainerInvoices).omit({ id: true, createdAt: true, updatedAt: true, submittedAt: true });
 
 // ============================================================
 // AUTH SCHEMAS
@@ -594,6 +618,8 @@ export type InsertSignature = z.infer<typeof insertSignatureSchema>;
 export type Signature = typeof signatures.$inferSelect;
 export type InsertExpenseNote = z.infer<typeof insertExpenseNoteSchema>;
 export type ExpenseNote = typeof expenseNotes.$inferSelect;
+export type InsertTrainerInvoice = z.infer<typeof insertTrainerInvoiceSchema>;
+export type TrainerInvoice = typeof trainerInvoices.$inferSelect;
 
 // ============================================================
 // CONSTANTS
@@ -915,4 +941,12 @@ export const EXPENSE_STATUSES = [
   { value: "approved", label: "Approuvée", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   { value: "rejected", label: "Rejetée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
   { value: "paid", label: "Payée", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+] as const;
+
+export const TRAINER_INVOICE_STATUSES = [
+  { value: "submitted", label: "Soumise", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "under_review", label: "En cours d'examen", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  { value: "approved", label: "Approuvée", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "paid", label: "Payée", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+  { value: "rejected", label: "Rejetée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
 ] as const;

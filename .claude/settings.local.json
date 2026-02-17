@@ -21,7 +21,15 @@
       "Bash(npx vite build:*)",
       "Bash(grep:*)",
       "Bash(npm install:*)",
-      "Bash(timeout 15 npm run dev:*)"
+      "Bash(timeout 15 npm run dev:*)",
+      "Bash(npm run dev:*)",
+      "Bash(xargs kill:*)",
+      "Bash(fuser:*)",
+      "Bash(ss:*)",
+      "Bash(kill:*)",
+      "Bash(git push:*)",
+      "Bash(gh auth status:*)",
+      "Bash(git remote add:*)"
     ]
   }
 }

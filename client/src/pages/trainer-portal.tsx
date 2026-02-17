@@ -38,13 +38,19 @@ import {
   Eye,
   Download,
   Plus,
+  ChevronDown,
+  Users,
+  BookOpen,
+  CreditCard,
 } from "lucide-react";
-import type { Session, TrainerDocument, ExpenseNote } from "@shared/schema";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { Session, TrainerDocument, ExpenseNote, TrainerInvoice, Program, Trainee } from "@shared/schema";
 import {
   TRAINER_DOCUMENT_TYPES,
   TRAINER_DOCUMENT_STATUSES,
   EXPENSE_CATEGORIES,
   EXPENSE_STATUSES,
+  TRAINER_INVOICE_STATUSES,
 } from "@shared/schema";
 
 // ============================================================
@@ -125,34 +131,43 @@ function DocumentPreviewDialog({
   mimeType: string | null;
 }) {
   if (!fileUrl) return null;
-  const isPdf = mimeType === "application/pdf" || fileUrl.endsWith(".pdf");
-  const isImage = mimeType?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
+  const isPdf = mimeType === "application/pdf" || /\.pdf(\?|$)/i.test(fileUrl);
+  const isImage = mimeType?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(fileUrl);
+  const isOffice = /\.(doc|docx|xls|xlsx)(\?|$)/i.test(fileUrl);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{fileName || "Apercu du document"}</DialogTitle>
         </DialogHeader>
-        <div className="mt-2">
+        <div className="flex-1 min-h-0 mt-2">
           {isPdf ? (
             <iframe src={fileUrl} className="w-full h-[70vh] rounded-lg border" title={fileName || "PDF"} />
           ) : isImage ? (
-            <div className="flex items-center justify-center">
-              <img src={fileUrl} alt={fileName || "Image"} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
+            <div className="flex items-center justify-center bg-muted/30 rounded-lg p-4">
+              <img src={fileUrl} alt={fileName || "Image"} className="max-w-full max-h-[65vh] rounded-lg object-contain" />
             </div>
+          ) : isOffice ? (
+            <iframe
+              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`}
+              className="w-full h-[70vh] rounded-lg border"
+              title={fileName || "Document"}
+            />
           ) : (
             <div className="text-center py-16 space-y-4">
               <FileText className="w-16 h-16 mx-auto text-muted-foreground/40" />
               <p className="text-muted-foreground">L'apercu n'est pas disponible pour ce type de fichier.</p>
-              <Button asChild>
-                <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-                  <Download className="w-4 h-4 mr-2" />
-                  Telecharger
-                </a>
-              </Button>
             </div>
           )}
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-3 border-t mt-3">
+          <Button variant="outline" size="sm" asChild>
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+              <Download className="w-4 h-4 mr-2" />
+              Telecharger
+            </a>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -537,6 +552,327 @@ function ExpenseNotesTab({ trainerId }: { trainerId: string }) {
 }
 
 // ============================================================
+// TRAINER INVOICES TAB
+// ============================================================
+
+function TrainerInvoicesTab({ trainerId }: { trainerId: string }) {
+  const { toast } = useToast();
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [title, setTitle] = useState("");
+  const [number, setNumber] = useState("");
+  const [amountHt, setAmountHt] = useState("");
+  const [taxRate, setTaxRate] = useState("20");
+  const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: trainerInvoices, isLoading } = useQuery<TrainerInvoice[]>({
+    queryKey: [`/api/trainers/${trainerId}/invoices`],
+    enabled: !!trainerId,
+  });
+
+  const computedTax = useMemo(() => {
+    const ht = Math.round(parseFloat(amountHt || "0") * 100);
+    const rate = parseInt(taxRate || "20", 10);
+    const taxAmount = Math.round(ht * rate / 100);
+    const totalTtc = ht + taxAmount;
+    return { ht, rate: rate * 100, taxAmount, totalTtc };
+  }, [amountHt, taxRate]);
+
+  const handleCreate = async () => {
+    if (!title || !number || !amountHt || !file) return;
+    setIsSubmitting(true);
+    try {
+      const uploaded = await uploadFile(file);
+      await apiRequest("POST", `/api/trainers/${trainerId}/invoices`, {
+        number,
+        title,
+        amount: computedTax.ht,
+        taxRate: computedTax.rate,
+        taxAmount: computedTax.taxAmount,
+        totalTtc: computedTax.totalTtc,
+        fileUrl: uploaded.fileUrl,
+        status: "submitted",
+        paidAt: null,
+        notes: notes || null,
+        reviewedBy: null,
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/invoices`] });
+      toast({ title: "Facture soumise avec succes" });
+      setTitle(""); setNumber(""); setAmountHt(""); setTaxRate("20"); setNotes(""); setFile(null);
+      setShowCreateDialog(false);
+    } catch {
+      toast({ title: "Erreur lors de la soumission", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getStatusInfo = (status: string) => {
+    return TRAINER_INVOICE_STATUSES.find((s) => s.value === status) || { label: status, color: "" };
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Factures de prestation
+            </CardTitle>
+            <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvelle facture
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!trainerInvoices || trainerInvoices.length === 0 ? (
+            <div className="text-center py-8">
+              <CreditCard className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Aucune facture soumise pour le moment.
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Titre</TableHead>
+                  <TableHead className="text-right">Montant HT</TableHead>
+                  <TableHead className="text-right">TVA</TableHead>
+                  <TableHead className="text-right">TTC</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>PDF</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trainerInvoices.map((inv) => {
+                  const statusInfo = getStatusInfo(inv.status);
+                  return (
+                    <TableRow key={inv.id}>
+                      <TableCell className="font-mono text-sm">{inv.number}</TableCell>
+                      <TableCell className="font-medium">{inv.title}</TableCell>
+                      <TableCell className="text-right">{(inv.amount / 100).toFixed(2)} EUR</TableCell>
+                      <TableCell className="text-right">{(inv.taxAmount / 100).toFixed(2)} EUR</TableCell>
+                      <TableCell className="text-right font-medium">{(inv.totalTtc / 100).toFixed(2)} EUR</TableCell>
+                      <TableCell>{inv.submittedAt ? formatDate(inv.submittedAt as unknown as string) : "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={statusInfo.color}>
+                          {statusInfo.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {inv.fileUrl ? (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={inv.fileUrl} target="_blank" rel="noopener noreferrer">
+                              <Eye className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Create invoice dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Soumettre une facture</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>N° de reference</Label>
+                <Input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="FAC-2026-001" />
+              </div>
+              <div className="space-y-2">
+                <Label>Titre</Label>
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Prestation session AFGSU" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Montant HT (EUR)</Label>
+                <Input type="number" step="0.01" min="0" value={amountHt} onChange={(e) => setAmountHt(e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="space-y-2">
+                <Label>Taux TVA (%)</Label>
+                <Select value={taxRate} onValueChange={setTaxRate}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0%</SelectItem>
+                    <SelectItem value="5.5">5.5%</SelectItem>
+                    <SelectItem value="10">10%</SelectItem>
+                    <SelectItem value="20">20%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {amountHt && parseFloat(amountHt) > 0 && (
+              <div className="p-3 rounded-lg bg-muted/50 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span>Montant HT</span>
+                  <span>{(computedTax.ht / 100).toFixed(2)} EUR</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>TVA ({taxRate}%)</span>
+                  <span>{(computedTax.taxAmount / 100).toFixed(2)} EUR</span>
+                </div>
+                <div className="flex justify-between font-medium border-t pt-1">
+                  <span>Total TTC</span>
+                  <span>{(computedTax.totalTtc / 100).toFixed(2)} EUR</span>
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Details supplementaires..." rows={2} />
+            </div>
+            <div className="space-y-2">
+              <Label>Fichier PDF (obligatoire)</Label>
+              <Input
+                type="file"
+                accept=".pdf"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+              />
+            </div>
+            <Button onClick={handleCreate} disabled={!title || !number || !amountHt || !file || isSubmitting} className="w-full">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Envoi en cours...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Soumettre la facture
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ============================================================
+// ENRICHED SESSION CARD
+// ============================================================
+
+function EnrichedSessionCard({ session }: { session: Session }) {
+  const [traineesOpen, setTraineesOpen] = useState(false);
+
+  const { data: program } = useQuery<Program>({
+    queryKey: [`/api/programs/${session.programId}`],
+    enabled: !!session.programId,
+  });
+
+  const { data: enrollmentCount } = useQuery<{ count: number }>({
+    queryKey: [`/api/sessions/${session.id}/enrollment-count`],
+  });
+
+  const { data: sessionTrainees, isLoading: traineesLoading } = useQuery<Trainee[]>({
+    queryKey: [`/api/sessions/${session.id}/trainees`],
+    enabled: traineesOpen,
+  });
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <CardTitle className="text-base">{session.title}</CardTitle>
+          <SessionStatusBadge status={session.status} />
+        </div>
+        {program && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <BookOpen className="w-4 h-4 shrink-0" />
+            <span>{program.title}</span>
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="w-4 h-4 shrink-0" />
+          <span>
+            {formatDate(session.startDate)} &mdash; {formatDate(session.endDate)}
+          </span>
+        </div>
+        {session.location && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <MapPin className="w-4 h-4 shrink-0" />
+            <span>{session.location}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Users className="w-4 h-4 shrink-0" />
+          <span>
+            {enrollmentCount?.count ?? 0} / {session.maxParticipants} inscrits
+          </span>
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          <ModalityBadge modality={session.modality} />
+        </div>
+        {session.notes && (
+          <p className="text-xs text-muted-foreground mt-2 italic">{session.notes}</p>
+        )}
+
+        {/* Collapsible trainees list */}
+        <Collapsible open={traineesOpen} onOpenChange={setTraineesOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-between mt-2">
+              <span className="text-xs">Voir les stagiaires</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${traineesOpen ? "rotate-180" : ""}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 space-y-1">
+              {traineesLoading ? (
+                <div className="flex items-center justify-center py-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : sessionTrainees && sessionTrainees.length > 0 ? (
+                sessionTrainees.map((trainee) => (
+                  <div key={trainee.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50 text-sm">
+                    <Users className="w-3 h-3 text-muted-foreground" />
+                    <span>{trainee.firstName} {trainee.lastName}</span>
+                    {trainee.email && (
+                      <span className="text-xs text-muted-foreground ml-auto">{trainee.email}</span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-2">Aucun stagiaire inscrit</p>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================
 // MAIN PAGE
 // ============================================================
 
@@ -546,6 +882,7 @@ export default function TrainerPortal() {
   const [previewDoc, setPreviewDoc] = useState<{ fileUrl: string; title: string; mimeType?: string } | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadType, setUploadType] = useState("autre");
   const [uploadFile_, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -585,7 +922,7 @@ export default function TrainerPortal() {
       const uploaded = await uploadFile(uploadFile_);
       await apiRequest("POST", `/api/trainers/${trainerId}/documents`, {
         title: uploadTitle,
-        type: "autre",
+        type: uploadType,
         fileUrl: uploaded.fileUrl,
         fileContent: null,
         status: "pending",
@@ -596,6 +933,7 @@ export default function TrainerPortal() {
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/documents`] });
       toast({ title: "Document depose avec succes" });
       setUploadTitle("");
+      setUploadType("autre");
       setUploadFile(null);
       setShowUploadDialog(false);
     } catch {
@@ -711,6 +1049,10 @@ export default function TrainerPortal() {
               <Receipt className="w-4 h-4" />
               Notes de frais
             </TabsTrigger>
+            <TabsTrigger value="invoices" className="gap-2">
+              <CreditCard className="w-4 h-4" />
+              Factures
+            </TabsTrigger>
           </TabsList>
 
           {/* Sessions Tab */}
@@ -718,31 +1060,7 @@ export default function TrainerPortal() {
             {sessions && sessions.length > 0 ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {sessions.map((session) => (
-                  <Card key={session.id} className="overflow-hidden">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <CardTitle className="text-base">{session.title}</CardTitle>
-                        <SessionStatusBadge status={session.status} />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Clock className="w-4 h-4 shrink-0" />
-                        <span>
-                          {formatDate(session.startDate)} &mdash; {formatDate(session.endDate)}
-                        </span>
-                      </div>
-                      {session.location && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="w-4 h-4 shrink-0" />
-                          <span>{session.location}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 pt-1">
-                        <ModalityBadge modality={session.modality} />
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <EnrichedSessionCard key={session.id} session={session} />
                 ))}
               </div>
             ) : (
@@ -797,14 +1115,15 @@ export default function TrainerPortal() {
                               {doc.expiresAt ? formatDate(doc.expiresAt) : "—"}
                             </td>
                             <td className="p-3">
-                              {doc.fileUrl && (
+                              {doc.fileUrl ? (
                                 <div className="flex items-center gap-1">
                                   <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
                                     onClick={() => setPreviewDoc({ fileUrl: doc.fileUrl!, title: doc.title })}
                                   >
-                                    <Eye className="w-4 h-4" />
+                                    <Eye className="w-4 h-4 mr-1" />
+                                    Visualiser
                                   </Button>
                                   <Button variant="ghost" size="sm" asChild>
                                     <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
@@ -812,6 +1131,8 @@ export default function TrainerPortal() {
                                     </a>
                                   </Button>
                                 </div>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">Aucun fichier</span>
                               )}
                             </td>
                           </tr>
@@ -840,6 +1161,11 @@ export default function TrainerPortal() {
           <TabsContent value="expenses">
             <ExpenseNotesTab trainerId={trainerId} />
           </TabsContent>
+
+          {/* Trainer Invoices Tab */}
+          <TabsContent value="invoices">
+            <TrainerInvoicesTab trainerId={trainerId} />
+          </TabsContent>
         </Tabs>
       )}
 
@@ -851,8 +1177,21 @@ export default function TrainerPortal() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label>Type de document</Label>
+              <Select value={uploadType} onValueChange={setUploadType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selectionnez un type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TRAINER_DOCUMENT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Titre du document</Label>
-              <Input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="Ex: CV, Diplome..." />
+              <Input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="Ex: CV 2026, Diplome IDE..." />
             </div>
             <div className="space-y-2">
               <Label>Fichier</Label>
@@ -861,7 +1200,19 @@ export default function TrainerPortal() {
                 accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
                 onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
               />
+              <p className="text-xs text-muted-foreground">
+                Formats acceptes : PDF, images (JPG, PNG, GIF), Word, Excel. Max 10 Mo.
+              </p>
             </div>
+            {uploadFile_ && (
+              <div className="p-3 rounded-lg bg-muted/50 flex items-center gap-2 text-sm">
+                <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="truncate">{uploadFile_.name}</span>
+                <span className="text-muted-foreground ml-auto shrink-0">
+                  {(uploadFile_.size / 1024).toFixed(0)} Ko
+                </span>
+              </div>
+            )}
             <Button onClick={handleDocUpload} disabled={!uploadFile_ || !uploadTitle || isUploading} className="w-full">
               {isUploading ? (
                 <>
@@ -871,7 +1222,7 @@ export default function TrainerPortal() {
               ) : (
                 <>
                   <Upload className="w-4 h-4 mr-2" />
-                  Deposer
+                  Deposer le document
                 </>
               )}
             </Button>

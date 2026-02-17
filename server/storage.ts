@@ -31,6 +31,7 @@ import {
   type UserDocument, type InsertUserDocument,
   type Signature, type InsertSignature,
   type ExpenseNote, type InsertExpenseNote,
+  type TrainerInvoice, type InsertTrainerInvoice,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
   emailTemplates, emailLogs, documentTemplates, generatedDocuments,
   prospects, quotes, invoices, payments,
@@ -39,7 +40,7 @@ import {
   attendanceSheets, attendanceRecords,
   automationRules, organizationSettings,
   enterpriseContacts, trainerDocuments, trainerEvaluations,
-  userDocuments, signatures, expenseNotes,
+  userDocuments, signatures, expenseNotes, trainerInvoices,
 } from "@shared/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -255,6 +256,11 @@ export interface IStorage {
   getExpenseNotes(trainerId: string): Promise<ExpenseNote[]>;
   createExpenseNote(note: InsertExpenseNote): Promise<ExpenseNote>;
   updateExpenseNote(id: string, note: Partial<InsertExpenseNote>): Promise<ExpenseNote | undefined>;
+
+  // Trainer Invoices
+  getTrainerInvoices(trainerId: string): Promise<TrainerInvoice[]>;
+  createTrainerInvoice(invoice: InsertTrainerInvoice): Promise<TrainerInvoice>;
+  updateTrainerInvoice(id: string, data: Partial<InsertTrainerInvoice>): Promise<TrainerInvoice | undefined>;
 
   // Enterprise-specific queries
   getQuotesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Quote[]>;
@@ -991,6 +997,21 @@ export class DatabaseStorage implements IStorage {
 
   async updateExpenseNote(id: string, data: Partial<InsertExpenseNote>): Promise<ExpenseNote | undefined> {
     const [result] = await db.update(expenseNotes).set({ ...data, updatedAt: new Date() } as any).where(eq(expenseNotes.id, id)).returning();
+    return result;
+  }
+
+  // ---- Trainer Invoices ----
+  async getTrainerInvoices(trainerId: string): Promise<TrainerInvoice[]> {
+    return db.select().from(trainerInvoices).where(eq(trainerInvoices.trainerId, trainerId)).orderBy(desc(trainerInvoices.createdAt));
+  }
+
+  async createTrainerInvoice(invoice: InsertTrainerInvoice): Promise<TrainerInvoice> {
+    const [result] = await db.insert(trainerInvoices).values(invoice).returning();
+    return result;
+  }
+
+  async updateTrainerInvoice(id: string, data: Partial<InsertTrainerInvoice>): Promise<TrainerInvoice | undefined> {
+    const [result] = await db.update(trainerInvoices).set({ ...data, updatedAt: new Date() } as any).where(eq(trainerInvoices.id, id)).returning();
     return result;
   }
 

@@ -2,9 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import Busboy from "busboy";
 import path from "path";
+import fs from "fs";
 import crypto from "crypto";
 import { storage } from "./storage";
-import { supabase, STORAGE_BUCKET } from "./supabase";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole } from "./auth";
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
@@ -20,6 +20,7 @@ import {
   insertEnterpriseContactSchema, insertTrainerDocumentSchema, insertTrainerEvaluationSchema,
   insertUserDocumentSchema, insertSignatureSchema,
   insertExpenseNoteSchema,
+  insertTrainerInvoiceSchema,
   loginSchema, registerSchema,
   TEMPLATE_VARIABLES,
 } from "@shared/schema";
@@ -95,22 +96,16 @@ export async function registerRoutes(
       }
 
       const buffer = Buffer.concat(chunks);
-      chunks = []; // free memory
+      chunks = [];
 
-      const { error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(fileMeta.savedName, buffer, { contentType: fileMeta.mimeType });
-
-      if (error) {
-        return res.status(500).json({ message: error.message || "Erreur lors de l'upload vers le stockage" });
+      const uploadsDir = path.resolve(process.cwd(), "uploads");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
       }
-
-      const { data: publicUrlData } = supabase.storage
-        .from(STORAGE_BUCKET)
-        .getPublicUrl(fileMeta.savedName);
+      fs.writeFileSync(path.join(uploadsDir, fileMeta.savedName), buffer);
 
       res.json({
-        fileUrl: publicUrlData.publicUrl,
+        fileUrl: `/uploads/${fileMeta.savedName}`,
         fileName: fileMeta.originalName,
         fileSize: size,
         mimeType: fileMeta.mimeType,
@@ -1069,7 +1064,20 @@ export async function registerRoutes(
     const present = allRecords.filter(r => r.status === "present").length;
     const absent = allRecords.filter(r => r.status === "absent").length;
     const late = allRecords.filter(r => r.status === "late").length;
-    res.json({ total, present, absent, late, rate: total > 0 ? Math.round((present / total) * 100) : 0, sheets: sheets.length });
+    const excused = allRecords.filter(r => r.status === "excused").length;
+    res.json({
+      totalRecords: total,
+      present,
+      absent,
+      late,
+      excused,
+      percentPresent: total > 0 ? (present / total) * 100 : 0,
+      percentAbsent: total > 0 ? (absent / total) * 100 : 0,
+      percentLate: total > 0 ? (late / total) * 100 : 0,
+      percentExcused: total > 0 ? (excused / total) * 100 : 0,
+      rate: total > 0 ? Math.round((present / total) * 100) : 0,
+      sheets: sheets.length,
+    });
   });
 
   app.post("/api/attendance-records", async (req, res) => {
@@ -1332,6 +1340,30 @@ export async function registerRoutes(
     const note = await storage.updateExpenseNote(req.params.id, parsed.data);
     if (!note) return res.status(404).json({ message: "Note de frais non trouvée" });
     res.json(note);
+  });
+
+  // ============================================================
+  // TRAINER INVOICES
+  // ============================================================
+
+  app.get("/api/trainers/:id/invoices", async (req, res) => {
+    const invoicesList = await storage.getTrainerInvoices(req.params.id);
+    res.json(invoicesList);
+  });
+
+  app.post("/api/trainers/:id/invoices", async (req, res) => {
+    const parsed = insertTrainerInvoiceSchema.safeParse({ ...req.body, trainerId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const invoice = await storage.createTrainerInvoice(parsed.data);
+    res.status(201).json(invoice);
+  });
+
+  app.patch("/api/trainer-invoices/:id", async (req, res) => {
+    const parsed = insertTrainerInvoiceSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const invoice = await storage.updateTrainerInvoice(req.params.id, parsed.data);
+    if (!invoice) return res.status(404).json({ message: "Facture non trouvée" });
+    res.json(invoice);
   });
 
   // ============================================================
