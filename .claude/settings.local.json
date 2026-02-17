@@ -9,7 +9,19 @@
       "Bash(wc:*)",
       "WebSearch",
       "WebFetch(domain:www.digiforma.com)",
-      "WebFetch(domain:help.digiforma.com)"
+      "WebFetch(domain:help.digiforma.com)",
+      "Bash(npm run db:push:*)",
+      "Bash(npx drizzle-kit push:*)",
+      "Bash(yes:*)",
+      "Bash(printf:*)",
+      "Bash(apt-get install:*)",
+      "Bash(npx drizzle-kit generate:*)",
+      "Bash(npx drizzle-kit migrate:*)",
+      "Bash(lsof:*)",
+      "Bash(npx vite build:*)",
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "Bash(timeout 15 npm run dev:*)"
     ]
   }
 }

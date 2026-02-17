@@ -48,15 +48,15 @@ import type { Program, InsertProgram } from "@shared/schema";
 import { PROGRAM_CATEGORIES, MODALITIES } from "@shared/schema";
 
 const levels = [
-  { value: "beginner", label: "D\u00e9butant" },
-  { value: "intermediate", label: "Interm\u00e9diaire" },
-  { value: "advanced", label: "Avanc\u00e9" },
+  { value: "beginner", label: "Débutant" },
+  { value: "intermediate", label: "Intermédiaire" },
+  { value: "advanced", label: "Avancé" },
 ];
 
 const statusOptions = [
   { value: "draft", label: "Brouillon" },
-  { value: "published", label: "Publi\u00e9" },
-  { value: "archived", label: "Archiv\u00e9" },
+  { value: "published", label: "Publié" },
+  { value: "archived", label: "Archivé" },
 ];
 
 function ProgramStatusBadge({ status }: { status: string }) {
@@ -67,17 +67,17 @@ function ProgramStatusBadge({ status }: { status: string }) {
   };
   const labels: Record<string, string> = {
     draft: "Brouillon",
-    published: "Publi\u00e9",
-    archived: "Archiv\u00e9",
+    published: "Publié",
+    archived: "Archivé",
   };
   return <Badge variant="outline" className={variants[status] || ""}>{labels[status] || status}</Badge>;
 }
 
 function LevelBadge({ level }: { level: string }) {
   const labels: Record<string, string> = {
-    beginner: "D\u00e9butant",
-    intermediate: "Interm\u00e9diaire",
-    advanced: "Avanc\u00e9",
+    beginner: "Débutant",
+    intermediate: "Intermédiaire",
+    advanced: "Avancé",
   };
   return <Badge variant="secondary" className="text-xs">{labels[level] || level}</Badge>;
 }
@@ -89,7 +89,7 @@ function ModalityBadge({ modality }: { modality: string }) {
     blended: Layers,
   };
   const labels: Record<string, string> = {
-    presentiel: "Pr\u00e9sentiel",
+    presentiel: "Présentiel",
     distanciel: "Distanciel",
     blended: "Blended",
   };
@@ -154,7 +154,7 @@ function ProgramForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Cat\u00e9gorie</Label>
+          <Label>Catégorie</Label>
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger data-testid="select-program-category">
               <SelectValue />
@@ -182,7 +182,7 @@ function ProgramForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Modalit\u00e9</Label>
+          <Label>Modalité</Label>
           <Select value={modality} onValueChange={setModality}>
             <SelectTrigger data-testid="select-program-modality">
               <SelectValue />
@@ -210,7 +210,7 @@ function ProgramForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="duration">Dur\u00e9e (heures)</Label>
+          <Label htmlFor="duration">Durée (heures)</Label>
           <Input id="duration" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} min="1" data-testid="input-program-duration" />
         </div>
         <div className="space-y-2">
@@ -219,12 +219,12 @@ function ProgramForm({
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="objectives">Objectifs p\u00e9dagogiques</Label>
+        <Label htmlFor="objectives">Objectifs pédagogiques</Label>
         <Textarea id="objectives" value={objectives} onChange={(e) => setObjectives(e.target.value)} placeholder="Les objectifs de cette formation..." className="resize-none" data-testid="input-program-objectives" />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="prerequisites">Pr\u00e9requis</Label>
-        <Input id="prerequisites" value={prerequisites} onChange={(e) => setPrerequisites(e.target.value)} placeholder="Ex: Aucun pr\u00e9requis" data-testid="input-program-prerequisites" />
+        <Label htmlFor="prerequisites">Prérequis</Label>
+        <Input id="prerequisites" value={prerequisites} onChange={(e) => setPrerequisites(e.target.value)} placeholder="Ex: Aucun prérequis" data-testid="input-program-prerequisites" />
       </div>
       <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
         <Switch id="certifying" checked={certifying} onCheckedChange={setCertifying} data-testid="switch-program-certifying" />
@@ -232,13 +232,13 @@ function ProgramForm({
       </div>
       {certifying && (
         <div className="space-y-2">
-          <Label htmlFor="recycling">D\u00e9lai de recyclage (mois)</Label>
+          <Label htmlFor="recycling">Délai de recyclage (mois)</Label>
           <Input id="recycling" type="number" value={recyclingMonths} onChange={(e) => setRecyclingMonths(e.target.value)} placeholder="Ex: 48 pour AFGSU" data-testid="input-program-recycling" />
         </div>
       )}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending} data-testid="button-program-submit">
-          {isPending ? "Enregistrement..." : program ? "Modifier" : "Cr\u00e9er"}
+          {isPending ? "Enregistrement..." : program ? "Modifier" : "Créer"}
         </Button>
       </div>
     </form>
@@ -260,9 +260,9 @@ export default function Programs() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
       setDialogOpen(false);
-      toast({ title: "Formation cr\u00e9\u00e9e avec succ\u00e8s" });
+      toast({ title: "Formation créée avec succès" });
     },
-    onError: () => toast({ title: "Erreur lors de la cr\u00e9ation", variant: "destructive" }),
+    onError: () => toast({ title: "Erreur lors de la création", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -272,7 +272,7 @@ export default function Programs() {
       queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
       setDialogOpen(false);
       setEditProgram(undefined);
-      toast({ title: "Formation modifi\u00e9e avec succ\u00e8s" });
+      toast({ title: "Formation modifiée avec succès" });
     },
     onError: () => toast({ title: "Erreur lors de la modification", variant: "destructive" }),
   });
@@ -281,7 +281,7 @@ export default function Programs() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/programs/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
-      toast({ title: "Formation supprim\u00e9e" });
+      toast({ title: "Formation supprimée" });
     },
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
@@ -321,12 +321,12 @@ export default function Programs() {
           <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
           <h3 className="text-lg font-medium mb-1">Aucune formation</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun r\u00e9sultat pour votre recherche" : "Commencez par cr\u00e9er votre premi\u00e8re formation"}
+            {search ? "Aucun résultat pour votre recherche" : "Commencez par créer votre première formation"}
           </p>
           {!search && (
             <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-program">
               <Plus className="w-4 h-4 mr-2" />
-              Cr\u00e9er une formation
+              Créer une formation
             </Button>
           )}
         </div>

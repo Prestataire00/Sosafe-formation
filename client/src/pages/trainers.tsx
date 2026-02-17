@@ -1,12 +1,21 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +42,14 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  Eye,
+  ArrowLeft,
+  FileText,
+  Calendar,
+  Star,
+  CheckCircle,
+  XCircle,
+  Clock,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,19 +57,45 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Trainer, InsertTrainer } from "@shared/schema";
+import type { Trainer, InsertTrainer, Session } from "@shared/schema";
+import { TRAINER_DOCUMENT_TYPES, TRAINER_DOCUMENT_STATUSES } from "@shared/schema";
+
+type TrainerDocument = {
+  id: string;
+  trainerId: string;
+  type: string;
+  title: string;
+  fileUrl: string | null;
+  status: string;
+  validatedBy: string | null;
+  expiresAt: string | null;
+  uploadedAt: Date | null;
+  notes: string | null;
+};
+
+type TrainerEvaluation = {
+  id: string;
+  trainerId: string;
+  sessionId: string | null;
+  year: number;
+  overallRating: number | null;
+  strengths: string | null;
+  improvements: string | null;
+  notes: string | null;
+  satisfactionScore: number | null;
+  createdAt: Date | null;
+};
 
 const specialties = [
-  "Développement web",
-  "Design UX/UI",
-  "Marketing digital",
-  "Management",
-  "Bureautique",
-  "Langues",
-  "Cybersécurité",
-  "Data Science",
-  "DevOps",
-  "Gestion de projet",
+  "AFGSU / Urgences",
+  "Hygiène / Certibiocide",
+  "Prévention des risques",
+  "Management santé",
+  "Soins infirmiers",
+  "Gestes et postures",
+  "Formation continue santé",
+  "Certificat de décès",
+  "Autre",
 ];
 
 function TrainerForm({
@@ -91,77 +134,40 @@ function TrainerForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="first-name">Prénom</Label>
-          <Input
-            id="first-name"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
-            data-testid="input-trainer-firstname"
-          />
+          <Input id="first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required data-testid="input-trainer-firstname" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="last-name">Nom</Label>
-          <Input
-            id="last-name"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
-            data-testid="input-trainer-lastname"
-          />
+          <Input id="last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} required data-testid="input-trainer-lastname" />
         </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          data-testid="input-trainer-email"
-        />
+        <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="input-trainer-email" />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="phone">Téléphone</Label>
-          <Input
-            id="phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            data-testid="input-trainer-phone"
-          />
+          <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="input-trainer-phone" />
         </div>
         <div className="space-y-2">
           <Label>Spécialité</Label>
           <Select value={specialty} onValueChange={setSpecialty}>
-            <SelectTrigger data-testid="select-trainer-specialty">
-              <SelectValue placeholder="Choisir" />
-            </SelectTrigger>
+            <SelectTrigger data-testid="select-trainer-specialty"><SelectValue placeholder="Choisir" /></SelectTrigger>
             <SelectContent>
-              {specialties.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
+              {specialties.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
             </SelectContent>
           </Select>
         </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="bio">Biographie</Label>
-        <Textarea
-          id="bio"
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          placeholder="Expérience et parcours du formateur..."
-          className="resize-none"
-          data-testid="input-trainer-bio"
-        />
+        <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Expérience et parcours du formateur..." className="resize-none" data-testid="input-trainer-bio" />
       </div>
       <div className="space-y-2">
         <Label>Statut</Label>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger data-testid="select-trainer-status">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger data-testid="select-trainer-status"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="active">Actif</SelectItem>
             <SelectItem value="inactive">Inactif</SelectItem>
@@ -177,10 +183,367 @@ function TrainerForm({
   );
 }
 
+// ============================================================
+// Document Form
+// ============================================================
+
+function DocumentForm({
+  onSubmit,
+  isPending,
+}: {
+  onSubmit: (data: { type: string; title: string; fileUrl: string | null; notes: string | null; expiresAt: string | null }) => void;
+  isPending: boolean;
+}) {
+  const [type, setType] = useState("autre");
+  const [title, setTitle] = useState("");
+  const [fileUrl, setFileUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ type, title, fileUrl: fileUrl || null, notes: notes || null, expiresAt: expiresAt || null }); }} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Type de document</Label>
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TRAINER_DOCUMENT_TYPES.map((t) => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Date d'expiration</Label>
+          <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Titre</Label>
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Ex: CV - Sophie Martin" />
+      </div>
+      <div className="space-y-2">
+        <Label>URL du fichier</Label>
+        <Input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://..." />
+      </div>
+      <div className="space-y-2">
+        <Label>Notes</Label>
+        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="resize-none" />
+      </div>
+      <div className="flex justify-end pt-2">
+        <Button type="submit" disabled={isPending}>{isPending ? "Enregistrement..." : "Ajouter"}</Button>
+      </div>
+    </form>
+  );
+}
+
+// ============================================================
+// Evaluation Form
+// ============================================================
+
+function EvaluationForm({
+  onSubmit,
+  isPending,
+}: {
+  onSubmit: (data: { year: number; overallRating: number | null; strengths: string | null; improvements: string | null; satisfactionScore: number | null; notes: string | null }) => void;
+  isPending: boolean;
+}) {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [overallRating, setOverallRating] = useState("3");
+  const [strengths, setStrengths] = useState("");
+  const [improvements, setImprovements] = useState("");
+  const [satisfactionScore, setSatisfactionScore] = useState("");
+  const [notes, setNotes] = useState("");
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ year, overallRating: parseInt(overallRating) || null, strengths: strengths || null, improvements: improvements || null, satisfactionScore: parseInt(satisfactionScore) || null, notes: notes || null }); }} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Année</Label>
+          <Input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Note globale (1-5)</Label>
+          <Input type="number" min="1" max="5" value={overallRating} onChange={(e) => setOverallRating(e.target.value)} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Score de satisfaction (%)</Label>
+        <Input type="number" min="0" max="100" value={satisfactionScore} onChange={(e) => setSatisfactionScore(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Points forts</Label>
+        <Textarea value={strengths} onChange={(e) => setStrengths(e.target.value)} className="resize-none" />
+      </div>
+      <div className="space-y-2">
+        <Label>Axes d'amélioration</Label>
+        <Textarea value={improvements} onChange={(e) => setImprovements(e.target.value)} className="resize-none" />
+      </div>
+      <div className="space-y-2">
+        <Label>Notes</Label>
+        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="resize-none" />
+      </div>
+      <div className="flex justify-end pt-2">
+        <Button type="submit" disabled={isPending}>{isPending ? "Enregistrement..." : "Ajouter"}</Button>
+      </div>
+    </form>
+  );
+}
+
+// ============================================================
+// Trainer Detail View
+// ============================================================
+
+function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => void }) {
+  const { toast } = useToast();
+  const [docDialogOpen, setDocDialogOpen] = useState(false);
+  const [evalDialogOpen, setEvalDialogOpen] = useState(false);
+
+  const { data: documents } = useQuery<TrainerDocument[]>({
+    queryKey: [`/api/trainers/${trainer.id}/documents`],
+  });
+
+  const { data: evaluations } = useQuery<TrainerEvaluation[]>({
+    queryKey: [`/api/trainers/${trainer.id}/evaluations`],
+  });
+
+  const { data: trainerSessions } = useQuery<Session[]>({
+    queryKey: [`/api/trainers/${trainer.id}/sessions`],
+  });
+
+  const createDocMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest("POST", `/api/trainers/${trainer.id}/documents`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/documents`] });
+      setDocDialogOpen(false);
+      toast({ title: "Document ajouté" });
+    },
+  });
+
+  const validateDocMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("PATCH", `/api/trainer-documents/${id}`, { status: "validated" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/documents`] });
+      toast({ title: "Document validé" });
+    },
+  });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/trainer-documents/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/documents`] });
+      toast({ title: "Document supprimé" });
+    },
+  });
+
+  const createEvalMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest("POST", `/api/trainers/${trainer.id}/evaluations`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/evaluations`] });
+      setEvalDialogOpen(false);
+      toast({ title: "Évaluation ajoutée" });
+    },
+  });
+
+  const docTypeLabels: Record<string, string> = {};
+  TRAINER_DOCUMENT_TYPES.forEach((t) => { docTypeLabels[t.value] = t.label; });
+  const docStatusConfig: Record<string, { label: string; color: string }> = {};
+  TRAINER_DOCUMENT_STATUSES.forEach((s) => { docStatusConfig[s.value] = { label: s.label, color: s.color }; });
+
+  return (
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="w-4 h-4" /></Button>
+        <Avatar className="w-12 h-12">
+          <AvatarFallback className="bg-primary/10 text-primary text-lg font-medium">{trainer.firstName[0]}{trainer.lastName[0]}</AvatarFallback>
+        </Avatar>
+        <div>
+          <h1 className="text-2xl font-bold">{trainer.firstName} {trainer.lastName}</h1>
+          <p className="text-muted-foreground text-sm">{trainer.specialty || "Formateur"}</p>
+        </div>
+        <Badge variant="outline" className={`ml-auto ${trainer.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}>
+          {trainer.status === "active" ? "Actif" : "Inactif"}
+        </Badge>
+      </div>
+
+      <Tabs defaultValue="profil" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="profil" className="gap-2"><Users className="w-4 h-4" />Profil</TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documents</TabsTrigger>
+          <TabsTrigger value="evaluations" className="gap-2"><Star className="w-4 h-4" />Évaluations</TabsTrigger>
+          <TabsTrigger value="sessions" className="gap-2"><Calendar className="w-4 h-4" />Sessions</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profil">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Informations</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{trainer.email}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Téléphone</span><span>{trainer.phone || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Spécialité</span><span>{trainer.specialty || "—"}</span></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Biographie</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{trainer.bio || "Aucune biographie renseignée."}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Documents du formateur</CardTitle>
+              <Button size="sm" onClick={() => setDocDialogOpen(true)}><Plus className="w-4 h-4 mr-2" />Ajouter</Button>
+            </CardHeader>
+            <CardContent>
+              {!documents || documents.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">Aucun document</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Titre</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead>Expiration</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {documents.map((doc) => {
+                      const statusInfo = docStatusConfig[doc.status] || { label: doc.status, color: "" };
+                      return (
+                        <TableRow key={doc.id}>
+                          <TableCell><Badge variant="outline" className="text-xs">{docTypeLabels[doc.type] || doc.type}</Badge></TableCell>
+                          <TableCell className="font-medium">{doc.title}</TableCell>
+                          <TableCell><Badge variant="outline" className={`text-xs ${statusInfo.color}`}>{statusInfo.label}</Badge></TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{doc.expiresAt ? new Date(doc.expiresAt).toLocaleDateString("fr-FR") : "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {doc.status === "pending" && (
+                                <Button variant="ghost" size="icon" onClick={() => validateDocMutation.mutate(doc.id)} title="Valider">
+                                  <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteDocMutation.mutate(doc.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+          <Dialog open={docDialogOpen} onOpenChange={setDocDialogOpen}>
+            <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Nouveau document</DialogTitle></DialogHeader>
+              <DocumentForm onSubmit={(data) => createDocMutation.mutate(data)} isPending={createDocMutation.isPending} />
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        <TabsContent value="evaluations">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Évaluations annuelles</CardTitle>
+              <Button size="sm" onClick={() => setEvalDialogOpen(true)}><Plus className="w-4 h-4 mr-2" />Ajouter</Button>
+            </CardHeader>
+            <CardContent>
+              {!evaluations || evaluations.length === 0 ? (
+                <div className="text-center py-8">
+                  <Star className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">Aucune évaluation</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Année</TableHead>
+                      <TableHead>Note globale</TableHead>
+                      <TableHead>Satisfaction</TableHead>
+                      <TableHead>Points forts</TableHead>
+                      <TableHead>Axes d'amélioration</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {evaluations.map((ev) => (
+                      <TableRow key={ev.id}>
+                        <TableCell className="font-medium">{ev.year}</TableCell>
+                        <TableCell>{ev.overallRating ? `${ev.overallRating}/5` : "—"}</TableCell>
+                        <TableCell>{ev.satisfactionScore != null ? `${ev.satisfactionScore}%` : "—"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{ev.strengths || "—"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{ev.improvements || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+          <Dialog open={evalDialogOpen} onOpenChange={setEvalDialogOpen}>
+            <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Nouvelle évaluation</DialogTitle></DialogHeader>
+              <EvaluationForm onSubmit={(data) => createEvalMutation.mutate(data)} isPending={createEvalMutation.isPending} />
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        <TabsContent value="sessions">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Sessions du formateur</CardTitle></CardHeader>
+            <CardContent>
+              {!trainerSessions || trainerSessions.length === 0 ? (
+                <div className="text-center py-8">
+                  <Calendar className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">Aucune session assignée</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Session</TableHead>
+                      <TableHead>Dates</TableHead>
+                      <TableHead>Lieu</TableHead>
+                      <TableHead>Statut</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trainerSessions.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{s.title}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{new Date(s.startDate).toLocaleDateString("fr-FR")} - {new Date(s.endDate).toLocaleDateString("fr-FR")}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{s.location || "—"}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-xs">{s.status}</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ============================================================
+// Main Trainers Page
+// ============================================================
+
 export default function Trainers() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTrainer, setEditTrainer] = useState<Trainer | undefined>();
+  const [viewTrainer, setViewTrainer] = useState<Trainer | undefined>();
   const { toast } = useToast();
 
   const { data: trainers, isLoading } = useQuery<Trainer[]>({
@@ -218,6 +581,10 @@ export default function Trainers() {
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
 
+  if (viewTrainer) {
+    return <TrainerDetail trainer={viewTrainer} onBack={() => setViewTrainer(undefined)} />;
+  }
+
   const filtered = trainers?.filter(
     (t) =>
       `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
@@ -232,10 +599,7 @@ export default function Trainers() {
           <h1 className="text-2xl font-bold" data-testid="text-trainers-title">Formateurs</h1>
           <p className="text-muted-foreground mt-1">Gérez votre équipe de formateurs</p>
         </div>
-        <Button
-          onClick={() => { setEditTrainer(undefined); setDialogOpen(true); }}
-          data-testid="button-create-trainer"
-        >
+        <Button onClick={() => { setEditTrainer(undefined); setDialogOpen(true); }} data-testid="button-create-trainer">
           <Plus className="w-4 h-4 mr-2" />
           Ajouter un formateur
         </Button>
@@ -243,41 +607,21 @@ export default function Trainers() {
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher un formateur..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-trainers"
-        />
+        <Input placeholder="Rechercher un formateur..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-trainers" />
       </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-5">
-                <Skeleton className="h-12 w-12 rounded-full mb-3" />
-                <Skeleton className="h-5 w-3/4 mb-2" />
-                <Skeleton className="h-4 w-full mb-2" />
-                <Skeleton className="h-4 w-1/2" />
-              </CardContent>
-            </Card>
+            <Card key={i}><CardContent className="p-5"><Skeleton className="h-12 w-12 rounded-full mb-3" /><Skeleton className="h-5 w-3/4 mb-2" /><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-1/2" /></CardContent></Card>
           ))}
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16">
           <Users className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
           <h3 className="text-lg font-medium mb-1">Aucun formateur</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun résultat pour votre recherche" : "Ajoutez votre premier formateur"}
-          </p>
-          {!search && (
-            <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-trainer">
-              <Plus className="w-4 h-4 mr-2" />
-              Ajouter un formateur
-            </Button>
-          )}
+          <p className="text-sm text-muted-foreground mb-4">{search ? "Aucun résultat pour votre recherche" : "Ajoutez votre premier formateur"}</p>
+          {!search && (<Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-trainer"><Plus className="w-4 h-4 mr-2" />Ajouter un formateur</Button>)}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -287,43 +631,28 @@ export default function Trainers() {
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex items-center gap-3">
                     <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                        {trainer.firstName[0]}{trainer.lastName[0]}
-                      </AvatarFallback>
+                      <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">{trainer.firstName[0]}{trainer.lastName[0]}</AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="font-semibold text-sm">{trainer.firstName} {trainer.lastName}</h3>
-                      <Badge
-                        variant="outline"
-                        className={
-                          trainer.status === "active"
-                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 mt-0.5"
-                            : "bg-muted text-muted-foreground mt-0.5"
-                        }
-                      >
+                      <Badge variant="outline" className={trainer.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 mt-0.5" : "bg-muted text-muted-foreground mt-0.5"}>
                         {trainer.status === "active" ? "Actif" : "Inactif"}
                       </Badge>
                     </div>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" data-testid={`button-trainer-menu-${trainer.id}`}>
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
+                      <Button variant="ghost" size="icon" data-testid={`button-trainer-menu-${trainer.id}`}><MoreHorizontal className="w-4 h-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => { setEditTrainer(trainer); setDialogOpen(true); }}
-                      >
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Modifier
+                      <DropdownMenuItem onClick={() => setViewTrainer(trainer)}>
+                        <Eye className="w-4 h-4 mr-2" />Voir
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onClick={() => deleteMutation.mutate(trainer.id)}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Supprimer
+                      <DropdownMenuItem onClick={() => { setEditTrainer(trainer); setDialogOpen(true); }}>
+                        <Pencil className="w-4 h-4 mr-2" />Modifier
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(trainer.id)}>
+                        <Trash2 className="w-4 h-4 mr-2" />Supprimer
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -335,20 +664,10 @@ export default function Trainers() {
                   </div>
                 )}
                 <div className="space-y-1 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5" />
-                    <span className="truncate">{trainer.email}</span>
-                  </div>
-                  {trainer.phone && (
-                    <div className="flex items-center gap-1.5">
-                      <Phone className="w-3.5 h-3.5" />
-                      <span>{trainer.phone}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /><span className="truncate">{trainer.email}</span></div>
+                  {trainer.phone && (<div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /><span>{trainer.phone}</span></div>)}
                 </div>
-                {trainer.bio && (
-                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{trainer.bio}</p>
-                )}
+                {trainer.bio && (<p className="text-xs text-muted-foreground mt-2 line-clamp-2">{trainer.bio}</p>)}
               </CardContent>
             </Card>
           ))}
@@ -357,16 +676,10 @@ export default function Trainers() {
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditTrainer(undefined); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editTrainer ? "Modifier le formateur" : "Nouveau formateur"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{editTrainer ? "Modifier le formateur" : "Nouveau formateur"}</DialogTitle></DialogHeader>
           <TrainerForm
             trainer={editTrainer}
-            onSubmit={(data) =>
-              editTrainer
-                ? updateMutation.mutate({ id: editTrainer.id, data })
-                : createMutation.mutate(data)
-            }
+            onSubmit={(data) => editTrainer ? updateMutation.mutate({ id: editTrainer.id, data }) : createMutation.mutate(data)}
             isPending={createMutation.isPending || updateMutation.isPending}
           />
         </DialogContent>

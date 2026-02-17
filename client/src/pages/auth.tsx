@@ -39,7 +39,7 @@ export default function AuthPage() {
     } catch (err: any) {
       toast({
         title: mode === "login" ? "Erreur de connexion" : "Erreur d'inscription",
-        description: err?.message || "Veuillez v\u00e9rifier vos informations",
+        description: err?.message || "Veuillez vérifier vos informations",
         variant: "destructive",
       });
     } finally {
@@ -70,7 +70,7 @@ export default function AuthPage() {
         <Card>
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-lg text-center">
-              {mode === "login" ? "Connexion" : "Cr\u00e9er un compte"}
+              {mode === "login" ? "Connexion" : "Créer un compte"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -79,7 +79,7 @@ export default function AuthPage() {
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label htmlFor="firstName">Pr\u00e9nom</Label>
+                      <Label htmlFor="firstName">Prénom</Label>
                       <Input
                         id="firstName"
                         value={firstName}
@@ -110,7 +110,7 @@ export default function AuthPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>R\u00f4le</Label>
+                    <Label>Rôle</Label>
                     <Select value={role} onValueChange={setRole}>
                       <SelectTrigger data-testid="select-register-role">
                         <SelectValue />
@@ -174,12 +174,12 @@ export default function AuthPage() {
               >
                 {mode === "login"
                   ? "Pas encore de compte ? S'inscrire"
-                  : "D\u00e9j\u00e0 un compte ? Se connecter"}
+                  : "Déjà un compte ? Se connecter"}
               </button>
             </div>
             {mode === "login" && (
               <div className="mt-4 p-3 rounded-md bg-accent/50 text-xs text-muted-foreground">
-                <p className="font-medium mb-1">Compte admin par d\u00e9faut :</p>
+                <p className="font-medium mb-1">Compte admin par défaut :</p>
                 <p>Utilisateur : <code className="bg-accent px-1 rounded">admin</code></p>
                 <p>Mot de passe : <code className="bg-accent px-1 rounded">admin123</code></p>
               </div>

@@ -10,6 +10,16 @@ interface AuthUser {
   firstName: string;
   lastName: string;
   email?: string;
+  permissions?: string[];
+  trainerId?: string;
+  traineeId?: string;
+  enterpriseId?: string;
+}
+
+export function hasPermission(user: AuthUser | null, permission: string): boolean {
+  if (!user) return false;
+  if (user.role === "admin" && (!user.permissions || user.permissions.length === 0)) return true;
+  return user.permissions?.includes(permission) ?? false;
 }
 
 interface AuthContextType {

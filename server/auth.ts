@@ -72,3 +72,25 @@ export function requireRole(...roles: string[]) {
     next();
   };
 }
+
+export function requirePermission(...permissions: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Non authentifié" });
+    }
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "Utilisateur introuvable" });
+    }
+    // Admin with no specific permissions = full access
+    if (user.role === "admin" && (!user.permissions || (user.permissions as string[]).length === 0)) {
+      return next();
+    }
+    const userPerms = (user.permissions as string[]) || [];
+    const hasAll = permissions.every((p) => userPerms.includes(p));
+    if (!hasAll) {
+      return res.status(403).json({ message: "Permission insuffisante" });
+    }
+    next();
+  };
+}

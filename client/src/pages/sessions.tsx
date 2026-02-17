@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -34,6 +39,8 @@ import {
   UserCheck,
   Monitor,
   Layers,
+  Printer,
+  Building2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -41,8 +48,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Session, InsertSession, Program, Trainer } from "@shared/schema";
-import { SESSION_STATUSES, MODALITIES } from "@shared/schema";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { Session, InsertSession, Program, Trainer, Trainee, Enrollment, Enterprise } from "@shared/schema";
+import { SESSION_STATUSES, MODALITIES, TRAINEE_PROFILE_TYPES } from "@shared/schema";
 
 function SessionStatusBadge({ status }: { status: string }) {
   const variants: Record<string, string> = {
@@ -141,9 +149,9 @@ function SessionForm({
         <Input id="session-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Session Mars 2026" required data-testid="input-session-title" />
       </div>
       <div className="space-y-2">
-        <Label>Formation associ\u00e9e</Label>
+        <Label>Formation associée</Label>
         <Select value={programId} onValueChange={setProgramId} required>
-          <SelectTrigger data-testid="select-session-program"><SelectValue placeholder="S\u00e9lectionner une formation" /></SelectTrigger>
+          <SelectTrigger data-testid="select-session-program"><SelectValue placeholder="Sélectionner une formation" /></SelectTrigger>
           <SelectContent>
             {programs.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
@@ -154,7 +162,7 @@ function SessionForm({
       <div className="space-y-2">
         <Label>Formateur</Label>
         <Select value={trainerId} onValueChange={setTrainerId}>
-          <SelectTrigger data-testid="select-session-trainer"><SelectValue placeholder="S\u00e9lectionner un formateur" /></SelectTrigger>
+          <SelectTrigger data-testid="select-session-trainer"><SelectValue placeholder="Sélectionner un formateur" /></SelectTrigger>
           <SelectContent>
             {trainers.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
@@ -164,7 +172,7 @@ function SessionForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="start-date">Date de d\u00e9but</Label>
+          <Label htmlFor="start-date">Date de début</Label>
           <Input id="start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required data-testid="input-session-start" />
         </div>
         <div className="space-y-2">
@@ -174,7 +182,7 @@ function SessionForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Modalit\u00e9</Label>
+          <Label>Modalité</Label>
           <Select value={modality} onValueChange={setModality}>
             <SelectTrigger data-testid="select-session-modality"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -206,14 +214,188 @@ function SessionForm({
       </div>
       <div className="space-y-2">
         <Label htmlFor="notes">Notes</Label>
-        <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes suppl\u00e9mentaires..." className="resize-none" data-testid="input-session-notes" />
+        <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes supplémentaires..." className="resize-none" data-testid="input-session-notes" />
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending} data-testid="button-session-submit">
-          {isPending ? "Enregistrement..." : session ? "Modifier" : "Cr\u00e9er"}
+          {isPending ? "Enregistrement..." : session ? "Modifier" : "Créer"}
         </Button>
       </div>
     </form>
+  );
+}
+
+// ============================================================
+// TRAINEE AVATAR STRIP (inline preview on session cards)
+// ============================================================
+
+const MAX_VISIBLE_AVATARS = 5;
+
+function TraineeAvatarStrip({
+  trainees,
+  onClick,
+}: {
+  trainees: Trainee[];
+  onClick: () => void;
+}) {
+  if (trainees.length === 0) return null;
+
+  const visible = trainees.slice(0, MAX_VISIBLE_AVATARS);
+  const overflow = trainees.length - MAX_VISIBLE_AVATARS;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1 mt-3 pt-3 border-t w-full hover:bg-accent/50 -mx-1 px-1 rounded transition-colors cursor-pointer"
+    >
+      <div className="flex -space-x-2">
+        {visible.map((t) => (
+          <Tooltip key={t.id}>
+            <TooltipTrigger asChild>
+              <Avatar className="w-8 h-8 border-2 border-background">
+                {t.avatarUrl && <AvatarImage src={t.avatarUrl} alt={`${t.firstName} ${t.lastName}`} />}
+                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                  {t.firstName.charAt(0)}{t.lastName.charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {t.firstName} {t.lastName}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+        {overflow > 0 && (
+          <Avatar className="w-8 h-8 border-2 border-background">
+            <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
+              +{overflow}
+            </AvatarFallback>
+          </Avatar>
+        )}
+      </div>
+      <span className="text-[11px] text-muted-foreground ml-1 truncate">
+        {trainees.length === 1
+          ? `${trainees[0].firstName} ${trainees[0].lastName}`
+          : `${trainees.length} participants`}
+      </span>
+    </button>
+  );
+}
+
+// ============================================================
+// TROMBINOSCOPE DIALOG (full view)
+// ============================================================
+
+function TrombinoscopeDialog({
+  open,
+  onOpenChange,
+  session,
+  trainees,
+  enterprises,
+  trainer,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  session: Session | undefined;
+  trainees: Trainee[];
+  enterprises: Enterprise[];
+  trainer?: Trainer;
+}) {
+  if (!session) return null;
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <DialogTitle className="text-xl">Trombinoscope</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                {session.title}
+                {" — "}
+                {new Date(session.startDate).toLocaleDateString("fr-FR")} au {new Date(session.endDate).toLocaleDateString("fr-FR")}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={handlePrint} className="shrink-0 print:hidden">
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimer
+            </Button>
+          </div>
+        </DialogHeader>
+
+        {/* Trainer section */}
+        {trainer && (
+          <div className="mb-4 p-3 rounded-lg bg-primary/5 border">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Formateur</p>
+            <div className="flex items-center gap-3">
+              <Avatar className="w-12 h-12">
+                {trainer.avatarUrl && <AvatarImage src={trainer.avatarUrl} alt={`${trainer.firstName} ${trainer.lastName}`} />}
+                <AvatarFallback className="text-sm bg-primary/10 text-primary">
+                  {trainer.firstName.charAt(0)}{trainer.lastName.charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-medium text-sm">{trainer.firstName} {trainer.lastName}</p>
+                <p className="text-xs text-muted-foreground">{trainer.specialty || trainer.email}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trainees grid */}
+        {trainees.length > 0 ? (
+          <>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Participants ({trainees.length})
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {trainees.map((trainee) => {
+                const enterprise = enterprises.find((e) => e.id === trainee.enterpriseId);
+                const profileLabel = TRAINEE_PROFILE_TYPES.find((p) => p.value === trainee.profileType)?.label;
+                return (
+                  <div key={trainee.id} className="flex flex-col items-center gap-2 p-4 rounded-lg border bg-card hover:shadow-sm transition-shadow">
+                    <Avatar className="w-20 h-20">
+                      {trainee.avatarUrl && <AvatarImage src={trainee.avatarUrl} alt={`${trainee.firstName} ${trainee.lastName}`} />}
+                      <AvatarFallback className="text-xl bg-primary/10 text-primary">
+                        {trainee.firstName.charAt(0)}{trainee.lastName.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="text-center min-w-0 w-full space-y-0.5">
+                      <p className="font-medium text-sm truncate">
+                        {trainee.civility ? `${trainee.civility} ` : ""}{trainee.firstName} {trainee.lastName}
+                      </p>
+                      {enterprise && (
+                        <p className="text-xs text-muted-foreground truncate flex items-center justify-center gap-1">
+                          <Building2 className="w-3 h-3 shrink-0" />
+                          {enterprise.name}
+                        </p>
+                      )}
+                      {!enterprise && trainee.proDenomination && (
+                        <p className="text-xs text-muted-foreground truncate">{trainee.proDenomination}</p>
+                      )}
+                      {profileLabel && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          {profileLabel}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-12">
+            <Users className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+            <p className="text-muted-foreground">Aucun apprenant inscrit à cette session</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -221,6 +403,7 @@ export default function Sessions() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editSession, setEditSession] = useState<Session | undefined>();
+  const [trombiSessionId, setTrombiSessionId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: sessions, isLoading } = useQuery<Session[]>({
@@ -232,29 +415,44 @@ export default function Sessions() {
   const { data: trainers } = useQuery<Trainer[]>({
     queryKey: ["/api/trainers"],
   });
-  const { data: enrollmentCounts } = useQuery<Record<string, number>>({
-    queryKey: ["/api/enrollment-counts"],
-    queryFn: async () => {
-      const res = await fetch("/api/enrollments");
-      const enrollments = await res.json();
-      const counts: Record<string, number> = {};
-      for (const e of enrollments) {
-        if (e.status !== "cancelled") {
-          counts[e.sessionId] = (counts[e.sessionId] || 0) + 1;
-        }
-      }
-      return counts;
-    },
+  const { data: allTrainees } = useQuery<Trainee[]>({
+    queryKey: ["/api/trainees"],
   });
+  const { data: allEnrollments } = useQuery<Enrollment[]>({
+    queryKey: ["/api/enrollments"],
+  });
+  const { data: enterprises } = useQuery<Enterprise[]>({
+    queryKey: ["/api/enterprises"],
+  });
+
+  // Compute enrollment counts and per-session trainees from the enrollments + trainees data
+  const { enrollmentCounts, sessionTraineesMap } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const map: Record<string, Trainee[]> = {};
+    if (!allEnrollments || !allTrainees) return { enrollmentCounts: counts, sessionTraineesMap: map };
+
+    const traineeById = new Map(allTrainees.map((t) => [t.id, t]));
+
+    for (const e of allEnrollments) {
+      if (e.status === "cancelled") continue;
+      counts[e.sessionId] = (counts[e.sessionId] || 0) + 1;
+      const trainee = traineeById.get(e.traineeId);
+      if (trainee) {
+        if (!map[e.sessionId]) map[e.sessionId] = [];
+        map[e.sessionId].push(trainee);
+      }
+    }
+    return { enrollmentCounts: counts, sessionTraineesMap: map };
+  }, [allEnrollments, allTrainees]);
 
   const createMutation = useMutation({
     mutationFn: (data: InsertSession) => apiRequest("POST", "/api/sessions", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       setDialogOpen(false);
-      toast({ title: "Session cr\u00e9\u00e9e avec succ\u00e8s" });
+      toast({ title: "Session créée avec succès" });
     },
-    onError: () => toast({ title: "Erreur lors de la cr\u00e9ation", variant: "destructive" }),
+    onError: () => toast({ title: "Erreur lors de la création", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -264,7 +462,7 @@ export default function Sessions() {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       setDialogOpen(false);
       setEditSession(undefined);
-      toast({ title: "Session modifi\u00e9e avec succ\u00e8s" });
+      toast({ title: "Session modifiée avec succès" });
     },
     onError: () => toast({ title: "Erreur lors de la modification", variant: "destructive" }),
   });
@@ -273,7 +471,7 @@ export default function Sessions() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/sessions/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      toast({ title: "Session supprim\u00e9e" });
+      toast({ title: "Session supprimée" });
     },
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
@@ -289,7 +487,7 @@ export default function Sessions() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-sessions-title">Sessions</h1>
-          <p className="text-muted-foreground mt-1">Planifiez et g\u00e9rez vos sessions de formation</p>
+          <p className="text-muted-foreground mt-1">Planifiez et gérez vos sessions de formation</p>
         </div>
         <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
           <Plus className="w-4 h-4 mr-2" />
@@ -313,12 +511,12 @@ export default function Sessions() {
           <Calendar className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
           <h3 className="text-lg font-medium mb-1">Aucune session</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun r\u00e9sultat pour votre recherche" : "Cr\u00e9ez votre premi\u00e8re session de formation"}
+            {search ? "Aucun résultat pour votre recherche" : "Créez votre première session de formation"}
           </p>
           {!search && (
             <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-session">
               <Plus className="w-4 h-4 mr-2" />
-              Cr\u00e9er une session
+              Créer une session
             </Button>
           )}
         </div>
@@ -327,7 +525,8 @@ export default function Sessions() {
           {filtered.map((session) => {
             const program = programs?.find((p) => p.id === session.programId);
             const trainer = trainers?.find((t) => t.id === session.trainerId);
-            const enrolledCount = enrollmentCounts?.[session.id] || 0;
+            const enrolledCount = enrollmentCounts[session.id] || 0;
+            const sessionTrainees = sessionTraineesMap[session.id] || [];
             return (
               <Card key={session.id} className="hover-elevate" data-testid={`card-session-${session.id}`}>
                 <CardContent className="p-5">
@@ -335,7 +534,7 @@ export default function Sessions() {
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold truncate">{session.title}</h3>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {program?.title || "Formation non trouv\u00e9e"}
+                        {program?.title || "Formation non trouvée"}
                       </p>
                     </div>
                     <DropdownMenu>
@@ -348,6 +547,10 @@ export default function Sessions() {
                         <DropdownMenuItem onClick={() => { setEditSession(session); setDialogOpen(true); }} data-testid={`button-edit-session-${session.id}`}>
                           <Pencil className="w-4 h-4 mr-2" />
                           Modifier
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTrombiSessionId(session.id)} data-testid={`button-trombi-session-${session.id}`}>
+                          <Users className="w-4 h-4 mr-2" />
+                          Trombinoscope
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(session.id)} data-testid={`button-delete-session-${session.id}`}>
                           <Trash2 className="w-4 h-4 mr-2" />
@@ -385,6 +588,10 @@ export default function Sessions() {
                       <span>{enrolledCount}/{session.maxParticipants} inscrits</span>
                     </div>
                   </div>
+                  <TraineeAvatarStrip
+                    trainees={sessionTrainees}
+                    onClick={() => setTrombiSessionId(session.id)}
+                  />
                 </CardContent>
               </Card>
             );
@@ -410,6 +617,15 @@ export default function Sessions() {
           />
         </DialogContent>
       </Dialog>
+
+      <TrombinoscopeDialog
+        open={!!trombiSessionId}
+        onOpenChange={(open) => { if (!open) setTrombiSessionId(null); }}
+        session={sessions?.find((s) => s.id === trombiSessionId)}
+        trainees={trombiSessionId ? (sessionTraineesMap[trombiSessionId] || []) : []}
+        enterprises={enterprises || []}
+        trainer={trainers?.find((t) => t.id === sessions?.find((s) => s.id === trombiSessionId)?.trainerId)}
+      />
     </div>
   );
 }

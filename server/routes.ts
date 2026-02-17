@@ -1,5 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole } from "./auth";
 import {
@@ -13,6 +16,9 @@ import {
   insertQualityActionSchema,
   insertAttendanceSheetSchema, insertAttendanceRecordSchema,
   insertAutomationRuleSchema, insertOrganizationSettingSchema,
+  insertEnterpriseContactSchema, insertTrainerDocumentSchema, insertTrainerEvaluationSchema,
+  insertUserDocumentSchema, insertSignatureSchema,
+  insertExpenseNoteSchema,
   loginSchema, registerSchema,
   TEMPLATE_VARIABLES,
 } from "@shared/schema";
@@ -25,6 +31,54 @@ export async function registerRoutes(
   setupAuth(app);
 
   // ============================================================
+  // FILE UPLOAD (multer)
+  // ============================================================
+
+  const uploadsDir = path.join(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadsDir),
+      filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname);
+        cb(null, uniqueSuffix + ext);
+      },
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (_req, file, cb) => {
+      const allowed = [
+        "application/pdf",
+        "image/jpeg", "image/png", "image/gif", "image/webp",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Type de fichier non autorisé"));
+      }
+    },
+  });
+
+  app.post("/api/upload", upload.single("file"), (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "Aucun fichier envoyé" });
+    }
+    res.json({
+      fileUrl: `/uploads/${req.file.filename}`,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+    });
+  });
+
+  // ============================================================
   // AUTH ROUTES
   // ============================================================
 
@@ -33,7 +87,7 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
 
     const existing = await storage.getUserByUsername(parsed.data.username);
-    if (existing) return res.status(409).json({ message: "Ce nom d'utilisateur existe d\u00e9j\u00e0" });
+    if (existing) return res.status(409).json({ message: "Ce nom d'utilisateur existe déjà" });
 
     const hashedPassword = await hashPassword(parsed.data.password);
     const user = await storage.createUser({
@@ -68,16 +122,16 @@ export async function registerRoutes(
 
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {
-      if (err) return res.status(500).json({ message: "Erreur de d\u00e9connexion" });
-      res.json({ message: "D\u00e9connect\u00e9" });
+      if (err) return res.status(500).json({ message: "Erreur de déconnexion" });
+      res.json({ message: "Déconnecté" });
     });
   });
 
   app.get("/api/auth/me", async (req, res) => {
-    if (!req.session.userId) return res.status(401).json({ message: "Non authentifi\u00e9" });
+    if (!req.session.userId) return res.status(401).json({ message: "Non authentifié" });
     const user = await storage.getUser(req.session.userId);
-    if (!user) return res.status(401).json({ message: "Utilisateur non trouv\u00e9" });
-    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email });
+    if (!user) return res.status(401).json({ message: "Utilisateur non trouvé" });
+    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions || [], trainerId: user.trainerId, traineeId: user.traineeId, enterpriseId: user.enterpriseId });
   });
 
   // ============================================================
@@ -91,7 +145,7 @@ export async function registerRoutes(
 
   app.get("/api/enterprises/:id", async (req, res) => {
     const enterprise = await storage.getEnterprise(req.params.id);
-    if (!enterprise) return res.status(404).json({ message: "Entreprise non trouv\u00e9e" });
+    if (!enterprise) return res.status(404).json({ message: "Entreprise non trouvée" });
     res.json(enterprise);
   });
 
@@ -106,7 +160,7 @@ export async function registerRoutes(
     const parsed = insertEnterpriseSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const enterprise = await storage.updateEnterprise(req.params.id, parsed.data);
-    if (!enterprise) return res.status(404).json({ message: "Entreprise non trouv\u00e9e" });
+    if (!enterprise) return res.status(404).json({ message: "Entreprise non trouvée" });
     res.json(enterprise);
   });
 
@@ -126,7 +180,7 @@ export async function registerRoutes(
 
   app.get("/api/trainers/:id", async (req, res) => {
     const trainer = await storage.getTrainer(req.params.id);
-    if (!trainer) return res.status(404).json({ message: "Formateur non trouv\u00e9" });
+    if (!trainer) return res.status(404).json({ message: "Formateur non trouvé" });
     res.json(trainer);
   });
 
@@ -141,7 +195,7 @@ export async function registerRoutes(
     const parsed = insertTrainerSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const trainer = await storage.updateTrainer(req.params.id, parsed.data);
-    if (!trainer) return res.status(404).json({ message: "Formateur non trouv\u00e9" });
+    if (!trainer) return res.status(404).json({ message: "Formateur non trouvé" });
     res.json(trainer);
   });
 
@@ -161,7 +215,7 @@ export async function registerRoutes(
 
   app.get("/api/trainees/:id", async (req, res) => {
     const trainee = await storage.getTrainee(req.params.id);
-    if (!trainee) return res.status(404).json({ message: "Stagiaire non trouv\u00e9" });
+    if (!trainee) return res.status(404).json({ message: "Stagiaire non trouvé" });
     res.json(trainee);
   });
 
@@ -176,7 +230,7 @@ export async function registerRoutes(
     const parsed = insertTraineeSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const trainee = await storage.updateTrainee(req.params.id, parsed.data);
-    if (!trainee) return res.status(404).json({ message: "Stagiaire non trouv\u00e9" });
+    if (!trainee) return res.status(404).json({ message: "Stagiaire non trouvé" });
     res.json(trainee);
   });
 
@@ -196,7 +250,7 @@ export async function registerRoutes(
 
   app.get("/api/programs/:id", async (req, res) => {
     const program = await storage.getProgram(req.params.id);
-    if (!program) return res.status(404).json({ message: "Formation non trouv\u00e9e" });
+    if (!program) return res.status(404).json({ message: "Formation non trouvée" });
     res.json(program);
   });
 
@@ -211,7 +265,7 @@ export async function registerRoutes(
     const parsed = insertProgramSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const program = await storage.updateProgram(req.params.id, parsed.data);
-    if (!program) return res.status(404).json({ message: "Formation non trouv\u00e9e" });
+    if (!program) return res.status(404).json({ message: "Formation non trouvée" });
     res.json(program);
   });
 
@@ -231,7 +285,7 @@ export async function registerRoutes(
 
   app.get("/api/sessions/:id", async (req, res) => {
     const session = await storage.getSession(req.params.id);
-    if (!session) return res.status(404).json({ message: "Session non trouv\u00e9e" });
+    if (!session) return res.status(404).json({ message: "Session non trouvée" });
     res.json(session);
   });
 
@@ -251,7 +305,7 @@ export async function registerRoutes(
     const parsed = insertSessionSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const session = await storage.updateSession(req.params.id, parsed.data);
-    if (!session) return res.status(404).json({ message: "Session non trouv\u00e9e" });
+    if (!session) return res.status(404).json({ message: "Session non trouvée" });
     res.json(session);
   });
 
@@ -281,7 +335,7 @@ export async function registerRoutes(
     const parsed = insertEnrollmentSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const enrollment = await storage.updateEnrollment(req.params.id, parsed.data);
-    if (!enrollment) return res.status(404).json({ message: "Inscription non trouv\u00e9e" });
+    if (!enrollment) return res.status(404).json({ message: "Inscription non trouvée" });
     res.json(enrollment);
   });
 
@@ -301,7 +355,7 @@ export async function registerRoutes(
 
   app.get("/api/email-templates/:id", async (req, res) => {
     const template = await storage.getEmailTemplate(req.params.id);
-    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    if (!template) return res.status(404).json({ message: "Modèle non trouvé" });
     res.json(template);
   });
 
@@ -316,7 +370,7 @@ export async function registerRoutes(
     const parsed = insertEmailTemplateSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const template = await storage.updateEmailTemplate(req.params.id, parsed.data);
-    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    if (!template) return res.status(404).json({ message: "Modèle non trouvé" });
     res.json(template);
   });
 
@@ -327,28 +381,28 @@ export async function registerRoutes(
 
   app.post("/api/email-templates/:id/preview", async (req, res) => {
     const template = await storage.getEmailTemplate(req.params.id);
-    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    if (!template) return res.status(404).json({ message: "Modèle non trouvé" });
 
     const exampleValues: Record<string, string> = {
-      "{learner_name}": "Jean Dupont",
-      "{learner_first_name}": "Jean",
-      "{learner_last_name}": "Dupont",
-      "{learner_email}": "jean.dupont@example.com",
-      "{learner_company}": "H\u00f4pital Saint-Louis",
-      "{session_title}": "AFGSU Niveau 1 - Session Mars",
-      "{start_date}": "15/03/2026",
-      "{end_date}": "17/03/2026",
-      "{location}": "Paris - Centre de formation",
-      "{modality}": "Pr\u00e9sentiel",
-      "{program_title}": "AFGSU Niveau 1",
-      "{program_duration}": "14 heures",
-      "{program_price}": "500 EUR",
-      "{program_objectives}": "Ma\u00eetriser les gestes d'urgence",
-      "{org_name}": "SO'SAFE Formation",
-      "{org_address}": "12 rue de la Sant\u00e9, 75013 Paris",
-      "{org_siret}": "123 456 789 00012",
-      "{org_email}": "contact@sosafe.fr",
-      "{org_phone}": "01 23 45 67 89",
+      "{nom_apprenant}": "Jean Dupont",
+      "{prenom_apprenant}": "Jean",
+      "{nom_famille_apprenant}": "Dupont",
+      "{email_apprenant}": "jean.dupont@example.com",
+      "{entreprise_apprenant}": "Hôpital Saint-Louis",
+      "{titre_session}": "AFGSU Niveau 1 - Session Mars",
+      "{date_debut}": "15/03/2026",
+      "{date_fin}": "17/03/2026",
+      "{lieu}": "Paris - Centre de formation",
+      "{modalite}": "Présentiel",
+      "{titre_formation}": "AFGSU Niveau 1",
+      "{duree_formation}": "14 heures",
+      "{prix_formation}": "500 EUR",
+      "{objectifs_formation}": "Maîtriser les gestes d'urgence",
+      "{nom_organisme}": "SO'SAFE Formation",
+      "{adresse_organisme}": "12 rue de la Santé, 75013 Paris",
+      "{siret_organisme}": "123 456 789 00012",
+      "{email_organisme}": "contact@sosafe.fr",
+      "{telephone_organisme}": "01 23 45 67 89",
     };
 
     let renderedSubject = template.subject;
@@ -388,7 +442,7 @@ export async function registerRoutes(
 
   app.get("/api/document-templates/:id", async (req, res) => {
     const template = await storage.getDocumentTemplate(req.params.id);
-    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    if (!template) return res.status(404).json({ message: "Modèle non trouvé" });
     res.json(template);
   });
 
@@ -403,7 +457,7 @@ export async function registerRoutes(
     const parsed = insertDocumentTemplateSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const template = await storage.updateDocumentTemplate(req.params.id, parsed.data);
-    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    if (!template) return res.status(404).json({ message: "Modèle non trouvé" });
     res.json(template);
   });
 
@@ -426,7 +480,7 @@ export async function registerRoutes(
     if (!templateId) return res.status(400).json({ message: "templateId requis" });
 
     const template = await storage.getDocumentTemplate(templateId);
-    if (!template) return res.status(404).json({ message: "Mod\u00e8le non trouv\u00e9" });
+    if (!template) return res.status(404).json({ message: "Modèle non trouvé" });
 
     let content = template.content;
     const replacements: Record<string, string> = {};
@@ -435,16 +489,16 @@ export async function registerRoutes(
       const session = await storage.getSession(sessionId);
       if (session) {
         const program = await storage.getProgram(session.programId);
-        replacements["{session_title}"] = session.title;
-        replacements["{start_date}"] = new Date(session.startDate).toLocaleDateString("fr-FR");
-        replacements["{end_date}"] = new Date(session.endDate).toLocaleDateString("fr-FR");
-        replacements["{location}"] = session.location || "";
-        replacements["{modality}"] = session.modality;
+        replacements["{titre_session}"] = session.title;
+        replacements["{date_debut}"] = new Date(session.startDate).toLocaleDateString("fr-FR");
+        replacements["{date_fin}"] = new Date(session.endDate).toLocaleDateString("fr-FR");
+        replacements["{lieu}"] = session.location || "";
+        replacements["{modalite}"] = session.modality;
         if (program) {
-          replacements["{program_title}"] = program.title;
-          replacements["{program_duration}"] = `${program.duration} heures`;
-          replacements["{program_price}"] = `${program.price} EUR`;
-          replacements["{program_objectives}"] = program.objectives || "";
+          replacements["{titre_formation}"] = program.title;
+          replacements["{duree_formation}"] = `${program.duration} heures`;
+          replacements["{prix_formation}"] = `${program.price} EUR`;
+          replacements["{objectifs_formation}"] = program.objectives || "";
         }
       }
     }
@@ -452,21 +506,21 @@ export async function registerRoutes(
     if (traineeId) {
       const trainee = await storage.getTrainee(traineeId);
       if (trainee) {
-        replacements["{learner_name}"] = `${trainee.firstName} ${trainee.lastName}`;
-        replacements["{learner_first_name}"] = trainee.firstName;
-        replacements["{learner_last_name}"] = trainee.lastName;
-        replacements["{learner_email}"] = trainee.email;
-        replacements["{learner_company}"] = trainee.company || "";
+        replacements["{nom_apprenant}"] = `${trainee.firstName} ${trainee.lastName}`;
+        replacements["{prenom_apprenant}"] = trainee.firstName;
+        replacements["{nom_famille_apprenant}"] = trainee.lastName;
+        replacements["{email_apprenant}"] = trainee.email;
+        replacements["{entreprise_apprenant}"] = trainee.company || "";
       }
     }
 
     const settings = await storage.getOrganizationSettings();
     const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
-    replacements["{org_name}"] = settingsMap["org_name"] || "SO'SAFE Formation";
-    replacements["{org_address}"] = settingsMap["org_address"] || "";
-    replacements["{org_siret}"] = settingsMap["org_siret"] || "";
-    replacements["{org_email}"] = settingsMap["org_email"] || "";
-    replacements["{org_phone}"] = settingsMap["org_phone"] || "";
+    replacements["{nom_organisme}"] = settingsMap["org_name"] || "SO'SAFE Formation";
+    replacements["{adresse_organisme}"] = settingsMap["org_address"] || "";
+    replacements["{siret_organisme}"] = settingsMap["org_siret"] || "";
+    replacements["{email_organisme}"] = settingsMap["org_email"] || "";
+    replacements["{telephone_organisme}"] = settingsMap["org_phone"] || "";
 
     for (const [key, value] of Object.entries(replacements)) {
       content = content.replaceAll(key, value);
@@ -501,7 +555,7 @@ export async function registerRoutes(
 
   app.get("/api/prospects/:id", async (req, res) => {
     const prospect = await storage.getProspect(req.params.id);
-    if (!prospect) return res.status(404).json({ message: "Prospect non trouv\u00e9" });
+    if (!prospect) return res.status(404).json({ message: "Prospect non trouvé" });
     res.json(prospect);
   });
 
@@ -516,7 +570,7 @@ export async function registerRoutes(
     const parsed = insertProspectSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const prospect = await storage.updateProspect(req.params.id, parsed.data);
-    if (!prospect) return res.status(404).json({ message: "Prospect non trouv\u00e9" });
+    if (!prospect) return res.status(404).json({ message: "Prospect non trouvé" });
     res.json(prospect);
   });
 
@@ -527,7 +581,7 @@ export async function registerRoutes(
 
   app.post("/api/prospects/:id/convert", async (req, res) => {
     const prospect = await storage.getProspect(req.params.id);
-    if (!prospect) return res.status(404).json({ message: "Prospect non trouv\u00e9" });
+    if (!prospect) return res.status(404).json({ message: "Prospect non trouvé" });
 
     const enterprise = await storage.createEnterprise({
       name: prospect.companyName,
@@ -540,6 +594,13 @@ export async function registerRoutes(
       city: null,
       postalCode: null,
       sector: null,
+      formatJuridique: null,
+      tvaNumber: null,
+      email: null,
+      phone: null,
+      legalRepName: null,
+      legalRepEmail: null,
+      legalRepPhone: null,
     });
 
     await storage.updateProspect(req.params.id, { status: "won" });
@@ -562,7 +623,7 @@ export async function registerRoutes(
 
   app.get("/api/quotes/:id", async (req, res) => {
     const quote = await storage.getQuote(req.params.id);
-    if (!quote) return res.status(404).json({ message: "Devis non trouv\u00e9" });
+    if (!quote) return res.status(404).json({ message: "Devis non trouvé" });
     res.json(quote);
   });
 
@@ -577,7 +638,7 @@ export async function registerRoutes(
     const parsed = insertQuoteSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const quote = await storage.updateQuote(req.params.id, parsed.data);
-    if (!quote) return res.status(404).json({ message: "Devis non trouv\u00e9" });
+    if (!quote) return res.status(404).json({ message: "Devis non trouvé" });
     res.json(quote);
   });
 
@@ -588,7 +649,7 @@ export async function registerRoutes(
 
   app.post("/api/quotes/:id/convert-to-invoice", async (req, res) => {
     const quote = await storage.getQuote(req.params.id);
-    if (!quote) return res.status(404).json({ message: "Devis non trouv\u00e9" });
+    if (!quote) return res.status(404).json({ message: "Devis non trouvé" });
 
     const invoiceNumber = await storage.getNextInvoiceNumber();
     const invoice = await storage.createInvoice({
@@ -637,7 +698,7 @@ export async function registerRoutes(
 
   app.get("/api/invoices/:id", async (req, res) => {
     const invoice = await storage.getInvoice(req.params.id);
-    if (!invoice) return res.status(404).json({ message: "Facture non trouv\u00e9e" });
+    if (!invoice) return res.status(404).json({ message: "Facture non trouvée" });
     res.json(invoice);
   });
 
@@ -652,7 +713,7 @@ export async function registerRoutes(
     const parsed = insertInvoiceSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const invoice = await storage.updateInvoice(req.params.id, parsed.data);
-    if (!invoice) return res.status(404).json({ message: "Facture non trouv\u00e9e" });
+    if (!invoice) return res.status(404).json({ message: "Facture non trouvée" });
     res.json(invoice);
   });
 
@@ -700,7 +761,7 @@ export async function registerRoutes(
 
   app.get("/api/elearning-modules/:id", async (req, res) => {
     const module = await storage.getElearningModule(req.params.id);
-    if (!module) return res.status(404).json({ message: "Module non trouv\u00e9" });
+    if (!module) return res.status(404).json({ message: "Module non trouvé" });
     res.json(module);
   });
 
@@ -715,7 +776,7 @@ export async function registerRoutes(
     const parsed = insertElearningModuleSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const module = await storage.updateElearningModule(req.params.id, parsed.data);
-    if (!module) return res.status(404).json({ message: "Module non trouv\u00e9" });
+    if (!module) return res.status(404).json({ message: "Module non trouvé" });
     res.json(module);
   });
 
@@ -746,7 +807,7 @@ export async function registerRoutes(
     const parsed = insertElearningBlockSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const block = await storage.updateElearningBlock(req.params.id, parsed.data);
-    if (!block) return res.status(404).json({ message: "Bloc non trouv\u00e9" });
+    if (!block) return res.status(404).json({ message: "Bloc non trouvé" });
     res.json(block);
   });
 
@@ -777,7 +838,7 @@ export async function registerRoutes(
     const parsed = insertQuizQuestionSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const question = await storage.updateQuizQuestion(req.params.id, parsed.data);
-    if (!question) return res.status(404).json({ message: "Question non trouv\u00e9e" });
+    if (!question) return res.status(404).json({ message: "Question non trouvée" });
     res.json(question);
   });
 
@@ -809,7 +870,7 @@ export async function registerRoutes(
     const parsed = insertLearnerProgressSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const progress = await storage.updateLearnerProgress(req.params.id, parsed.data);
-    if (!progress) return res.status(404).json({ message: "Progression non trouv\u00e9e" });
+    if (!progress) return res.status(404).json({ message: "Progression non trouvée" });
     res.json(progress);
   });
 
@@ -824,7 +885,7 @@ export async function registerRoutes(
 
   app.get("/api/survey-templates/:id", async (req, res) => {
     const template = await storage.getSurveyTemplate(req.params.id);
-    if (!template) return res.status(404).json({ message: "Enqu\u00eate non trouv\u00e9e" });
+    if (!template) return res.status(404).json({ message: "Enquête non trouvée" });
     res.json(template);
   });
 
@@ -839,7 +900,7 @@ export async function registerRoutes(
     const parsed = insertSurveyTemplateSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const template = await storage.updateSurveyTemplate(req.params.id, parsed.data);
-    if (!template) return res.status(404).json({ message: "Enqu\u00eate non trouv\u00e9e" });
+    if (!template) return res.status(404).json({ message: "Enquête non trouvée" });
     res.json(template);
   });
 
@@ -885,7 +946,7 @@ export async function registerRoutes(
 
   app.get("/api/quality-actions/:id", async (req, res) => {
     const action = await storage.getQualityAction(req.params.id);
-    if (!action) return res.status(404).json({ message: "Action non trouv\u00e9e" });
+    if (!action) return res.status(404).json({ message: "Action non trouvée" });
     res.json(action);
   });
 
@@ -900,7 +961,7 @@ export async function registerRoutes(
     const parsed = insertQualityActionSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const action = await storage.updateQualityAction(req.params.id, parsed.data);
-    if (!action) return res.status(404).json({ message: "Action non trouv\u00e9e" });
+    if (!action) return res.status(404).json({ message: "Action non trouvée" });
     res.json(action);
   });
 
@@ -930,7 +991,7 @@ export async function registerRoutes(
     const parsed = insertAttendanceSheetSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const sheet = await storage.updateAttendanceSheet(req.params.id, parsed.data);
-    if (!sheet) return res.status(404).json({ message: "Feuille non trouv\u00e9e" });
+    if (!sheet) return res.status(404).json({ message: "Feuille non trouvée" });
     res.json(sheet);
   });
 
@@ -976,7 +1037,7 @@ export async function registerRoutes(
     const parsed = insertAttendanceRecordSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const record = await storage.updateAttendanceRecord(req.params.id, parsed.data);
-    if (!record) return res.status(404).json({ message: "Enregistrement non trouv\u00e9" });
+    if (!record) return res.status(404).json({ message: "Enregistrement non trouvé" });
     res.json(record);
   });
 
@@ -1000,7 +1061,7 @@ export async function registerRoutes(
     const parsed = insertAutomationRuleSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const rule = await storage.updateAutomationRule(req.params.id, parsed.data);
-    if (!rule) return res.status(404).json({ message: "R\u00e8gle non trouv\u00e9e" });
+    if (!rule) return res.status(404).json({ message: "Règle non trouvée" });
     res.json(rule);
   });
 
@@ -1035,15 +1096,210 @@ export async function registerRoutes(
 
   app.get("/api/users", async (_req, res) => {
     const result = await storage.getUsers();
-    res.json(result.map(u => ({ id: u.id, username: u.username, role: u.role, firstName: u.firstName, lastName: u.lastName, email: u.email })));
+    res.json(result.map(u => ({ id: u.id, username: u.username, role: u.role, firstName: u.firstName, lastName: u.lastName, email: u.email, permissions: u.permissions || [] })));
   });
 
   app.patch("/api/users/:id/role", async (req, res) => {
     const { role } = req.body;
     if (!role) return res.status(400).json({ message: "role requis" });
     const user = await storage.updateUser(req.params.id, { role });
-    if (!user) return res.status(404).json({ message: "Utilisateur non trouv\u00e9" });
+    if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
     res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName });
+  });
+
+  app.patch("/api/users/:id", async (req, res) => {
+    const { permissions, role } = req.body;
+    const updateData: Record<string, unknown> = {};
+    if (permissions !== undefined) updateData.permissions = permissions;
+    if (role !== undefined) updateData.role = role;
+    const user = await storage.updateUser(req.params.id, updateData as any);
+    if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions });
+  });
+
+  // ============================================================
+  // ENTERPRISE CONTACTS
+  // ============================================================
+
+  app.get("/api/enterprises/:id/contacts", async (req, res) => {
+    const contacts = await storage.getEnterpriseContacts(req.params.id);
+    res.json(contacts);
+  });
+
+  app.post("/api/enterprises/:id/contacts", async (req, res) => {
+    const parsed = insertEnterpriseContactSchema.safeParse({ ...req.body, enterpriseId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const contact = await storage.createEnterpriseContact(parsed.data);
+    res.status(201).json(contact);
+  });
+
+  app.patch("/api/enterprise-contacts/:id", async (req, res) => {
+    const parsed = insertEnterpriseContactSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const contact = await storage.updateEnterpriseContact(req.params.id, parsed.data);
+    if (!contact) return res.status(404).json({ message: "Contact non trouvé" });
+    res.json(contact);
+  });
+
+  app.delete("/api/enterprise-contacts/:id", async (req, res) => {
+    await storage.deleteEnterpriseContact(req.params.id);
+    res.status(204).send();
+  });
+
+  app.get("/api/enterprises/:id/enrollments", async (req, res) => {
+    const enrollmentsList = await storage.getEnrollmentsByEnterprise(req.params.id);
+    res.json(enrollmentsList);
+  });
+
+  // ============================================================
+  // SESSION TRAINEES (Trombinoscope)
+  // ============================================================
+
+  app.get("/api/sessions/:id/trainees", async (req, res) => {
+    const traineesList = await storage.getTraineesBySession(req.params.id);
+    res.json(traineesList);
+  });
+
+  // ============================================================
+  // TRAINER DOCUMENTS
+  // ============================================================
+
+  app.get("/api/trainers/:id/documents", async (req, res) => {
+    const docs = await storage.getTrainerDocuments(req.params.id);
+    res.json(docs);
+  });
+
+  app.post("/api/trainers/:id/documents", async (req, res) => {
+    const parsed = insertTrainerDocumentSchema.safeParse({ ...req.body, trainerId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const doc = await storage.createTrainerDocument(parsed.data);
+    res.status(201).json(doc);
+  });
+
+  app.patch("/api/trainer-documents/:id", async (req, res) => {
+    const parsed = insertTrainerDocumentSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const doc = await storage.updateTrainerDocument(req.params.id, parsed.data);
+    if (!doc) return res.status(404).json({ message: "Document non trouvé" });
+    res.json(doc);
+  });
+
+  app.delete("/api/trainer-documents/:id", async (req, res) => {
+    await storage.deleteTrainerDocument(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // TRAINER EVALUATIONS
+  // ============================================================
+
+  app.get("/api/trainers/:id/evaluations", async (req, res) => {
+    const evals = await storage.getTrainerEvaluations(req.params.id);
+    res.json(evals);
+  });
+
+  app.post("/api/trainers/:id/evaluations", async (req, res) => {
+    const parsed = insertTrainerEvaluationSchema.safeParse({ ...req.body, trainerId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const evaluation = await storage.createTrainerEvaluation(parsed.data);
+    res.status(201).json(evaluation);
+  });
+
+  app.get("/api/trainers/:id/sessions", async (req, res) => {
+    const trainerSessions = await storage.getSessionsByTrainer(req.params.id);
+    res.json(trainerSessions);
+  });
+
+  // ============================================================
+  // SURVEY RESPONSES - Admin override
+  // ============================================================
+
+  app.patch("/api/survey-responses/:id", async (req, res) => {
+    const parsed = insertSurveyResponseSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const response = await storage.updateSurveyResponse(req.params.id, parsed.data);
+    if (!response) return res.status(404).json({ message: "Réponse non trouvée" });
+    res.json(response);
+  });
+
+  // ============================================================
+  // USER DOCUMENTS (Phase 5)
+  // ============================================================
+
+  app.get("/api/user-documents", async (req, res) => {
+    const ownerId = req.query.ownerId as string;
+    const ownerType = req.query.ownerType as string | undefined;
+    if (!ownerId) return res.status(400).json({ message: "ownerId requis" });
+    const docs = await storage.getUserDocuments(ownerId, ownerType);
+    res.json(docs);
+  });
+
+  app.post("/api/user-documents", async (req, res) => {
+    const parsed = insertUserDocumentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const doc = await storage.createUserDocument(parsed.data);
+    res.status(201).json(doc);
+  });
+
+  app.delete("/api/user-documents/:id", async (req, res) => {
+    await storage.deleteUserDocument(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // SIGNATURES (Phase 5)
+  // ============================================================
+
+  app.get("/api/signatures", async (req, res) => {
+    const signerId = req.query.signerId as string;
+    if (!signerId) return res.status(400).json({ message: "signerId requis" });
+    const sigs = await storage.getSignatures(signerId);
+    res.json(sigs);
+  });
+
+  app.post("/api/signatures", async (req, res) => {
+    const parsed = insertSignatureSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const sig = await storage.createSignature(parsed.data);
+    res.status(201).json(sig);
+  });
+
+  // ============================================================
+  // EXPENSE NOTES
+  // ============================================================
+
+  app.get("/api/trainers/:id/expense-notes", async (req, res) => {
+    const notes = await storage.getExpenseNotes(req.params.id);
+    res.json(notes);
+  });
+
+  app.post("/api/trainers/:id/expense-notes", async (req, res) => {
+    const parsed = insertExpenseNoteSchema.safeParse({ ...req.body, trainerId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const note = await storage.createExpenseNote(parsed.data);
+    res.status(201).json(note);
+  });
+
+  app.patch("/api/expense-notes/:id", async (req, res) => {
+    const parsed = insertExpenseNoteSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const note = await storage.updateExpenseNote(req.params.id, parsed.data);
+    if (!note) return res.status(404).json({ message: "Note de frais non trouvée" });
+    res.json(note);
+  });
+
+  // ============================================================
+  // ENTERPRISE-SPECIFIC ROUTES (Quotes & Invoices)
+  // ============================================================
+
+  app.get("/api/enterprises/:id/quotes", async (req, res) => {
+    const result = await storage.getQuotesByEnterprise(req.params.id);
+    res.json(result);
+  });
+
+  app.get("/api/enterprises/:id/invoices", async (req, res) => {
+    const result = await storage.getInvoicesByEnterprise(req.params.id);
+    res.json(result);
   });
 
   return httpServer;

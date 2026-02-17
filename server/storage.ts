@@ -25,6 +25,12 @@ import {
   type AttendanceRecord, type InsertAttendanceRecord,
   type AutomationRule, type InsertAutomationRule,
   type OrganizationSetting, type InsertOrganizationSetting,
+  type EnterpriseContact, type InsertEnterpriseContact,
+  type TrainerDocument, type InsertTrainerDocument,
+  type TrainerEvaluation, type InsertTrainerEvaluation,
+  type UserDocument, type InsertUserDocument,
+  type Signature, type InsertSignature,
+  type ExpenseNote, type InsertExpenseNote,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
   emailTemplates, emailLogs, documentTemplates, generatedDocuments,
   prospects, quotes, invoices, payments,
@@ -32,6 +38,8 @@ import {
   surveyTemplates, surveyResponses, qualityActions,
   attendanceSheets, attendanceRecords,
   automationRules, organizationSettings,
+  enterpriseContacts, trainerDocuments, trainerEvaluations,
+  userDocuments, signatures, expenseNotes,
 } from "@shared/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -205,6 +213,52 @@ export interface IStorage {
   getOrganizationSettings(): Promise<OrganizationSetting[]>;
   getOrganizationSetting(key: string): Promise<OrganizationSetting | undefined>;
   upsertOrganizationSetting(setting: InsertOrganizationSetting): Promise<OrganizationSetting>;
+
+  // Enterprise Contacts
+  getEnterpriseContacts(enterpriseId: string): Promise<EnterpriseContact[]>;
+  createEnterpriseContact(contact: InsertEnterpriseContact): Promise<EnterpriseContact>;
+  updateEnterpriseContact(id: string, contact: Partial<InsertEnterpriseContact>): Promise<EnterpriseContact | undefined>;
+  deleteEnterpriseContact(id: string): Promise<void>;
+
+  // Enterprise enrollments
+  getEnrollmentsByEnterprise(enterpriseId: string): Promise<Enrollment[]>;
+
+  // Session trainees
+  getTraineesBySession(sessionId: string): Promise<Trainee[]>;
+
+  // Trainer Documents
+  getTrainerDocuments(trainerId: string): Promise<TrainerDocument[]>;
+  createTrainerDocument(doc: InsertTrainerDocument): Promise<TrainerDocument>;
+  updateTrainerDocument(id: string, doc: Partial<InsertTrainerDocument>): Promise<TrainerDocument | undefined>;
+  deleteTrainerDocument(id: string): Promise<void>;
+
+  // Trainer Evaluations
+  getTrainerEvaluations(trainerId: string): Promise<TrainerEvaluation[]>;
+  createTrainerEvaluation(evaluation: InsertTrainerEvaluation): Promise<TrainerEvaluation>;
+
+  // Trainer sessions
+  getSessionsByTrainer(trainerId: string): Promise<Session[]>;
+
+  // Survey Responses update
+  updateSurveyResponse(id: string, response: Partial<InsertSurveyResponse>): Promise<SurveyResponse | undefined>;
+
+  // User Documents
+  getUserDocuments(ownerId: string, ownerType?: string): Promise<UserDocument[]>;
+  createUserDocument(doc: InsertUserDocument): Promise<UserDocument>;
+  deleteUserDocument(id: string): Promise<void>;
+
+  // Signatures
+  getSignatures(signerId: string): Promise<Signature[]>;
+  createSignature(signature: InsertSignature): Promise<Signature>;
+
+  // Expense Notes
+  getExpenseNotes(trainerId: string): Promise<ExpenseNote[]>;
+  createExpenseNote(note: InsertExpenseNote): Promise<ExpenseNote>;
+  updateExpenseNote(id: string, note: Partial<InsertExpenseNote>): Promise<ExpenseNote | undefined>;
+
+  // Enterprise-specific queries
+  getQuotesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Quote[]>;
+  getInvoicesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Invoice[]>;
 }
 
 const pool = new pg.Pool({
@@ -226,7 +280,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db.insert(users).values({
+      ...insertUser,
+      permissions: insertUser.permissions as string[] | null | undefined,
+    }).returning();
     return user;
   }
 
@@ -235,7 +292,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
-    const [result] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [result] = await db.update(users).set(data as any).where(eq(users.id, id)).returning();
     return result;
   }
 
@@ -405,12 +463,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate> {
-    const [result] = await db.insert(emailTemplates).values(template).returning();
+    const [result] = await db.insert(emailTemplates).values(template as any).returning();
     return result;
   }
 
   async updateEmailTemplate(id: string, data: Partial<InsertEmailTemplate>): Promise<EmailTemplate | undefined> {
-    const [result] = await db.update(emailTemplates).set({ ...data, updatedAt: new Date() }).where(eq(emailTemplates.id, id)).returning();
+    const [result] = await db.update(emailTemplates).set({ ...data, updatedAt: new Date() } as any).where(eq(emailTemplates.id, id)).returning();
     return result;
   }
 
@@ -439,12 +497,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDocumentTemplate(template: InsertDocumentTemplate): Promise<DocumentTemplate> {
-    const [result] = await db.insert(documentTemplates).values(template).returning();
+    const [result] = await db.insert(documentTemplates).values(template as any).returning();
     return result;
   }
 
   async updateDocumentTemplate(id: string, data: Partial<InsertDocumentTemplate>): Promise<DocumentTemplate | undefined> {
-    const [result] = await db.update(documentTemplates).set({ ...data, updatedAt: new Date() }).where(eq(documentTemplates.id, id)).returning();
+    const [result] = await db.update(documentTemplates).set({ ...data, updatedAt: new Date() } as any).where(eq(documentTemplates.id, id)).returning();
     return result;
   }
 
@@ -506,12 +564,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createQuote(quote: InsertQuote): Promise<Quote> {
-    const [result] = await db.insert(quotes).values(quote).returning();
+    const [result] = await db.insert(quotes).values(quote as any).returning();
     return result;
   }
 
   async updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined> {
-    const [result] = await db.update(quotes).set({ ...data, updatedAt: new Date() }).where(eq(quotes.id, id)).returning();
+    const [result] = await db.update(quotes).set({ ...data, updatedAt: new Date() } as any).where(eq(quotes.id, id)).returning();
     return result;
   }
 
@@ -538,12 +596,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const [result] = await db.insert(invoices).values(invoice).returning();
+    const [result] = await db.insert(invoices).values(invoice as any).returning();
     return result;
   }
 
   async updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined> {
-    const [result] = await db.update(invoices).set({ ...data, updatedAt: new Date() }).where(eq(invoices.id, id)).returning();
+    const [result] = await db.update(invoices).set({ ...data, updatedAt: new Date() } as any).where(eq(invoices.id, id)).returning();
     return result;
   }
 
@@ -629,12 +687,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createQuizQuestion(question: InsertQuizQuestion): Promise<QuizQuestion> {
-    const [result] = await db.insert(quizQuestions).values(question).returning();
+    const [result] = await db.insert(quizQuestions).values(question as any).returning();
     return result;
   }
 
   async updateQuizQuestion(id: string, data: Partial<InsertQuizQuestion>): Promise<QuizQuestion | undefined> {
-    const [result] = await db.update(quizQuestions).set(data).where(eq(quizQuestions.id, id)).returning();
+    const [result] = await db.update(quizQuestions).set(data as any).where(eq(quizQuestions.id, id)).returning();
     return result;
   }
 
@@ -671,12 +729,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSurveyTemplate(template: InsertSurveyTemplate): Promise<SurveyTemplate> {
-    const [result] = await db.insert(surveyTemplates).values(template).returning();
+    const [result] = await db.insert(surveyTemplates).values(template as any).returning();
     return result;
   }
 
   async updateSurveyTemplate(id: string, data: Partial<InsertSurveyTemplate>): Promise<SurveyTemplate | undefined> {
-    const [result] = await db.update(surveyTemplates).set(data).where(eq(surveyTemplates.id, id)).returning();
+    const [result] = await db.update(surveyTemplates).set(data as any).where(eq(surveyTemplates.id, id)).returning();
     return result;
   }
 
@@ -699,7 +757,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSurveyResponse(response: InsertSurveyResponse): Promise<SurveyResponse> {
-    const [result] = await db.insert(surveyResponses).values(response).returning();
+    const [result] = await db.insert(surveyResponses).values(response as any).returning();
     return result;
   }
 
@@ -783,12 +841,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAutomationRule(rule: InsertAutomationRule): Promise<AutomationRule> {
-    const [result] = await db.insert(automationRules).values(rule).returning();
+    const [result] = await db.insert(automationRules).values(rule as any).returning();
     return result;
   }
 
   async updateAutomationRule(id: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule | undefined> {
-    const [result] = await db.update(automationRules).set(data).where(eq(automationRules.id, id)).returning();
+    const [result] = await db.update(automationRules).set(data as any).where(eq(automationRules.id, id)).returning();
     return result;
   }
 
@@ -817,6 +875,132 @@ export class DatabaseStorage implements IStorage {
     }
     const [result] = await db.insert(organizationSettings).values(setting).returning();
     return result;
+  }
+
+  // ---- Enterprise Contacts ----
+  async getEnterpriseContacts(enterpriseId: string): Promise<EnterpriseContact[]> {
+    return db.select().from(enterpriseContacts).where(eq(enterpriseContacts.enterpriseId, enterpriseId)).orderBy(desc(enterpriseContacts.createdAt));
+  }
+
+  async createEnterpriseContact(contact: InsertEnterpriseContact): Promise<EnterpriseContact> {
+    const [result] = await db.insert(enterpriseContacts).values(contact).returning();
+    return result;
+  }
+
+  async updateEnterpriseContact(id: string, data: Partial<InsertEnterpriseContact>): Promise<EnterpriseContact | undefined> {
+    const [result] = await db.update(enterpriseContacts).set(data).where(eq(enterpriseContacts.id, id)).returning();
+    return result;
+  }
+
+  async deleteEnterpriseContact(id: string): Promise<void> {
+    await db.delete(enterpriseContacts).where(eq(enterpriseContacts.id, id));
+  }
+
+  // ---- Enterprise enrollments ----
+  async getEnrollmentsByEnterprise(enterpriseId: string): Promise<Enrollment[]> {
+    return db.select().from(enrollments).where(eq(enrollments.enterpriseId, enterpriseId)).orderBy(desc(enrollments.enrolledAt));
+  }
+
+  // ---- Session trainees ----
+  async getTraineesBySession(sessionId: string): Promise<Trainee[]> {
+    const enrollmentList = await db.select().from(enrollments).where(
+      and(eq(enrollments.sessionId, sessionId), sql`${enrollments.status} NOT IN ('cancelled')`)
+    );
+    if (enrollmentList.length === 0) return [];
+    const traineeIds = enrollmentList.map(e => e.traineeId);
+    const result = await db.select().from(trainees).where(sql`${trainees.id} IN (${sql.join(traineeIds.map(id => sql`${id}`), sql`, `)})`);
+    return result;
+  }
+
+  // ---- Trainer Documents ----
+  async getTrainerDocuments(trainerId: string): Promise<TrainerDocument[]> {
+    return db.select().from(trainerDocuments).where(eq(trainerDocuments.trainerId, trainerId)).orderBy(desc(trainerDocuments.uploadedAt));
+  }
+
+  async createTrainerDocument(doc: InsertTrainerDocument): Promise<TrainerDocument> {
+    const [result] = await db.insert(trainerDocuments).values(doc).returning();
+    return result;
+  }
+
+  async updateTrainerDocument(id: string, data: Partial<InsertTrainerDocument>): Promise<TrainerDocument | undefined> {
+    const [result] = await db.update(trainerDocuments).set(data).where(eq(trainerDocuments.id, id)).returning();
+    return result;
+  }
+
+  async deleteTrainerDocument(id: string): Promise<void> {
+    await db.delete(trainerDocuments).where(eq(trainerDocuments.id, id));
+  }
+
+  // ---- Trainer Evaluations ----
+  async getTrainerEvaluations(trainerId: string): Promise<TrainerEvaluation[]> {
+    return db.select().from(trainerEvaluations).where(eq(trainerEvaluations.trainerId, trainerId)).orderBy(desc(trainerEvaluations.createdAt));
+  }
+
+  async createTrainerEvaluation(evaluation: InsertTrainerEvaluation): Promise<TrainerEvaluation> {
+    const [result] = await db.insert(trainerEvaluations).values(evaluation).returning();
+    return result;
+  }
+
+  // ---- Trainer sessions ----
+  async getSessionsByTrainer(trainerId: string): Promise<Session[]> {
+    return db.select().from(sessions).where(eq(sessions.trainerId, trainerId)).orderBy(desc(sessions.startDate));
+  }
+
+  // ---- Survey Response Update ----
+  async updateSurveyResponse(id: string, data: Partial<InsertSurveyResponse>): Promise<SurveyResponse | undefined> {
+    const [result] = await db.update(surveyResponses).set(data as any).where(eq(surveyResponses.id, id)).returning();
+    return result;
+  }
+
+  // ---- User Documents ----
+  async getUserDocuments(ownerId: string, ownerType?: string): Promise<UserDocument[]> {
+    if (ownerType) {
+      return db.select().from(userDocuments).where(and(eq(userDocuments.ownerId, ownerId), eq(userDocuments.ownerType, ownerType))).orderBy(desc(userDocuments.uploadedAt));
+    }
+    return db.select().from(userDocuments).where(eq(userDocuments.ownerId, ownerId)).orderBy(desc(userDocuments.uploadedAt));
+  }
+
+  async createUserDocument(doc: InsertUserDocument): Promise<UserDocument> {
+    const [result] = await db.insert(userDocuments).values(doc).returning();
+    return result;
+  }
+
+  async deleteUserDocument(id: string): Promise<void> {
+    await db.delete(userDocuments).where(eq(userDocuments.id, id));
+  }
+
+  // ---- Signatures ----
+  async getSignatures(signerId: string): Promise<Signature[]> {
+    return db.select().from(signatures).where(eq(signatures.signerId, signerId)).orderBy(desc(signatures.signedAt));
+  }
+
+  async createSignature(signature: InsertSignature): Promise<Signature> {
+    const [result] = await db.insert(signatures).values(signature).returning();
+    return result;
+  }
+
+  // ---- Expense Notes ----
+  async getExpenseNotes(trainerId: string): Promise<ExpenseNote[]> {
+    return db.select().from(expenseNotes).where(eq(expenseNotes.trainerId, trainerId)).orderBy(desc(expenseNotes.createdAt));
+  }
+
+  async createExpenseNote(note: InsertExpenseNote): Promise<ExpenseNote> {
+    const [result] = await db.insert(expenseNotes).values(note).returning();
+    return result;
+  }
+
+  async updateExpenseNote(id: string, data: Partial<InsertExpenseNote>): Promise<ExpenseNote | undefined> {
+    const [result] = await db.update(expenseNotes).set({ ...data, updatedAt: new Date() } as any).where(eq(expenseNotes.id, id)).returning();
+    return result;
+  }
+
+  // ---- Enterprise-specific queries ----
+  async getQuotesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Quote[]> {
+    return db.select().from(quotes).where(eq(quotes.enterpriseId, enterpriseId)).orderBy(desc(quotes.createdAt));
+  }
+
+  async getInvoicesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Invoice[]> {
+    return db.select().from(invoices).where(eq(invoices.enterpriseId, enterpriseId)).orderBy(desc(invoices.createdAt));
   }
 }
 

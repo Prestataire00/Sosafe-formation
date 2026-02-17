@@ -19,6 +19,20 @@ import Trainees from "@/pages/trainees";
 import Trainers from "@/pages/trainers";
 import Enterprises from "@/pages/enterprises";
 import Enrollments from "@/pages/enrollments";
+import EmailTemplates from "@/pages/email-templates";
+import Documents from "@/pages/documents";
+import Prospects from "@/pages/prospects";
+import Quotes from "@/pages/quotes";
+import Invoices from "@/pages/invoices";
+import FinancialReports from "@/pages/financial-reports";
+import Attendance from "@/pages/attendance";
+import QualityDashboard from "@/pages/quality-dashboard";
+import Surveys from "@/pages/surveys";
+import Elearning from "@/pages/elearning";
+import LearnerPortal from "@/pages/learner-portal";
+import TrainerPortal from "@/pages/trainer-portal";
+import EnterprisePortal from "@/pages/enterprise-portal";
+import SettingsPage from "@/pages/settings";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 
@@ -32,6 +46,20 @@ function Router() {
       <Route path="/trainers" component={Trainers} />
       <Route path="/enterprises" component={Enterprises} />
       <Route path="/enrollments" component={Enrollments} />
+      <Route path="/email-templates" component={EmailTemplates} />
+      <Route path="/documents" component={Documents} />
+      <Route path="/prospects" component={Prospects} />
+      <Route path="/quotes" component={Quotes} />
+      <Route path="/invoices" component={Invoices} />
+      <Route path="/financial-reports" component={FinancialReports} />
+      <Route path="/attendance" component={Attendance} />
+      <Route path="/quality" component={QualityDashboard} />
+      <Route path="/surveys" component={Surveys} />
+      <Route path="/elearning" component={Elearning} />
+      <Route path="/learner-portal" component={LearnerPortal} />
+      <Route path="/trainer-portal" component={TrainerPortal} />
+      <Route path="/enterprise-portal" component={EnterprisePortal} />
+      <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );

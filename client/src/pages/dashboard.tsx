@@ -14,8 +14,12 @@ import {
   Building2,
   Award,
   UserCheck,
+  CreditCard,
+  Star,
+  CheckSquare,
+  Euro,
 } from "lucide-react";
-import type { Program, Session, Trainer, Trainee, Enterprise, Enrollment } from "@shared/schema";
+import type { Program, Session, Trainer, Trainee, Enterprise, Enrollment, Invoice } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
 
 function StatCard({
@@ -57,10 +61,10 @@ function StatCard({
 
 function SessionStatusBadge({ status }: { status: string }) {
   const variants: Record<string, { label: string; className: string }> = {
-    planned: { label: "Planifi\u00e9e", className: "bg-accent text-accent-foreground" },
+    planned: { label: "Planifiée", className: "bg-accent text-accent-foreground" },
     ongoing: { label: "En cours", className: "bg-primary/10 text-primary dark:bg-primary/20" },
-    completed: { label: "Termin\u00e9e", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-    cancelled: { label: "Annul\u00e9e", className: "bg-destructive/10 text-destructive" },
+    completed: { label: "Terminée", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+    cancelled: { label: "Annulée", className: "bg-destructive/10 text-destructive" },
   };
   const v = variants[status] || variants.planned;
   return <Badge variant="outline" className={v.className}>{v.label}</Badge>;
@@ -87,6 +91,12 @@ export default function Dashboard() {
   const { data: enrollments, isLoading: loadingEnrollments } = useQuery<Enrollment[]>({
     queryKey: ["/api/enrollments"],
   });
+  const { data: invoiceStats } = useQuery<{ total: number; paid: number; pending: number; overdue: number; count: number }>({
+    queryKey: ["/api/invoices/stats"],
+  });
+  const { data: surveyStats } = useQuery<{ totalResponses: number; averageRating: number; ratingsCount: number }>({
+    queryKey: ["/api/survey-responses/stats"],
+  });
 
   const loading = loadingPrograms || loadingSessions || loadingTrainers || loadingTrainees || loadingEnterprises || loadingEnrollments;
 
@@ -106,7 +116,7 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">{greeting}</h1>
         <p className="text-muted-foreground mt-1">
           {user?.role === "admin"
-            ? "Vue d'ensemble de l'activit\u00e9 SO'SAFE"
+            ? "Vue d'ensemble de l'activité SO'SAFE"
             : user?.role === "trainer"
               ? "Vos sessions et formations"
               : "Votre espace de formation"}
@@ -126,7 +136,7 @@ export default function Dashboard() {
           title="Sessions actives"
           value={activeSessions.length}
           icon={Calendar}
-          subtitle="En cours / Planifi\u00e9es"
+          subtitle="En cours / Planifiées"
           loading={loading}
           testId="card-stat-sessions"
         />
@@ -140,12 +150,12 @@ export default function Dashboard() {
         />
         {user?.role === "admin" ? (
           <StatCard
-            title="Entreprises"
-            value={enterprises?.length ?? 0}
-            icon={Building2}
-            subtitle="Clients actifs"
+            title="Chiffre d'affaires"
+            value={invoiceStats ? `${(invoiceStats.paid / 100).toLocaleString("fr-FR")} €` : "0 €"}
+            icon={Euro}
+            subtitle={invoiceStats ? `${invoiceStats.count} facture${invoiceStats.count > 1 ? "s" : ""}` : ""}
             loading={loading}
-            testId="card-stat-enterprises"
+            testId="card-stat-revenue"
           />
         ) : (
           <StatCard
@@ -159,10 +169,39 @@ export default function Dashboard() {
         )}
       </div>
 
+      {user?.role === "admin" && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            title="Entreprises"
+            value={enterprises?.length ?? 0}
+            icon={Building2}
+            subtitle="Clients actifs"
+            loading={loading}
+            testId="card-stat-enterprises"
+          />
+          <StatCard
+            title="Satisfaction moyenne"
+            value={surveyStats?.averageRating ? `${surveyStats.averageRating}/5` : "N/A"}
+            icon={Star}
+            subtitle={surveyStats ? `${surveyStats.totalResponses} réponse${surveyStats.totalResponses > 1 ? "s" : ""}` : ""}
+            loading={loading}
+            testId="card-stat-satisfaction"
+          />
+          <StatCard
+            title="Impayés"
+            value={invoiceStats ? `${((invoiceStats.pending + invoiceStats.overdue) / 100).toLocaleString("fr-FR")} €` : "0 €"}
+            icon={CreditCard}
+            subtitle={invoiceStats?.overdue ? `dont ${(invoiceStats.overdue / 100).toLocaleString("fr-FR")} € en retard` : ""}
+            loading={loading}
+            testId="card-stat-unpaid"
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base font-semibold">Sessions r\u00e9centes</CardTitle>
+            <CardTitle className="text-base font-semibold">Sessions récentes</CardTitle>
             <Clock className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -199,7 +238,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base font-semibold">Activit\u00e9</CardTitle>
+            <CardTitle className="text-base font-semibold">Activité</CardTitle>
             <TrendingUp className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -209,7 +248,7 @@ export default function Dashboard() {
                   <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Sessions termin\u00e9es</p>
+                  <p className="text-sm font-medium">Sessions terminées</p>
                   <p className="text-xs text-muted-foreground">
                     {sessions?.filter((s) => s.status === "completed").length ?? 0} sessions
                   </p>
@@ -231,7 +270,7 @@ export default function Dashboard() {
                   <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Sessions planifi\u00e9es</p>
+                  <p className="text-sm font-medium">Sessions planifiées</p>
                   <p className="text-xs text-muted-foreground">
                     {sessions?.filter((s) => s.status === "planned").length ?? 0} sessions
                   </p>

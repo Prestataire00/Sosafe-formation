@@ -51,9 +51,9 @@ import type { Enrollment, InsertEnrollment, Session, Trainee, Enterprise } from 
 
 const ENROLLMENT_STATUSES = [
   { value: "registered", label: "Inscrit", icon: Clock, className: "bg-accent text-accent-foreground" },
-  { value: "confirmed", label: "Confirm\u00e9", icon: UserCheck, className: "bg-primary/10 text-primary dark:bg-primary/20" },
-  { value: "completed", label: "Termin\u00e9", icon: CheckCircle, className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-  { value: "cancelled", label: "Annul\u00e9", icon: XCircle, className: "bg-destructive/10 text-destructive" },
+  { value: "confirmed", label: "Confirmé", icon: UserCheck, className: "bg-primary/10 text-primary dark:bg-primary/20" },
+  { value: "completed", label: "Terminé", icon: CheckCircle, className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "cancelled", label: "Annulé", icon: XCircle, className: "bg-destructive/10 text-destructive" },
 ];
 
 function EnrollmentStatusBadge({ status }: { status: string }) {
@@ -66,6 +66,8 @@ function EnrollmentStatusBadge({ status }: { status: string }) {
     </Badge>
   );
 }
+
+const ENROLLMENT_MEMORY_KEY = "enrollment_last_values";
 
 function EnrollmentForm({
   sessions,
@@ -80,13 +82,38 @@ function EnrollmentForm({
   onSubmit: (data: InsertEnrollment) => void;
   isPending: boolean;
 }) {
-  const [sessionId, setSessionId] = useState("");
+  const plannedSessions = sessions.filter((s) => s.status === "planned" || s.status === "ongoing");
+
+  const savedValues = (() => {
+    try {
+      const raw = localStorage.getItem(ENROLLMENT_MEMORY_KEY);
+      if (!raw) return { sessionId: "", enterpriseId: "" };
+      const parsed = JSON.parse(raw);
+      return {
+        sessionId: plannedSessions.some((s) => s.id === parsed.sessionId) ? parsed.sessionId : "",
+        enterpriseId: enterprises.some((e) => e.id === parsed.enterpriseId) ? parsed.enterpriseId : "",
+      };
+    } catch {
+      return { sessionId: "", enterpriseId: "" };
+    }
+  })();
+
+  const [sessionId, setSessionId] = useState(savedValues.sessionId);
   const [traineeId, setTraineeId] = useState("");
-  const [enterpriseId, setEnterpriseId] = useState("");
+  const [enterpriseId, setEnterpriseId] = useState(savedValues.enterpriseId);
   const [notes, setNotes] = useState("");
+
+  const handleTraineeChange = (id: string) => {
+    setTraineeId(id);
+    const trainee = trainees.find((t) => t.id === id);
+    if (trainee?.enterpriseId) {
+      setEnterpriseId(trainee.enterpriseId);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    localStorage.setItem(ENROLLMENT_MEMORY_KEY, JSON.stringify({ sessionId, enterpriseId }));
     onSubmit({
       sessionId,
       traineeId,
@@ -97,14 +124,12 @@ function EnrollmentForm({
     });
   };
 
-  const plannedSessions = sessions.filter((s) => s.status === "planned" || s.status === "ongoing");
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label>Session</Label>
         <Select value={sessionId} onValueChange={setSessionId} required>
-          <SelectTrigger data-testid="select-enrollment-session"><SelectValue placeholder="S\u00e9lectionner une session" /></SelectTrigger>
+          <SelectTrigger data-testid="select-enrollment-session"><SelectValue placeholder="Sélectionner une session" /></SelectTrigger>
           <SelectContent>
             {plannedSessions.map((s) => (
               <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
@@ -114,8 +139,8 @@ function EnrollmentForm({
       </div>
       <div className="space-y-2">
         <Label>Stagiaire</Label>
-        <Select value={traineeId} onValueChange={setTraineeId} required>
-          <SelectTrigger data-testid="select-enrollment-trainee"><SelectValue placeholder="S\u00e9lectionner un stagiaire" /></SelectTrigger>
+        <Select value={traineeId} onValueChange={handleTraineeChange} required>
+          <SelectTrigger data-testid="select-enrollment-trainee"><SelectValue placeholder="Sélectionner un stagiaire" /></SelectTrigger>
           <SelectContent>
             {trainees.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
@@ -173,7 +198,7 @@ export default function Enrollments() {
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/enrollment-counts"] });
       setDialogOpen(false);
-      toast({ title: "Inscription cr\u00e9\u00e9e avec succ\u00e8s" });
+      toast({ title: "Inscription créée avec succès" });
     },
     onError: () => toast({ title: "Erreur lors de l'inscription", variant: "destructive" }),
   });
@@ -184,9 +209,9 @@ export default function Enrollments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/enrollment-counts"] });
-      toast({ title: "Statut mis \u00e0 jour" });
+      toast({ title: "Statut mis à jour" });
     },
-    onError: () => toast({ title: "Erreur lors de la mise \u00e0 jour", variant: "destructive" }),
+    onError: () => toast({ title: "Erreur lors de la mise à jour", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -194,7 +219,7 @@ export default function Enrollments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/enrollment-counts"] });
-      toast({ title: "Inscription supprim\u00e9e" });
+      toast({ title: "Inscription supprimée" });
     },
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
@@ -222,7 +247,7 @@ export default function Enrollments() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-enrollments-title">Inscriptions</h1>
-          <p className="text-muted-foreground mt-1">G\u00e9rez les inscriptions aux sessions de formation</p>
+          <p className="text-muted-foreground mt-1">Gérez les inscriptions aux sessions de formation</p>
         </div>
         <Button onClick={() => setDialogOpen(true)} data-testid="button-create-enrollment">
           <Plus className="w-4 h-4 mr-2" />
@@ -234,9 +259,9 @@ export default function Enrollments() {
         {[
           { value: "all", label: "Toutes" },
           { value: "registered", label: "Inscrits" },
-          { value: "confirmed", label: "Confirm\u00e9s" },
-          { value: "completed", label: "Termin\u00e9s" },
-          { value: "cancelled", label: "Annul\u00e9s" },
+          { value: "confirmed", label: "Confirmés" },
+          { value: "completed", label: "Terminés" },
+          { value: "cancelled", label: "Annulés" },
         ].map((s) => (
           <Button
             key={s.value}
@@ -265,8 +290,8 @@ export default function Enrollments() {
           <h3 className="text-lg font-medium mb-1">Aucune inscription</h3>
           <p className="text-sm text-muted-foreground mb-4">
             {search || statusFilter !== "all"
-              ? "Aucun r\u00e9sultat pour vos filtres"
-              : "Commencez par inscrire un stagiaire \u00e0 une session"}
+              ? "Aucun résultat pour vos filtres"
+              : "Commencez par inscrire un stagiaire à une session"}
           </p>
           {!search && statusFilter === "all" && (
             <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-enrollment">

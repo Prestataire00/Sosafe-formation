@@ -16,6 +16,18 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+export async function uploadFile(file: File): Promise<{ fileUrl: string; fileName: string; fileSize: number; mimeType: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  await throwIfResNotOk(res);
+  return res.json();
+}
+
 export async function apiRequest(
   method: string,
   url: string,

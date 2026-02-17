@@ -89,10 +89,10 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 const VARIABLE_GROUPS = [
-  { key: "learner" as const, label: "Apprenant" },
+  { key: "apprenant" as const, label: "Apprenant" },
   { key: "session" as const, label: "Session" },
-  { key: "program" as const, label: "Programme" },
-  { key: "organization" as const, label: "Organisme" },
+  { key: "formation" as const, label: "Formation" },
+  { key: "organisme" as const, label: "Organisme" },
 ];
 
 function VariableInserter({
@@ -202,7 +202,7 @@ function TemplateForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Cat\u00e9gorie</Label>
+          <Label>Catégorie</Label>
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger>
               <SelectValue />
@@ -250,7 +250,7 @@ function TemplateForm({
       />
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Enregistrement..." : template ? "Modifier" : "Cr\u00e9er"}
+          {isPending ? "Enregistrement..." : template ? "Modifier" : "Créer"}
         </Button>
       </div>
     </form>
@@ -276,10 +276,10 @@ export default function EmailTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setDialogOpen(false);
-      toast({ title: "Template cr\u00e9\u00e9 avec succ\u00e8s" });
+      toast({ title: "Template créé avec succès" });
     },
     onError: () =>
-      toast({ title: "Erreur lors de la cr\u00e9ation", variant: "destructive" }),
+      toast({ title: "Erreur lors de la création", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -289,7 +289,7 @@ export default function EmailTemplates() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setDialogOpen(false);
       setEditItem(undefined);
-      toast({ title: "Template modifi\u00e9 avec succ\u00e8s" });
+      toast({ title: "Template modifié avec succès" });
     },
     onError: () =>
       toast({ title: "Erreur lors de la modification", variant: "destructive" }),
@@ -300,7 +300,7 @@ export default function EmailTemplates() {
       apiRequest("DELETE", `/api/email-templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
-      toast({ title: "Template supprim\u00e9" });
+      toast({ title: "Template supprimé" });
     },
     onError: () =>
       toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
@@ -315,7 +315,7 @@ export default function EmailTemplates() {
       const data = await res.json();
       setPreviewContent(data);
     } catch {
-      toast({ title: "Erreur lors de la pr\u00e9visualisation", variant: "destructive" });
+      toast({ title: "Erreur lors de la prévisualisation", variant: "destructive" });
       setPreviewOpen(false);
     } finally {
       setPreviewLoading(false);
@@ -333,7 +333,7 @@ export default function EmailTemplates() {
         <div>
           <h1 className="text-2xl font-bold">Templates d'emails</h1>
           <p className="text-muted-foreground mt-1">
-            G\u00e9rez vos mod\u00e8les d'emails pour les communications SO'SAFE
+            Gérez vos modèles d'emails pour les communications SO'SAFE
           </p>
         </div>
         <Button
@@ -376,13 +376,13 @@ export default function EmailTemplates() {
           <h3 className="text-lg font-medium mb-1">Aucun template</h3>
           <p className="text-sm text-muted-foreground mb-4">
             {search
-              ? "Aucun r\u00e9sultat pour votre recherche"
-              : "Cr\u00e9ez votre premier mod\u00e8le d'email"}
+              ? "Aucun résultat pour votre recherche"
+              : "Créez votre premier modèle d'email"}
           </p>
           {!search && (
             <Button onClick={() => setDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              Cr\u00e9er un template
+              Créer un template
             </Button>
           )}
         </div>
@@ -416,7 +416,7 @@ export default function EmailTemplates() {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handlePreview(template)}>
                         <Eye className="w-4 h-4 mr-2" />
-                        Pr\u00e9visualiser
+                        Prévisualiser
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive"
@@ -469,9 +469,9 @@ export default function EmailTemplates() {
       <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
         <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Pr\u00e9visualisation</SheetTitle>
+            <SheetTitle>Prévisualisation</SheetTitle>
             <SheetDescription>
-              Aper\u00e7u du template avec des donn\u00e9es d'exemple
+              Aperçu du template avec des données d'exemple
             </SheetDescription>
           </SheetHeader>
           {previewLoading ? (

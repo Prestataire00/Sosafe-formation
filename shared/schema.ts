@@ -18,6 +18,7 @@ export const users = pgTable("users", {
   trainerId: varchar("trainer_id"),
   traineeId: varchar("trainee_id"),
   enterpriseId: varchar("enterprise_id"),
+  permissions: jsonb("permissions").$type<string[]>().default([]),
 });
 
 export const enterprises = pgTable("enterprises", {
@@ -32,6 +33,25 @@ export const enterprises = pgTable("enterprises", {
   contactPhone: text("contact_phone"),
   sector: text("sector"),
   status: text("status").notNull().default("active"),
+  formatJuridique: text("format_juridique"),
+  tvaNumber: text("tva_number"),
+  email: text("email"),
+  phone: text("phone"),
+  legalRepName: text("legal_rep_name"),
+  legalRepEmail: text("legal_rep_email"),
+  legalRepPhone: text("legal_rep_phone"),
+});
+
+export const enterpriseContacts = pgTable("enterprise_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  role: text("role").notNull().default("general"),
+  isPrimary: boolean("is_primary").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const trainers = pgTable("trainers", {
@@ -56,6 +76,18 @@ export const trainees = pgTable("trainees", {
   enterpriseId: varchar("enterprise_id"),
   status: text("status").notNull().default("active"),
   avatarUrl: text("avatar_url"),
+  civility: text("civility"),
+  dateOfBirth: date("date_of_birth"),
+  cityOfBirth: text("city_of_birth"),
+  department: text("department"),
+  poleEmploiId: text("pole_emploi_id"),
+  dietaryRegime: text("dietary_regime"),
+  imageRightsConsent: boolean("image_rights_consent"),
+  profileType: text("profile_type").default("salarie"),
+  proStatut: text("pro_statut"),
+  proDenomination: text("pro_denomination"),
+  proSiret: text("pro_siret"),
+  proTva: text("pro_tva"),
 });
 
 export const programs = pgTable("programs", {
@@ -358,6 +390,86 @@ export const organizationSettings = pgTable("organization_settings", {
 });
 
 // ============================================================
+// NEW TABLES - TRAINER DOCUMENTS & EVALUATIONS
+// ============================================================
+
+export const trainerDocuments = pgTable("trainer_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  trainerId: varchar("trainer_id").notNull(),
+  type: text("type").notNull().default("autre"),
+  title: text("title").notNull(),
+  fileUrl: text("file_url"),
+  fileContent: text("file_content"),
+  status: text("status").notNull().default("pending"),
+  validatedBy: varchar("validated_by"),
+  expiresAt: date("expires_at"),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  notes: text("notes"),
+});
+
+export const trainerEvaluations = pgTable("trainer_evaluations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  trainerId: varchar("trainer_id").notNull(),
+  sessionId: varchar("session_id"),
+  evaluatorId: varchar("evaluator_id"),
+  year: integer("year").notNull(),
+  overallRating: integer("overall_rating"),
+  strengths: text("strengths"),
+  improvements: text("improvements"),
+  notes: text("notes"),
+  satisfactionScore: integer("satisfaction_score"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ============================================================
+// NEW TABLES - USER DOCUMENTS & SIGNATURES (Phase 5)
+// ============================================================
+
+export const userDocuments = pgTable("user_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").notNull(),
+  ownerType: text("owner_type").notNull(), // 'enterprise', 'trainee', 'trainer'
+  title: text("title").notNull(),
+  fileName: text("file_name"),
+  fileUrl: text("file_url"),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+  category: text("category").default("autre"),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  uploadedBy: varchar("uploaded_by"),
+});
+
+export const signatures = pgTable("signatures", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  signerId: varchar("signer_id").notNull(),
+  signerType: text("signer_type").notNull(), // 'trainee', 'trainer', 'enterprise'
+  documentType: text("document_type").notNull(),
+  relatedId: varchar("related_id"),
+  signatureData: text("signature_data"),
+  signedAt: timestamp("signed_at").defaultNow(),
+  ipAddress: text("ip_address"),
+});
+
+// ============================================================
+// NEW TABLES - EXPENSE NOTES
+// ============================================================
+
+export const expenseNotes = pgTable("expense_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  trainerId: varchar("trainer_id").notNull(),
+  title: text("title").notNull(),
+  amount: integer("amount").notNull(),
+  category: text("category").notNull().default("autre"),
+  date: date("date").notNull(),
+  status: text("status").notNull().default("submitted"),
+  fileUrl: text("file_url"),
+  notes: text("notes"),
+  reviewedBy: varchar("reviewed_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ============================================================
 // INSERT SCHEMAS
 // ============================================================
 
@@ -388,6 +500,12 @@ export const insertAttendanceSheetSchema = createInsertSchema(attendanceSheets).
 export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords).omit({ id: true });
 export const insertAutomationRuleSchema = createInsertSchema(automationRules).omit({ id: true, createdAt: true });
 export const insertOrganizationSettingSchema = createInsertSchema(organizationSettings).omit({ id: true, updatedAt: true });
+export const insertEnterpriseContactSchema = createInsertSchema(enterpriseContacts).omit({ id: true, createdAt: true });
+export const insertTrainerDocumentSchema = createInsertSchema(trainerDocuments).omit({ id: true, uploadedAt: true });
+export const insertTrainerEvaluationSchema = createInsertSchema(trainerEvaluations).omit({ id: true, createdAt: true });
+export const insertUserDocumentSchema = createInsertSchema(userDocuments).omit({ id: true, uploadedAt: true });
+export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: true, signedAt: true });
+export const insertExpenseNoteSchema = createInsertSchema(expenseNotes).omit({ id: true, createdAt: true, updatedAt: true });
 
 // ============================================================
 // AUTH SCHEMAS
@@ -464,6 +582,18 @@ export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;
 export type AutomationRule = typeof automationRules.$inferSelect;
 export type InsertOrganizationSetting = z.infer<typeof insertOrganizationSettingSchema>;
 export type OrganizationSetting = typeof organizationSettings.$inferSelect;
+export type InsertEnterpriseContact = z.infer<typeof insertEnterpriseContactSchema>;
+export type EnterpriseContact = typeof enterpriseContacts.$inferSelect;
+export type InsertTrainerDocument = z.infer<typeof insertTrainerDocumentSchema>;
+export type TrainerDocument = typeof trainerDocuments.$inferSelect;
+export type InsertTrainerEvaluation = z.infer<typeof insertTrainerEvaluationSchema>;
+export type TrainerEvaluation = typeof trainerEvaluations.$inferSelect;
+export type InsertUserDocument = z.infer<typeof insertUserDocumentSchema>;
+export type UserDocument = typeof userDocuments.$inferSelect;
+export type InsertSignature = z.infer<typeof insertSignatureSchema>;
+export type Signature = typeof signatures.$inferSelect;
+export type InsertExpenseNote = z.infer<typeof insertExpenseNoteSchema>;
+export type ExpenseNote = typeof expenseNotes.$inferSelect;
 
 // ============================================================
 // CONSTANTS
@@ -472,38 +602,38 @@ export type OrganizationSetting = typeof organizationSettings.$inferSelect;
 export const PROGRAM_CATEGORIES = [
   "AFGSU",
   "Certibiocide",
-  "Certificat de d\u00e9c\u00e8s",
+  "Certificat de décès",
   "VAE",
-  "S\u00e9curit\u00e9 au travail",
+  "Sécurité au travail",
   "Soins infirmiers",
-  "Hygi\u00e8ne hospitali\u00e8re",
+  "Hygiène hospitalière",
   "Gestes et postures",
-  "Pr\u00e9vention des risques",
-  "Formation continue sant\u00e9",
-  "Management sant\u00e9",
+  "Prévention des risques",
+  "Formation continue santé",
+  "Management santé",
   "Autre",
 ] as const;
 
 export const MODALITIES = [
-  { value: "presentiel", label: "Pr\u00e9sentiel" },
+  { value: "presentiel", label: "Présentiel" },
   { value: "distanciel", label: "Distanciel" },
   { value: "blended", label: "Blended Learning" },
 ] as const;
 
 export const SESSION_STATUSES = [
-  { value: "planned", label: "Planifi\u00e9e" },
+  { value: "planned", label: "Planifiée" },
   { value: "ongoing", label: "En cours" },
-  { value: "completed", label: "Termin\u00e9e" },
-  { value: "cancelled", label: "Annul\u00e9e" },
+  { value: "completed", label: "Terminée" },
+  { value: "cancelled", label: "Annulée" },
 ] as const;
 
 export const ENROLLMENT_STATUSES = [
   { value: "pending", label: "En attente" },
   { value: "registered", label: "Inscrit" },
-  { value: "confirmed", label: "Confirm\u00e9" },
-  { value: "attended", label: "Pr\u00e9sent" },
-  { value: "completed", label: "Termin\u00e9" },
-  { value: "cancelled", label: "Annul\u00e9" },
+  { value: "confirmed", label: "Confirmé" },
+  { value: "attended", label: "Présent" },
+  { value: "completed", label: "Terminé" },
+  { value: "cancelled", label: "Annulé" },
   { value: "no_show", label: "Absent" },
 ] as const;
 
@@ -520,7 +650,7 @@ export const EMAIL_TEMPLATE_CATEGORIES = [
   { value: "rappel", label: "Rappel" },
   { value: "suivi", label: "Suivi" },
   { value: "facturation", label: "Facturation" },
-  { value: "general", label: "G\u00e9n\u00e9ral" },
+  { value: "general", label: "Général" },
 ] as const;
 
 export const EMAIL_TEMPLATE_TYPES = [
@@ -533,71 +663,71 @@ export const DOCUMENT_TYPES = [
   { value: "convocation", label: "Convocation" },
   { value: "attestation", label: "Attestation de formation" },
   { value: "certificat", label: "Certificat" },
-  { value: "bpf", label: "Bilan P\u00e9dagogique et Financier" },
+  { value: "bpf", label: "Bilan Pédagogique et Financier" },
   { value: "programme", label: "Programme de formation" },
-  { value: "reglement", label: "R\u00e8glement int\u00e9rieur" },
+  { value: "reglement", label: "Règlement intérieur" },
   { value: "autre", label: "Autre" },
 ] as const;
 
 export const PROSPECT_STATUSES = [
   { value: "prospect", label: "Prospect", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
-  { value: "contact", label: "Contact\u00e9", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  { value: "qualified", label: "Qualifi\u00e9", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
-  { value: "negotiation", label: "N\u00e9gociation", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  { value: "won", label: "Gagn\u00e9", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "contact", label: "Contacté", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "qualified", label: "Qualifié", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+  { value: "negotiation", label: "Négociation", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  { value: "won", label: "Gagné", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   { value: "lost", label: "Perdu", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
 ] as const;
 
 export const QUOTE_STATUSES = [
   { value: "draft", label: "Brouillon" },
-  { value: "sent", label: "Envoy\u00e9" },
-  { value: "accepted", label: "Accept\u00e9" },
-  { value: "rejected", label: "Refus\u00e9" },
-  { value: "expired", label: "Expir\u00e9" },
+  { value: "sent", label: "Envoyé" },
+  { value: "accepted", label: "Accepté" },
+  { value: "rejected", label: "Refusé" },
+  { value: "expired", label: "Expiré" },
 ] as const;
 
 export const INVOICE_STATUSES = [
   { value: "draft", label: "Brouillon" },
-  { value: "sent", label: "Envoy\u00e9e" },
-  { value: "paid", label: "Pay\u00e9e" },
-  { value: "partial", label: "Partiellement pay\u00e9e" },
+  { value: "sent", label: "Envoyée" },
+  { value: "paid", label: "Payée" },
+  { value: "partial", label: "Partiellement payée" },
   { value: "overdue", label: "En retard" },
-  { value: "cancelled", label: "Annul\u00e9e" },
+  { value: "cancelled", label: "Annulée" },
 ] as const;
 
 export const PAYMENT_METHODS = [
   { value: "virement", label: "Virement bancaire" },
-  { value: "cheque", label: "Ch\u00e8que" },
+  { value: "cheque", label: "Chèque" },
   { value: "cb", label: "Carte bancaire" },
-  { value: "especes", label: "Esp\u00e8ces" },
-  { value: "prelevement", label: "Pr\u00e9l\u00e8vement" },
+  { value: "especes", label: "Espèces" },
+  { value: "prelevement", label: "Prélèvement" },
   { value: "autre", label: "Autre" },
 ] as const;
 
 export const ATTENDANCE_STATUSES = [
-  { value: "present", label: "Pr\u00e9sent", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "present", label: "Présent", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   { value: "absent", label: "Absent", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
   { value: "late", label: "Retard", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  { value: "excused", label: "Excus\u00e9", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "excused", label: "Excusé", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
 ] as const;
 
 export const ATTENDANCE_PERIODS = [
   { value: "matin", label: "Matin" },
-  { value: "apres-midi", label: "Apr\u00e8s-midi" },
-  { value: "journee", label: "Journ\u00e9e enti\u00e8re" },
+  { value: "apres-midi", label: "Après-midi" },
+  { value: "journee", label: "Journée entière" },
 ] as const;
 
 export const QUALITY_ACTION_TYPES = [
-  { value: "improvement", label: "Am\u00e9lioration" },
+  { value: "improvement", label: "Amélioration" },
   { value: "corrective", label: "Corrective" },
-  { value: "preventive", label: "Pr\u00e9ventive" },
+  { value: "preventive", label: "Préventive" },
 ] as const;
 
 export const QUALITY_ACTION_STATUSES = [
   { value: "open", label: "Ouverte" },
   { value: "in_progress", label: "En cours" },
-  { value: "completed", label: "Termin\u00e9e" },
-  { value: "cancelled", label: "Annul\u00e9e" },
+  { value: "completed", label: "Terminée" },
+  { value: "cancelled", label: "Annulée" },
 ] as const;
 
 export const QUALITY_PRIORITIES = [
@@ -609,55 +739,180 @@ export const QUALITY_PRIORITIES = [
 
 export const ELEARNING_BLOCK_TYPES = [
   { value: "text", label: "Texte" },
-  { value: "video", label: "Vid\u00e9o" },
+  { value: "video", label: "Vidéo" },
   { value: "quiz", label: "Quiz" },
 ] as const;
 
 export const AUTOMATION_EVENTS = [
   { value: "enrollment_created", label: "Nouvelle inscription" },
-  { value: "session_starting", label: "D\u00e9but de session" },
+  { value: "session_starting", label: "Début de session" },
   { value: "session_completed", label: "Fin de session" },
-  { value: "invoice_created", label: "Facture cr\u00e9\u00e9e" },
-  { value: "payment_received", label: "Paiement re\u00e7u" },
-  { value: "survey_completed", label: "Enqu\u00eate compl\u00e9t\u00e9e" },
+  { value: "invoice_created", label: "Facture créée" },
+  { value: "payment_received", label: "Paiement reçu" },
+  { value: "survey_completed", label: "Enquête complétée" },
 ] as const;
 
 export const AUTOMATION_ACTIONS = [
   { value: "send_email", label: "Envoyer un email" },
-  { value: "generate_document", label: "G\u00e9n\u00e9rer un document" },
-  { value: "create_attendance", label: "Cr\u00e9er une feuille d'\u00e9margement" },
+  { value: "generate_document", label: "Générer un document" },
+  { value: "create_attendance", label: "Créer une feuille d'émargement" },
 ] as const;
+
+// Enterprise constants
+export const ENTERPRISE_FORMATS_JURIDIQUES = [
+  { value: "SAS", label: "SAS" },
+  { value: "SARL", label: "SARL" },
+  { value: "EURL", label: "EURL" },
+  { value: "SA", label: "SA" },
+  { value: "EI", label: "Entreprise Individuelle" },
+  { value: "association", label: "Association" },
+  { value: "public", label: "Établissement public" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+export const ENTERPRISE_CONTACT_ROLES = [
+  { value: "general", label: "Contact général" },
+  { value: "finance", label: "Finance / Comptabilité" },
+  { value: "rh", label: "Ressources Humaines" },
+  { value: "manager", label: "Responsable de service" },
+  { value: "direction", label: "Direction" },
+  { value: "formation", label: "Responsable formation" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+// Trainee constants
+export const TRAINEE_CIVILITIES = [
+  { value: "M.", label: "M." },
+  { value: "Mme", label: "Mme" },
+  { value: "Dr", label: "Dr" },
+] as const;
+
+export const TRAINEE_PROFILE_TYPES = [
+  { value: "salarie", label: "Salarié(e)" },
+  { value: "profession_liberale", label: "Profession libérale" },
+  { value: "particulier", label: "Particulier" },
+] as const;
+
+export const PRO_STATUT_TYPES = [
+  { value: "micro_entreprise", label: "Micro-entreprise" },
+  { value: "ei", label: "Entreprise individuelle" },
+  { value: "eurl", label: "EURL" },
+  { value: "sasu", label: "SASU" },
+  { value: "selarl", label: "SELARL" },
+  { value: "scm", label: "SCM" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+export const DIETARY_REGIMES = [
+  { value: "aucun", label: "Aucun régime particulier" },
+  { value: "vegetarien", label: "Végétarien" },
+  { value: "vegan", label: "Végétalien" },
+  { value: "halal", label: "Halal" },
+  { value: "casher", label: "Casher" },
+  { value: "sans_gluten", label: "Sans gluten" },
+  { value: "sans_lactose", label: "Sans lactose" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+// Trainer document constants
+export const TRAINER_DOCUMENT_TYPES = [
+  { value: "cv", label: "CV" },
+  { value: "diplome", label: "Diplôme" },
+  { value: "attestation", label: "Attestation" },
+  { value: "contrat", label: "Contrat" },
+  { value: "nda", label: "NDA" },
+  { value: "assurance", label: "Assurance RC Pro" },
+  { value: "rib", label: "RIB" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+export const TRAINER_DOCUMENT_STATUSES = [
+  { value: "pending", label: "En attente", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  { value: "validated", label: "Validé", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "rejected", label: "Rejeté", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  { value: "expired", label: "Expiré", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+] as const;
+
+// Admin permissions
+export const ADMIN_PERMISSIONS = {
+  administration: [
+    { value: "manage_users", label: "Gérer les utilisateurs" },
+    { value: "manage_settings", label: "Gérer les paramètres" },
+    { value: "manage_templates", label: "Gérer les modèles" },
+    { value: "manage_automation", label: "Gérer l'automatisation" },
+  ],
+  contacts: [
+    { value: "manage_enterprises", label: "Gérer les entreprises" },
+    { value: "manage_trainees", label: "Gérer les apprenants" },
+    { value: "manage_trainers", label: "Gérer les formateurs" },
+    { value: "view_contacts", label: "Voir les contacts" },
+  ],
+  formation: [
+    { value: "manage_programs", label: "Gérer les formations" },
+    { value: "manage_sessions", label: "Gérer les sessions" },
+    { value: "manage_enrollments", label: "Gérer les inscriptions" },
+    { value: "manage_attendance", label: "Gérer l'émargement" },
+    { value: "manage_elearning", label: "Gérer le e-learning" },
+  ],
+  commercial: [
+    { value: "manage_prospects", label: "Gérer les prospects" },
+    { value: "manage_quotes", label: "Gérer les devis" },
+    { value: "manage_invoices", label: "Gérer les factures" },
+    { value: "view_financial_reports", label: "Voir les rapports financiers" },
+  ],
+  qualite: [
+    { value: "manage_surveys", label: "Gérer les enquêtes" },
+    { value: "manage_quality_actions", label: "Gérer les actions qualité" },
+    { value: "override_survey_responses", label: "Modifier les réponses d'enquêtes" },
+    { value: "manage_documents", label: "Gérer les documents" },
+  ],
+} as const;
 
 // ============================================================
 // TEMPLATE VARIABLES
 // ============================================================
 
 export const TEMPLATE_VARIABLES = {
-  learner: [
-    { key: "{learner_name}", label: "Nom de l'apprenant" },
-    { key: "{learner_first_name}", label: "Pr\u00e9nom de l'apprenant" },
-    { key: "{learner_last_name}", label: "Nom de famille" },
-    { key: "{learner_email}", label: "Email de l'apprenant" },
-    { key: "{learner_company}", label: "Entreprise de l'apprenant" },
+  apprenant: [
+    { key: "{nom_apprenant}", label: "Nom complet de l'apprenant" },
+    { key: "{prenom_apprenant}", label: "Prénom de l'apprenant" },
+    { key: "{nom_famille_apprenant}", label: "Nom de famille" },
+    { key: "{email_apprenant}", label: "Email de l'apprenant" },
+    { key: "{entreprise_apprenant}", label: "Entreprise de l'apprenant" },
   ],
   session: [
-    { key: "{session_title}", label: "Titre de la session" },
-    { key: "{start_date}", label: "Date de d\u00e9but" },
-    { key: "{end_date}", label: "Date de fin" },
-    { key: "{location}", label: "Lieu" },
-    { key: "{modality}", label: "Modalit\u00e9" },
+    { key: "{titre_session}", label: "Titre de la session" },
+    { key: "{date_debut}", label: "Date de début" },
+    { key: "{date_fin}", label: "Date de fin" },
+    { key: "{lieu}", label: "Lieu" },
+    { key: "{modalite}", label: "Modalité" },
   ],
-  program: [
-    { key: "{program_title}", label: "Titre de la formation" },
-    { key: "{program_duration}", label: "Dur\u00e9e" },
-    { key: "{program_price}", label: "Prix" },
-    { key: "{program_objectives}", label: "Objectifs" },
+  formation: [
+    { key: "{titre_formation}", label: "Titre de la formation" },
+    { key: "{duree_formation}", label: "Durée" },
+    { key: "{prix_formation}", label: "Prix" },
+    { key: "{objectifs_formation}", label: "Objectifs" },
   ],
-  organization: [
-    { key: "{org_name}", label: "Nom de l'organisme" },
-    { key: "{org_address}", label: "Adresse" },
-    { key: "{org_siret}", label: "SIRET" },
-    { key: "{org_email}", label: "Email" },
-    { key: "{org_phone}", label: "T\u00e9l\u00e9phone" },
+  organisme: [
+    { key: "{nom_organisme}", label: "Nom de l'organisme" },
+    { key: "{adresse_organisme}", label: "Adresse" },
+    { key: "{siret_organisme}", label: "SIRET" },
+    { key: "{email_organisme}", label: "Email" },
+    { key: "{telephone_organisme}", label: "Téléphone" },
   ],
 } as const;
+
+export const EXPENSE_CATEGORIES = [
+  { value: "deplacement", label: "Déplacement" },
+  { value: "hebergement", label: "Hébergement" },
+  { value: "restauration", label: "Restauration" },
+  { value: "materiel", label: "Matériel" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+export const EXPENSE_STATUSES = [
+  { value: "submitted", label: "Soumise", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "approved", label: "Approuvée", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "rejected", label: "Rejetée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  { value: "paid", label: "Payée", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+] as const;
