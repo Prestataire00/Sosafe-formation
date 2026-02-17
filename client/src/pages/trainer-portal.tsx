@@ -42,15 +42,20 @@ import {
   Users,
   BookOpen,
   CreditCard,
+  Award,
+  AlertTriangle,
+  TrendingUp,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { Session, TrainerDocument, ExpenseNote, TrainerInvoice, Program, Trainee } from "@shared/schema";
+import type { Session, TrainerDocument, ExpenseNote, TrainerInvoice, Program, Trainee, TrainerCompetency } from "@shared/schema";
 import {
   TRAINER_DOCUMENT_TYPES,
   TRAINER_DOCUMENT_STATUSES,
   EXPENSE_CATEGORIES,
   EXPENSE_STATUSES,
   TRAINER_INVOICE_STATUSES,
+  COMPETENCY_LEVELS,
+  COMPETENCY_STATUSES,
 } from "@shared/schema";
 
 // ============================================================
@@ -777,6 +782,148 @@ function TrainerInvoicesTab({ trainerId }: { trainerId: string }) {
 }
 
 // ============================================================
+// COMPETENCIES TAB (read-only)
+// ============================================================
+
+type SatisfactionStats = {
+  avgRating: number;
+  totalResponses: number;
+  satisfactionScore: number;
+  perYear: { year: number; avgRating: number; count: number }[];
+};
+
+function CompetenciesTab({ trainerId }: { trainerId: string }) {
+  const { data: competencies, isLoading } = useQuery<TrainerCompetency[]>({
+    queryKey: [`/api/trainers/${trainerId}/competencies`],
+    enabled: !!trainerId,
+  });
+
+  const { data: satisfaction } = useQuery<SatisfactionStats>({
+    queryKey: [`/api/trainers/${trainerId}/satisfaction-stats`],
+    enabled: !!trainerId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const activeComps = competencies?.filter((c) => c.status === "active") || [];
+  const expiredComps = competencies?.filter((c) => c.status === "expired") || [];
+  const renewalComps = competencies?.filter((c) => c.status === "renewal") || [];
+
+  return (
+    <div className="space-y-4">
+      {/* Satisfaction summary */}
+      {satisfaction && satisfaction.totalResponses > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Satisfaction des apprenants
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-3 rounded-lg bg-muted/50 text-center">
+                <p className="text-2xl font-bold">{satisfaction.avgRating}/5</p>
+                <p className="text-xs text-muted-foreground">Note moyenne</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50 text-center">
+                <p className="text-2xl font-bold">{satisfaction.satisfactionScore}%</p>
+                <p className="text-xs text-muted-foreground">Satisfaction</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50 text-center">
+                <p className="text-2xl font-bold">{satisfaction.totalResponses}</p>
+                <p className="text-xs text-muted-foreground">Reponses</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Alerts */}
+      {(expiredComps.length > 0 || renewalComps.length > 0) && (
+        <Card className="border-amber-300 dark:border-amber-700">
+          <CardContent className="p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium">Alertes de competences</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {expiredComps.length > 0 && `${expiredComps.length} competence(s) expiree(s). `}
+                {renewalComps.length > 0 && `${renewalComps.length} en cours de renouvellement.`}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Competencies list */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Award className="w-5 h-5" />
+            Mes competences
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!competencies || competencies.length === 0 ? (
+            <div className="text-center py-8">
+              <Award className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Aucune competence enregistree dans votre profil.
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Domaine</TableHead>
+                  <TableHead>Libelle</TableHead>
+                  <TableHead>Niveau</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>Obtention</TableHead>
+                  <TableHead>Expiration</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {competencies.map((comp) => {
+                  const levelInfo = COMPETENCY_LEVELS.find((l) => l.value === comp.level) || COMPETENCY_LEVELS[0];
+                  const statusInfo = COMPETENCY_STATUSES.find((s) => s.value === comp.status) || COMPETENCY_STATUSES[0];
+                  return (
+                    <TableRow key={comp.id}>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">{comp.domain}</Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">{comp.competencyLabel}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${levelInfo.color}`}>{levelInfo.label}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${statusInfo.color}`}>{statusInfo.label}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {comp.obtainedAt ? formatDate(comp.obtainedAt) : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {comp.expiresAt ? formatDate(comp.expiresAt) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============================================================
 // ENRICHED SESSION CARD
 // ============================================================
 
@@ -1045,6 +1192,10 @@ export default function TrainerPortal() {
               <PenTool className="w-4 h-4" />
               Signature
             </TabsTrigger>
+            <TabsTrigger value="competences" className="gap-2">
+              <Award className="w-4 h-4" />
+              Competences
+            </TabsTrigger>
             <TabsTrigger value="expenses" className="gap-2">
               <Receipt className="w-4 h-4" />
               Notes de frais
@@ -1155,6 +1306,11 @@ export default function TrainerPortal() {
           {/* Signature Tab */}
           <TabsContent value="signature">
             <TrainerSignaturePad trainerId={trainerId} />
+          </TabsContent>
+
+          {/* Competences Tab */}
+          <TabsContent value="competences">
+            <CompetenciesTab trainerId={trainerId} />
           </TabsContent>
 
           {/* Expense Notes Tab */}

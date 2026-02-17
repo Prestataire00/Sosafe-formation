@@ -32,6 +32,7 @@ import {
   type Signature, type InsertSignature,
   type ExpenseNote, type InsertExpenseNote,
   type TrainerInvoice, type InsertTrainerInvoice,
+  type TrainerCompetency, type InsertTrainerCompetency,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
   emailTemplates, emailLogs, documentTemplates, generatedDocuments,
   prospects, quotes, invoices, payments,
@@ -41,6 +42,7 @@ import {
   automationRules, organizationSettings,
   enterpriseContacts, trainerDocuments, trainerEvaluations,
   userDocuments, signatures, expenseNotes, trainerInvoices,
+  trainerCompetencies,
 } from "@shared/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -261,6 +263,13 @@ export interface IStorage {
   getTrainerInvoices(trainerId: string): Promise<TrainerInvoice[]>;
   createTrainerInvoice(invoice: InsertTrainerInvoice): Promise<TrainerInvoice>;
   updateTrainerInvoice(id: string, data: Partial<InsertTrainerInvoice>): Promise<TrainerInvoice | undefined>;
+
+  // Trainer Competencies
+  getTrainerCompetencies(trainerId: string): Promise<TrainerCompetency[]>;
+  getAllTrainerCompetencies(): Promise<TrainerCompetency[]>;
+  createTrainerCompetency(data: InsertTrainerCompetency): Promise<TrainerCompetency>;
+  updateTrainerCompetency(id: string, data: Partial<InsertTrainerCompetency>): Promise<TrainerCompetency | undefined>;
+  deleteTrainerCompetency(id: string): Promise<void>;
 
   // Enterprise-specific queries
   getQuotesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Quote[]>;
@@ -986,6 +995,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ---- Expense Notes ----
+  async getAllExpenseNotes(): Promise<ExpenseNote[]> {
+    return db.select().from(expenseNotes).orderBy(desc(expenseNotes.createdAt));
+  }
+
   async getExpenseNotes(trainerId: string): Promise<ExpenseNote[]> {
     return db.select().from(expenseNotes).where(eq(expenseNotes.trainerId, trainerId)).orderBy(desc(expenseNotes.createdAt));
   }
@@ -1001,6 +1014,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ---- Trainer Invoices ----
+  async getAllTrainerInvoices(): Promise<TrainerInvoice[]> {
+    return db.select().from(trainerInvoices).orderBy(desc(trainerInvoices.createdAt));
+  }
+
   async getTrainerInvoices(trainerId: string): Promise<TrainerInvoice[]> {
     return db.select().from(trainerInvoices).where(eq(trainerInvoices.trainerId, trainerId)).orderBy(desc(trainerInvoices.createdAt));
   }
@@ -1013,6 +1030,29 @@ export class DatabaseStorage implements IStorage {
   async updateTrainerInvoice(id: string, data: Partial<InsertTrainerInvoice>): Promise<TrainerInvoice | undefined> {
     const [result] = await db.update(trainerInvoices).set({ ...data, updatedAt: new Date() } as any).where(eq(trainerInvoices.id, id)).returning();
     return result;
+  }
+
+  // ---- Trainer Competencies ----
+  async getTrainerCompetencies(trainerId: string): Promise<TrainerCompetency[]> {
+    return db.select().from(trainerCompetencies).where(eq(trainerCompetencies.trainerId, trainerId)).orderBy(desc(trainerCompetencies.createdAt));
+  }
+
+  async getAllTrainerCompetencies(): Promise<TrainerCompetency[]> {
+    return db.select().from(trainerCompetencies).orderBy(desc(trainerCompetencies.createdAt));
+  }
+
+  async createTrainerCompetency(data: InsertTrainerCompetency): Promise<TrainerCompetency> {
+    const [result] = await db.insert(trainerCompetencies).values(data).returning();
+    return result;
+  }
+
+  async updateTrainerCompetency(id: string, data: Partial<InsertTrainerCompetency>): Promise<TrainerCompetency | undefined> {
+    const [result] = await db.update(trainerCompetencies).set({ ...data, updatedAt: new Date() } as any).where(eq(trainerCompetencies.id, id)).returning();
+    return result;
+  }
+
+  async deleteTrainerCompetency(id: string): Promise<void> {
+    await db.delete(trainerCompetencies).where(eq(trainerCompetencies.id, id));
   }
 
   // ---- Enterprise-specific queries ----

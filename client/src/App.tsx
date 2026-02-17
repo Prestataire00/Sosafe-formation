@@ -32,6 +32,9 @@ import Elearning from "@/pages/elearning";
 import LearnerPortal from "@/pages/learner-portal";
 import TrainerPortal from "@/pages/trainer-portal";
 import EnterprisePortal from "@/pages/enterprise-portal";
+import ExpenseNotesPage from "@/pages/expense-notes";
+import TrainerInvoicesPage from "@/pages/trainer-invoices-page";
+import TrainerCompetencies from "@/pages/trainer-competencies";
 import SettingsPage from "@/pages/settings";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
@@ -57,6 +60,9 @@ function Router() {
       <Route path="/surveys" component={Surveys} />
       <Route path="/elearning" component={Elearning} />
       <Route path="/learner-portal" component={LearnerPortal} />
+      <Route path="/expense-notes" component={ExpenseNotesPage} />
+      <Route path="/trainer-invoices" component={TrainerInvoicesPage} />
+      <Route path="/trainer-competencies" component={TrainerCompetencies} />
       <Route path="/trainer-portal" component={TrainerPortal} />
       <Route path="/enterprise-portal" component={EnterprisePortal} />
       <Route path="/settings" component={SettingsPage} />

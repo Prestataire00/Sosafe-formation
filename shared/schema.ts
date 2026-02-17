@@ -493,6 +493,26 @@ export const trainerInvoices = pgTable("trainer_invoices", {
 });
 
 // ============================================================
+// NEW TABLES - TRAINER COMPETENCIES (Qualiopi)
+// ============================================================
+
+export const trainerCompetencies = pgTable("trainer_competencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  trainerId: varchar("trainer_id").notNull(),
+  domain: text("domain").notNull(),
+  competencyLabel: text("competency_label").notNull(),
+  level: text("level").notNull().default("junior"),
+  certificationRef: text("certification_ref"),
+  obtainedAt: date("obtained_at"),
+  expiresAt: date("expires_at"),
+  status: text("status").notNull().default("active"),
+  documentId: varchar("document_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ============================================================
 // INSERT SCHEMAS
 // ============================================================
 
@@ -530,6 +550,7 @@ export const insertUserDocumentSchema = createInsertSchema(userDocuments).omit({
 export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: true, signedAt: true });
 export const insertExpenseNoteSchema = createInsertSchema(expenseNotes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTrainerInvoiceSchema = createInsertSchema(trainerInvoices).omit({ id: true, createdAt: true, updatedAt: true, submittedAt: true });
+export const insertTrainerCompetencySchema = createInsertSchema(trainerCompetencies).omit({ id: true, createdAt: true, updatedAt: true });
 
 // ============================================================
 // AUTH SCHEMAS
@@ -620,6 +641,8 @@ export type InsertExpenseNote = z.infer<typeof insertExpenseNoteSchema>;
 export type ExpenseNote = typeof expenseNotes.$inferSelect;
 export type InsertTrainerInvoice = z.infer<typeof insertTrainerInvoiceSchema>;
 export type TrainerInvoice = typeof trainerInvoices.$inferSelect;
+export type InsertTrainerCompetency = z.infer<typeof insertTrainerCompetencySchema>;
+export type TrainerCompetency = typeof trainerCompetencies.$inferSelect;
 
 // ============================================================
 // CONSTANTS
@@ -840,6 +863,15 @@ export const DIETARY_REGIMES = [
   { value: "autre", label: "Autre" },
 ] as const;
 
+// Trainer statuses
+export const TRAINER_STATUSES = [
+  { value: "active", label: "Actif", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "inactive", label: "Inactif", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+  { value: "pending", label: "En attente", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  { value: "suspended", label: "Suspendu", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  { value: "archived", label: "Archivé", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+] as const;
+
 // Trainer document constants
 export const TRAINER_DOCUMENT_TYPES = [
   { value: "cv", label: "CV" },
@@ -949,4 +981,33 @@ export const TRAINER_INVOICE_STATUSES = [
   { value: "approved", label: "Approuvée", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   { value: "paid", label: "Payée", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
   { value: "rejected", label: "Rejetée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+] as const;
+
+// Competency tracking (Qualiopi)
+export const COMPETENCY_DOMAINS = [
+  "AFGSU",
+  "Certibiocide",
+  "Certificat de décès",
+  "Hygiène",
+  "Prévention des risques",
+  "Management santé",
+  "Pédagogie",
+  "Soins infirmiers",
+  "Gestes et postures",
+  "Sécurité au travail",
+  "Formation continue santé",
+  "Autre",
+] as const;
+
+export const COMPETENCY_LEVELS = [
+  { value: "junior", label: "Junior", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "confirme", label: "Confirmé", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "expert", label: "Expert", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
+  { value: "referent", label: "Référent", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+] as const;
+
+export const COMPETENCY_STATUSES = [
+  { value: "active", label: "Active", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "expired", label: "Expirée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  { value: "renewal", label: "Renouvellement en cours", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
 ] as const;

@@ -50,6 +50,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Download,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,8 +58,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Trainer, InsertTrainer, Session } from "@shared/schema";
-import { TRAINER_DOCUMENT_TYPES, TRAINER_DOCUMENT_STATUSES } from "@shared/schema";
+import type { Trainer, InsertTrainer, Session, TrainerCompetency } from "@shared/schema";
+import {
+  TRAINER_DOCUMENT_TYPES, TRAINER_DOCUMENT_STATUSES, TRAINER_STATUSES,
+  COMPETENCY_DOMAINS, COMPETENCY_LEVELS, COMPETENCY_STATUSES,
+} from "@shared/schema";
 
 type TrainerDocument = {
   id: string;
@@ -85,6 +89,65 @@ type TrainerEvaluation = {
   satisfactionScore: number | null;
   createdAt: Date | null;
 };
+
+// ============================================================
+// Document Preview Dialog
+// ============================================================
+
+function DocumentPreviewDialog({
+  open,
+  onOpenChange,
+  fileUrl,
+  fileName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  fileUrl: string | null;
+  fileName: string | null;
+}) {
+  if (!fileUrl) return null;
+  const isPdf = /\.pdf(\?|$)/i.test(fileUrl);
+  const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(fileUrl);
+  const isOffice = /\.(doc|docx|xls|xlsx)(\?|$)/i.test(fileUrl);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>{fileName || "Aperçu du document"}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 min-h-0 mt-2">
+          {isPdf ? (
+            <iframe src={fileUrl} className="w-full h-[70vh] rounded-lg border" title={fileName || "PDF"} />
+          ) : isImage ? (
+            <div className="flex items-center justify-center bg-muted/30 rounded-lg p-4">
+              <img src={fileUrl} alt={fileName || "Image"} className="max-w-full max-h-[65vh] rounded-lg object-contain" />
+            </div>
+          ) : isOffice ? (
+            <iframe
+              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`}
+              className="w-full h-[70vh] rounded-lg border"
+              title={fileName || "Document"}
+            />
+          ) : (
+            <div className="text-center py-16 space-y-4">
+              <FileText className="w-16 h-16 mx-auto text-muted-foreground/40" />
+              <p className="text-muted-foreground">L'aperçu n'est pas disponible pour ce type de fichier.</p>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-3 border-t mt-3">
+          <Button variant="outline" size="sm" asChild>
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+              <Download className="w-4 h-4 mr-2" />
+              Télécharger
+            </a>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const specialties = [
   "AFGSU / Urgences",
@@ -169,8 +232,9 @@ function TrainerForm({
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger data-testid="select-trainer-status"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="active">Actif</SelectItem>
-            <SelectItem value="inactive">Inactif</SelectItem>
+            {TRAINER_STATUSES.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -297,6 +361,9 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
   const { toast } = useToast();
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [evalDialogOpen, setEvalDialogOpen] = useState(false);
+  const [compDialogOpen, setCompDialogOpen] = useState(false);
+  const [editCompetency, setEditCompetency] = useState<TrainerCompetency | undefined>();
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string } | null>(null);
 
   const { data: documents } = useQuery<TrainerDocument[]>({
     queryKey: [`/api/trainers/${trainer.id}/documents`],
@@ -308,6 +375,22 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
 
   const { data: trainerSessions } = useQuery<Session[]>({
     queryKey: [`/api/trainers/${trainer.id}/sessions`],
+  });
+
+  const { data: competencies } = useQuery<TrainerCompetency[]>({
+    queryKey: [`/api/trainers/${trainer.id}/competencies`],
+  });
+
+  type QualiopiStatus = {
+    globalScore: number;
+    documents: { score: number; coverage: { type: string; present: boolean }[]; total: number; validated: number };
+    competencies: { score: number; total: number; active: number; expired: number; renewal: number };
+    evaluations: { score: number; hasCurrentYear: boolean; total: number };
+    sessions: { count: number };
+  };
+
+  const { data: qualiopiStatus } = useQuery<QualiopiStatus>({
+    queryKey: [`/api/trainers/${trainer.id}/qualiopi-status`],
   });
 
   const createDocMutation = useMutation({
@@ -324,6 +407,14 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/documents`] });
       toast({ title: "Document validé" });
+    },
+  });
+
+  const rejectDocMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("PATCH", `/api/trainer-documents/${id}`, { status: "rejected" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/documents`] });
+      toast({ title: "Document rejeté" });
     },
   });
 
@@ -344,6 +435,36 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
     },
   });
 
+  const createCompMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest("POST", `/api/trainers/${trainer.id}/competencies`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/competencies`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/qualiopi-status`] });
+      setCompDialogOpen(false);
+      toast({ title: "Competence ajoutee" });
+    },
+  });
+
+  const updateCompMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => apiRequest("PATCH", `/api/trainer-competencies/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/competencies`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/qualiopi-status`] });
+      setCompDialogOpen(false);
+      setEditCompetency(undefined);
+      toast({ title: "Competence modifiee" });
+    },
+  });
+
+  const deleteCompMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/trainer-competencies/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/competencies`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/qualiopi-status`] });
+      toast({ title: "Competence supprimee" });
+    },
+  });
+
   const docTypeLabels: Record<string, string> = {};
   TRAINER_DOCUMENT_TYPES.forEach((t) => { docTypeLabels[t.value] = t.label; });
   const docStatusConfig: Record<string, { label: string; color: string }> = {};
@@ -360,9 +481,14 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
           <h1 className="text-2xl font-bold">{trainer.firstName} {trainer.lastName}</h1>
           <p className="text-muted-foreground text-sm">{trainer.specialty || "Formateur"}</p>
         </div>
-        <Badge variant="outline" className={`ml-auto ${trainer.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}>
-          {trainer.status === "active" ? "Actif" : "Inactif"}
-        </Badge>
+        {(() => {
+          const statusInfo = TRAINER_STATUSES.find((s) => s.value === trainer.status) || TRAINER_STATUSES[0];
+          return (
+            <Badge variant="outline" className={`ml-auto ${statusInfo.color}`}>
+              {statusInfo.label}
+            </Badge>
+          );
+        })()}
       </div>
 
       <Tabs defaultValue="profil" className="space-y-4">
@@ -370,6 +496,7 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
           <TabsTrigger value="profil" className="gap-2"><Users className="w-4 h-4" />Profil</TabsTrigger>
           <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documents</TabsTrigger>
           <TabsTrigger value="evaluations" className="gap-2"><Star className="w-4 h-4" />Évaluations</TabsTrigger>
+          <TabsTrigger value="competences" className="gap-2"><Award className="w-4 h-4" />Compétences</TabsTrigger>
           <TabsTrigger value="sessions" className="gap-2"><Calendar className="w-4 h-4" />Sessions</TabsTrigger>
         </TabsList>
 
@@ -426,12 +553,22 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
                           <TableCell className="text-sm text-muted-foreground">{doc.expiresAt ? new Date(doc.expiresAt).toLocaleDateString("fr-FR") : "—"}</TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {doc.status === "pending" && (
-                                <Button variant="ghost" size="icon" onClick={() => validateDocMutation.mutate(doc.id)} title="Valider">
-                                  <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                              {doc.fileUrl && (
+                                <Button variant="ghost" size="icon" onClick={() => setPreviewDoc({ url: doc.fileUrl!, title: doc.title })} title="Aperçu">
+                                  <Eye className="w-3.5 h-3.5" />
                                 </Button>
                               )}
-                              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteDocMutation.mutate(doc.id)}>
+                              {doc.status === "pending" && (
+                                <>
+                                  <Button variant="ghost" size="icon" onClick={() => validateDocMutation.mutate(doc.id)} title="Valider">
+                                    <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => rejectDocMutation.mutate(doc.id)} title="Rejeter">
+                                    <XCircle className="w-3.5 h-3.5 text-red-600" />
+                                  </Button>
+                                </>
+                              )}
+                              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteDocMutation.mutate(doc.id)} title="Supprimer">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             </div>
@@ -449,6 +586,12 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
               <DocumentForm onSubmit={(data) => createDocMutation.mutate(data)} isPending={createDocMutation.isPending} />
             </DialogContent>
           </Dialog>
+          <DocumentPreviewDialog
+            open={!!previewDoc}
+            onOpenChange={(open) => { if (!open) setPreviewDoc(null); }}
+            fileUrl={previewDoc?.url || null}
+            fileName={previewDoc?.title || null}
+          />
         </TabsContent>
 
         <TabsContent value="evaluations">
@@ -492,6 +635,168 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
           <Dialog open={evalDialogOpen} onOpenChange={setEvalDialogOpen}>
             <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Nouvelle évaluation</DialogTitle></DialogHeader>
               <EvaluationForm onSubmit={(data) => createEvalMutation.mutate(data)} isPending={createEvalMutation.isPending} />
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        <TabsContent value="competences">
+          <div className="space-y-4">
+            {/* Qualiopi compact score */}
+            {qualiopiStatus && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-lg ${qualiopiStatus.globalScore >= 75 ? "bg-green-50 dark:bg-green-900/20" : qualiopiStatus.globalScore >= 50 ? "bg-amber-50 dark:bg-amber-900/20" : "bg-red-50 dark:bg-red-900/20"}`}>
+                      <CheckCircle className={`w-5 h-5 ${qualiopiStatus.globalScore >= 75 ? "text-green-600" : qualiopiStatus.globalScore >= 50 ? "text-amber-600" : "text-red-600"}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium">Score Qualiopi : {qualiopiStatus.globalScore}%</p>
+                      <p className="text-xs text-muted-foreground">
+                        Docs {qualiopiStatus.documents.score}% | Comp. {qualiopiStatus.competencies.score}% | Eval. {qualiopiStatus.evaluations.score}%
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Competencies list */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Competences du formateur</CardTitle>
+                <Button size="sm" onClick={() => { setEditCompetency(undefined); setCompDialogOpen(true); }}>
+                  <Plus className="w-4 h-4 mr-2" />Ajouter
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {!competencies || competencies.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Award className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">Aucune competence</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Domaine</TableHead>
+                        <TableHead>Libelle</TableHead>
+                        <TableHead>Niveau</TableHead>
+                        <TableHead>Statut</TableHead>
+                        <TableHead>Expiration</TableHead>
+                        <TableHead className="w-[100px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {competencies.map((comp) => {
+                        const levelInfo = COMPETENCY_LEVELS.find((l) => l.value === comp.level) || COMPETENCY_LEVELS[0];
+                        const statusInfoComp = COMPETENCY_STATUSES.find((s) => s.value === comp.status) || COMPETENCY_STATUSES[0];
+                        return (
+                          <TableRow key={comp.id}>
+                            <TableCell><Badge variant="outline" className="text-xs">{comp.domain}</Badge></TableCell>
+                            <TableCell className="font-medium">{comp.competencyLabel}</TableCell>
+                            <TableCell><Badge variant="outline" className={`text-xs ${levelInfo.color}`}>{levelInfo.label}</Badge></TableCell>
+                            <TableCell><Badge variant="outline" className={`text-xs ${statusInfoComp.color}`}>{statusInfoComp.label}</Badge></TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{comp.expiresAt ? new Date(comp.expiresAt).toLocaleDateString("fr-FR") : "—"}</TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="icon" onClick={() => { setEditCompetency(comp); setCompDialogOpen(true); }}>
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteCompMutation.mutate(comp.id)}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Dialog open={compDialogOpen} onOpenChange={(open) => { setCompDialogOpen(open); if (!open) setEditCompetency(undefined); }}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader><DialogTitle>{editCompetency ? "Modifier la competence" : "Nouvelle competence"}</DialogTitle></DialogHeader>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const data = {
+                  domain: formData.get("domain") as string,
+                  competencyLabel: formData.get("competencyLabel") as string,
+                  level: formData.get("level") as string,
+                  certificationRef: (formData.get("certificationRef") as string) || null,
+                  obtainedAt: (formData.get("obtainedAt") as string) || null,
+                  expiresAt: (formData.get("expiresAt") as string) || null,
+                  status: formData.get("status") as string,
+                  documentId: null,
+                  notes: (formData.get("notes") as string) || null,
+                };
+                if (editCompetency) {
+                  updateCompMutation.mutate({ id: editCompetency.id, data });
+                } else {
+                  createCompMutation.mutate(data);
+                }
+              }} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Domaine</Label>
+                    <Select name="domain" defaultValue={editCompetency?.domain || ""}>
+                      <SelectTrigger><SelectValue placeholder="Choisir" /></SelectTrigger>
+                      <SelectContent>
+                        {COMPETENCY_DOMAINS.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Niveau</Label>
+                    <Select name="level" defaultValue={editCompetency?.level || "junior"}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {COMPETENCY_LEVELS.map((l) => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Libelle</Label>
+                  <Input name="competencyLabel" defaultValue={editCompetency?.competencyLabel || ""} required placeholder="Ex: Formateur AFGSU Niveau 2" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ref. certification</Label>
+                  <Input name="certificationRef" defaultValue={editCompetency?.certificationRef || ""} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Obtention</Label>
+                    <Input name="obtainedAt" type="date" defaultValue={editCompetency?.obtainedAt || ""} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Expiration</Label>
+                    <Input name="expiresAt" type="date" defaultValue={editCompetency?.expiresAt || ""} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Statut</Label>
+                  <Select name="status" defaultValue={editCompetency?.status || "active"}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {COMPETENCY_STATUSES.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea name="notes" defaultValue={editCompetency?.notes || ""} className="resize-none" />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" disabled={createCompMutation.isPending || updateCompMutation.isPending}>
+                    {(createCompMutation.isPending || updateCompMutation.isPending) ? "Enregistrement..." : editCompetency ? "Modifier" : "Ajouter"}
+                  </Button>
+                </div>
+              </form>
             </DialogContent>
           </Dialog>
         </TabsContent>
@@ -635,9 +940,14 @@ export default function Trainers() {
                     </Avatar>
                     <div>
                       <h3 className="font-semibold text-sm">{trainer.firstName} {trainer.lastName}</h3>
-                      <Badge variant="outline" className={trainer.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 mt-0.5" : "bg-muted text-muted-foreground mt-0.5"}>
-                        {trainer.status === "active" ? "Actif" : "Inactif"}
-                      </Badge>
+                      {(() => {
+                        const statusInfo = TRAINER_STATUSES.find((s) => s.value === trainer.status) || TRAINER_STATUSES[0];
+                        return (
+                          <Badge variant="outline" className={`${statusInfo.color} mt-0.5`}>
+                            {statusInfo.label}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                   </div>
                   <DropdownMenu>
@@ -651,6 +961,12 @@ export default function Trainers() {
                       <DropdownMenuItem onClick={() => { setEditTrainer(trainer); setDialogOpen(true); }}>
                         <Pencil className="w-4 h-4 mr-2" />Modifier
                       </DropdownMenuItem>
+                      {TRAINER_STATUSES.filter((s) => s.value !== trainer.status).map((s) => (
+                        <DropdownMenuItem key={s.value} onClick={() => updateMutation.mutate({ id: trainer.id, data: { ...trainer, status: s.value } as InsertTrainer })}>
+                          <span className={`w-2 h-2 rounded-full mr-2 ${s.value === "active" ? "bg-green-500" : s.value === "inactive" ? "bg-gray-400" : s.value === "pending" ? "bg-amber-500" : s.value === "suspended" ? "bg-red-500" : "bg-blue-500"}`} />
+                          Passer en {s.label.toLowerCase()}
+                        </DropdownMenuItem>
+                      ))}
                       <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(trainer.id)}>
                         <Trash2 className="w-4 h-4 mr-2" />Supprimer
                       </DropdownMenuItem>

@@ -18,6 +18,7 @@ import {
   Star,
   MonitorPlay,
   BookMarked,
+  Award,
 } from "lucide-react";
 import {
   Sidebar,
@@ -67,6 +68,10 @@ const allNav: NavItem[] = [
   { title: "Factures", url: "/invoices", icon: CreditCard, roles: ["admin"], permission: "manage_invoices", group: "commercial" },
   { title: "Rapports financiers", url: "/financial-reports", icon: BarChart3, roles: ["admin"], permission: "view_financial_reports", group: "commercial" },
 
+  // Intervenant
+  { title: "Notes de frais", url: "/expense-notes", icon: Receipt, roles: ["admin", "trainer"], group: "intervenant" },
+  { title: "Factures formateur", url: "/trainer-invoices", icon: CreditCard, roles: ["admin", "trainer"], group: "intervenant" },
+
   // Administration
   { title: "Modèles d'emails", url: "/email-templates", icon: Mail, roles: ["admin"], permission: "manage_templates", group: "administration" },
   { title: "Documents", url: "/documents", icon: FileText, roles: ["admin"], permission: "manage_documents", group: "administration" },
@@ -74,6 +79,7 @@ const allNav: NavItem[] = [
 
   // Qualite
   { title: "Qualité Qualiopi", url: "/quality", icon: Star, roles: ["admin"], permission: "manage_quality_actions", group: "qualite" },
+  { title: "Suivi des compétences", url: "/trainer-competencies", icon: Award, roles: ["admin"], group: "qualite" },
   { title: "Enquêtes", url: "/surveys", icon: ClipboardList, roles: ["admin"], permission: "manage_surveys", group: "qualite" },
 ];
 
@@ -81,9 +87,10 @@ const groupConfig: Record<string, { label: string; order: number }> = {
   principal: { label: "Principal", order: 0 },
   formation: { label: "Formation", order: 1 },
   contacts: { label: "Contacts", order: 2 },
-  commercial: { label: "Commercial", order: 3 },
-  administration: { label: "Administration", order: 4 },
-  qualite: { label: "Qualité", order: 5 },
+  intervenant: { label: "Intervenant", order: 3 },
+  commercial: { label: "Commercial", order: 4 },
+  administration: { label: "Administration", order: 5 },
+  qualite: { label: "Qualité", order: 6 },
 };
 
 export function AppSidebar() {
@@ -93,7 +100,8 @@ export function AppSidebar() {
 
   const visibleNav = allNav.filter((item) => {
     if (!item.roles.includes(role)) return false;
-    if (item.permission && user) {
+    // Les permissions ne s'appliquent qu'aux admins (système de sous-rôles admin)
+    if (item.permission && role === "admin" && user) {
       return hasPermission(user, item.permission);
     }
     return true;

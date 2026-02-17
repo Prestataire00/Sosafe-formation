@@ -21,6 +21,7 @@ import {
   insertUserDocumentSchema, insertSignatureSchema,
   insertExpenseNoteSchema,
   insertTrainerInvoiceSchema,
+  insertTrainerCompetencySchema,
   loginSchema, registerSchema,
   TEMPLATE_VARIABLES,
 } from "@shared/schema";
@@ -43,6 +44,7 @@ export async function registerRoutes(
   app.use("/api/signatures", requireAuth);
   app.use("/api/trainer-documents", requireAuth);
   app.use("/api/trainer-invoices", requireAuth);
+  app.use("/api/trainer-competencies", requireAuth);
   app.use("/api/expense-notes", requireAuth);
 
   // Trainer routes: requireAuth for all, requirePermission only for CRUD (not portal sub-routes)
@@ -1201,7 +1203,7 @@ export async function registerRoutes(
 
   app.get("/api/users", async (_req, res) => {
     const result = await storage.getUsers();
-    res.json(result.map(u => ({ id: u.id, username: u.username, role: u.role, firstName: u.firstName, lastName: u.lastName, email: u.email, permissions: u.permissions || [] })));
+    res.json(result.map(u => ({ id: u.id, username: u.username, role: u.role, firstName: u.firstName, lastName: u.lastName, email: u.email, permissions: u.permissions || [], trainerId: u.trainerId, traineeId: u.traineeId, enterpriseId: u.enterpriseId })));
   });
 
   app.patch("/api/users/:id/role", async (req, res) => {
@@ -1213,13 +1215,16 @@ export async function registerRoutes(
   });
 
   app.patch("/api/users/:id", async (req, res) => {
-    const { permissions, role } = req.body;
+    const { permissions, role, trainerId, traineeId, enterpriseId } = req.body;
     const updateData: Record<string, unknown> = {};
     if (permissions !== undefined) updateData.permissions = permissions;
     if (role !== undefined) updateData.role = role;
+    if (trainerId !== undefined) updateData.trainerId = trainerId;
+    if (traineeId !== undefined) updateData.traineeId = traineeId;
+    if (enterpriseId !== undefined) updateData.enterpriseId = enterpriseId;
     const user = await storage.updateUser(req.params.id, updateData as any);
     if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
-    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions });
+    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions, trainerId: user.trainerId, traineeId: user.traineeId, enterpriseId: user.enterpriseId });
   });
 
   // ============================================================
@@ -1373,6 +1378,11 @@ export async function registerRoutes(
   // EXPENSE NOTES
   // ============================================================
 
+  app.get("/api/expense-notes", async (req, res) => {
+    const notes = await storage.getAllExpenseNotes();
+    res.json(notes);
+  });
+
   app.get("/api/trainers/:id/expense-notes", async (req, res) => {
     const notes = await storage.getExpenseNotes(req.params.id);
     res.json(notes);
@@ -1397,6 +1407,11 @@ export async function registerRoutes(
   // TRAINER INVOICES
   // ============================================================
 
+  app.get("/api/trainer-invoices", async (req, res) => {
+    const invoicesList = await storage.getAllTrainerInvoices();
+    res.json(invoicesList);
+  });
+
   app.get("/api/trainers/:id/invoices", async (req, res) => {
     const invoicesList = await storage.getTrainerInvoices(req.params.id);
     res.json(invoicesList);
@@ -1415,6 +1430,130 @@ export async function registerRoutes(
     const invoice = await storage.updateTrainerInvoice(req.params.id, parsed.data);
     if (!invoice) return res.status(404).json({ message: "Facture non trouvée" });
     res.json(invoice);
+  });
+
+  // ============================================================
+  // TRAINER COMPETENCIES
+  // ============================================================
+
+  app.get("/api/trainer-competencies", async (_req, res) => {
+    const competencies = await storage.getAllTrainerCompetencies();
+    res.json(competencies);
+  });
+
+  app.get("/api/trainers/:id/competencies", async (req, res) => {
+    const competencies = await storage.getTrainerCompetencies(req.params.id);
+    res.json(competencies);
+  });
+
+  app.post("/api/trainers/:id/competencies", async (req, res) => {
+    const parsed = insertTrainerCompetencySchema.safeParse({ ...req.body, trainerId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const competency = await storage.createTrainerCompetency(parsed.data);
+    res.status(201).json(competency);
+  });
+
+  app.patch("/api/trainer-competencies/:id", async (req, res) => {
+    const parsed = insertTrainerCompetencySchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const competency = await storage.updateTrainerCompetency(req.params.id, parsed.data);
+    if (!competency) return res.status(404).json({ message: "Compétence non trouvée" });
+    res.json(competency);
+  });
+
+  app.delete("/api/trainer-competencies/:id", async (req, res) => {
+    await storage.deleteTrainerCompetency(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // TRAINER SATISFACTION STATS (auto-calculated from surveys)
+  // ============================================================
+
+  app.get("/api/trainers/:id/satisfaction-stats", async (req, res) => {
+    const trainerId = req.params.id;
+    const trainerSessions = await storage.getSessionsByTrainer(trainerId);
+
+    let totalRatings = 0;
+    let sumRatings = 0;
+    let totalResponses = 0;
+    const perYear: Record<number, { sum: number; count: number }> = {};
+
+    for (const session of trainerSessions) {
+      const responses = await storage.getSurveyResponses(undefined, session.id);
+      for (const r of responses) {
+        totalResponses++;
+        if (r.rating != null) {
+          totalRatings++;
+          sumRatings += r.rating;
+          const year = new Date(session.startDate).getFullYear();
+          if (!perYear[year]) perYear[year] = { sum: 0, count: 0 };
+          perYear[year].sum += r.rating;
+          perYear[year].count++;
+        }
+      }
+    }
+
+    const avgRating = totalRatings > 0 ? Math.round((sumRatings / totalRatings) * 10) / 10 : 0;
+    const satisfactionScore = totalRatings > 0 ? Math.round((avgRating / 5) * 100) : 0;
+
+    res.json({
+      avgRating,
+      totalResponses,
+      satisfactionScore,
+      perYear: Object.entries(perYear)
+        .map(([year, data]) => ({
+          year: parseInt(year),
+          avgRating: Math.round((data.sum / data.count) * 10) / 10,
+          count: data.count,
+        }))
+        .sort((a, b) => b.year - a.year),
+    });
+  });
+
+  // ============================================================
+  // TRAINER QUALIOPI STATUS
+  // ============================================================
+
+  app.get("/api/trainers/:id/qualiopi-status", async (req, res) => {
+    const trainerId = req.params.id;
+    const currentYear = new Date().getFullYear();
+
+    // Documents
+    const docs = await storage.getTrainerDocuments(trainerId);
+    const requiredDocTypes = ["cv", "diplome", "contrat", "assurance"];
+    const validatedDocs = docs.filter(d => d.status === "validated");
+    const docCoverage = requiredDocTypes.map(type => ({
+      type,
+      present: validatedDocs.some(d => d.type === type),
+    }));
+    const docScore = Math.round((docCoverage.filter(d => d.present).length / requiredDocTypes.length) * 100);
+
+    // Competencies
+    const competencies = await storage.getTrainerCompetencies(trainerId);
+    const activeCompetencies = competencies.filter(c => c.status === "active");
+    const expiredCompetencies = competencies.filter(c => c.status === "expired");
+    const renewalCompetencies = competencies.filter(c => c.status === "renewal");
+    const compScore = competencies.length > 0 ? Math.round((activeCompetencies.length / competencies.length) * 100) : 0;
+
+    // Evaluations
+    const evaluations = await storage.getTrainerEvaluations(trainerId);
+    const currentYearEval = evaluations.find(e => e.year === currentYear);
+    const evalScore = currentYearEval ? 100 : 0;
+
+    // Sessions
+    const trainerSessions = await storage.getSessionsByTrainer(trainerId);
+    const sessionCount = trainerSessions.length;
+
+    const globalScore = Math.round((docScore + compScore + evalScore) / 3);
+
+    res.json({
+      globalScore,
+      documents: { score: docScore, coverage: docCoverage, total: docs.length, validated: validatedDocs.length },
+      competencies: { score: compScore, total: competencies.length, active: activeCompetencies.length, expired: expiredCompetencies.length, renewal: renewalCompetencies.length },
+      evaluations: { score: evalScore, hasCurrentYear: !!currentYearEval, total: evaluations.length },
+      sessions: { count: sessionCount },
+    });
   });
 
   // ============================================================

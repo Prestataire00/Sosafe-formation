@@ -32,7 +32,26 @@
       "Bash(git remote add:*)",
       "Bash(git stash:*)",
       "Bash(sort:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)",
+      "Bash(COOKIE_FILE=/tmp/test_cookies.txt)",
+      "Bash(__NEW_LINE_c31121db18f5f6ef__ echo \"=== 1. Liste des utilisateurs ===\")",
+      "Bash(__NEW_LINE_ec14fe341ae14512__ echo \"=== 1. Liste des utilisateurs ===\")",
+      "Bash(__NEW_LINE_be4318a9037ad847__ echo \"\")",
+      "Bash(__NEW_LINE_d564d31878ad02d7__ echo \"=== 1. Liste des utilisateurs ===\")",
+      "Bash(__NEW_LINE_81a46006bde05c58__ echo \"\")",
+      "Bash(__NEW_LINE_6ca61d7aa7caddff__ echo \"=== Test: Associer le profil formateur à l''utilisateur Anissa ===\")",
+      "Bash(__NEW_LINE_9bc3159b2e5e3661__ echo \"=== Vérification: l''utilisateur a bien le trainerId associé ===\")",
+      "Bash(TRAINER_ID=\"6ca450e7-fa47-478f-83e9-a19a8fc4c55d\":*)",
+      "Bash(__NEW_LINE_51a709e81ee09770__ echo \"=== 3. Compétences du formateur ===\")",
+      "Bash(__NEW_LINE_51a709e81ee09770__ echo \"\")",
+      "Bash(__NEW_LINE_afe8e1b044396ff5__ echo \"=== 6. Créer une compétence ===\")",
+      "Bash(COMP_ID=\"5e76f153-8d0a-4503-9bfd-cb99dbfddcf3\")",
+      "Bash(__NEW_LINE_35296a37c2fec705__ echo \"=== 7. Vérifier les compétences après création ===\")",
+      "Bash(__NEW_LINE_35296a37c2fec705__ echo \"\")",
+      "Bash(__NEW_LINE_d3053a6ae3617543__ echo \"=== 11. Supprimer la compétence ===\")",
+      "Bash(__NEW_LINE_d3053a6ae3617543__ echo \"\")"
     ]
   }
 }

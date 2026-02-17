@@ -50,6 +50,9 @@ import type {
   InsertAutomationRule,
   EmailTemplate,
   User,
+  Trainer,
+  Trainee,
+  Enterprise,
 } from "@shared/schema";
 import {
   AUTOMATION_EVENTS,
@@ -611,6 +614,18 @@ function UtilisateursTab() {
     queryKey: ["/api/users"],
   });
 
+  const { data: trainers } = useQuery<Trainer[]>({
+    queryKey: ["/api/trainers"],
+  });
+
+  const { data: trainees } = useQuery<Trainee[]>({
+    queryKey: ["/api/trainees"],
+  });
+
+  const { data: enterprises } = useQuery<Enterprise[]>({
+    queryKey: ["/api/enterprises"],
+  });
+
   const updateRoleMutation = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) =>
       apiRequest("PATCH", `/api/users/${id}/role`, { role }),
@@ -620,6 +635,17 @@ function UtilisateursTab() {
     },
     onError: () =>
       toast({ title: "Erreur lors de la mise à jour du rôle", variant: "destructive" }),
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: ({ id, ...data }: { id: string; trainerId?: string | null; traineeId?: string | null; enterpriseId?: string | null }) =>
+      apiRequest("PATCH", `/api/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Profil associé mis à jour" });
+    },
+    onError: () =>
+      toast({ title: "Erreur lors de l'association du profil", variant: "destructive" }),
   });
 
   const updatePermsMutation = useMutation({
@@ -696,6 +722,7 @@ function UtilisateursTab() {
                 <TableHead>Email</TableHead>
                 <TableHead>Rôle</TableHead>
                 <TableHead>Modifier le rôle</TableHead>
+                <TableHead>Profil associé</TableHead>
                 <TableHead>Permissions</TableHead>
               </TableRow>
             </TableHeader>
@@ -731,6 +758,80 @@ function UtilisateursTab() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </TableCell>
+                  <TableCell>
+                    {user.role === "trainer" && (
+                      <Select
+                        value={user.trainerId || "__none__"}
+                        onValueChange={(val) =>
+                          updateProfileMutation.mutate({
+                            id: user.id,
+                            trainerId: val === "__none__" ? null : val,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Non associé" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Non associé</SelectItem>
+                          {trainers?.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.firstName} {t.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {user.role === "trainee" && (
+                      <Select
+                        value={user.traineeId || "__none__"}
+                        onValueChange={(val) =>
+                          updateProfileMutation.mutate({
+                            id: user.id,
+                            traineeId: val === "__none__" ? null : val,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Non associé" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Non associé</SelectItem>
+                          {trainees?.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.firstName} {t.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {user.role === "enterprise" && (
+                      <Select
+                        value={user.enterpriseId || "__none__"}
+                        onValueChange={(val) =>
+                          updateProfileMutation.mutate({
+                            id: user.id,
+                            enterpriseId: val === "__none__" ? null : val,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Non associé" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Non associé</SelectItem>
+                          {enterprises?.map((e) => (
+                            <SelectItem key={e.id} value={e.id}>
+                              {e.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {user.role === "admin" && (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {user.role === "admin" && (
