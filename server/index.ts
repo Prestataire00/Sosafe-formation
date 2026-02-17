@@ -1,5 +1,5 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
-import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -24,8 +24,15 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-// Serve uploaded files
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// Redirect legacy /uploads/:filename URLs to Supabase Storage
+app.get("/uploads/:filename", (req, res) => {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  if (!supabaseUrl) {
+    return res.status(404).json({ message: "File not found" });
+  }
+  const publicUrl = `${supabaseUrl}/storage/v1/object/public/uploads/${req.params.filename}`;
+  res.redirect(301, publicUrl);
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

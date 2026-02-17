@@ -2,9 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import Busboy from "busboy";
 import path from "path";
-import fs from "fs";
 import crypto from "crypto";
 import { storage } from "./storage";
+import { supabase, STORAGE_BUCKET } from "./supabase";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole } from "./auth";
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
@@ -32,13 +32,8 @@ export async function registerRoutes(
   setupAuth(app);
 
   // ============================================================
-  // FILE UPLOAD (busboy)
+  // FILE UPLOAD (busboy → Supabase Storage)
   // ============================================================
-
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
 
   const ALLOWED_MIMETYPES = [
     "application/pdf",
@@ -57,9 +52,10 @@ export async function registerRoutes(
     }
 
     let fileHandled = false;
-    let fileInfo: { fileUrl: string; fileName: string; fileSize: number; mimeType: string } | null = null;
-    let writeStream: fs.WriteStream | null = null;
-    let filePath = "";
+    let fileMeta: { originalName: string; mimeType: string; savedName: string } | null = null;
+    let chunks: Buffer[] = [];
+    let size = 0;
+    let limitExceeded = false;
 
     const busboy = Busboy({ headers: req.headers, limits: { fileSize: MAX_FILE_SIZE, files: 1 } });
 
@@ -75,41 +71,53 @@ export async function registerRoutes(
       const uniqueSuffix = Date.now() + "-" + crypto.randomBytes(6).toString("hex");
       const ext = path.extname(originalName);
       const savedName = uniqueSuffix + ext;
-      filePath = path.join(uploadsDir, savedName);
-      let size = 0;
 
-      writeStream = fs.createWriteStream(filePath);
-      stream.on("data", (chunk: Buffer) => { size += chunk.length; });
-      stream.pipe(writeStream);
+      fileMeta = { originalName, mimeType, savedName };
 
-      stream.on("end", () => {
-        fileInfo = {
-          fileUrl: `/uploads/${savedName}`,
-          fileName: originalName,
-          fileSize: size,
-          mimeType,
-        };
+      stream.on("data", (chunk: Buffer) => {
+        size += chunk.length;
+        chunks.push(chunk);
       });
 
       stream.on("limit", () => {
-        writeStream?.destroy();
-        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        fileInfo = null;
+        limitExceeded = true;
+        chunks = [];
+        fileMeta = null;
       });
     });
 
-    busboy.on("finish", () => {
+    busboy.on("finish", async () => {
       if (!fileHandled) {
         return res.status(400).json({ message: "Aucun fichier envoyé" });
       }
-      if (!fileInfo) {
+      if (!fileMeta || limitExceeded) {
         return res.status(400).json({ message: "Type de fichier non autorisé ou fichier trop volumineux" });
       }
-      res.json(fileInfo);
+
+      const buffer = Buffer.concat(chunks);
+      chunks = []; // free memory
+
+      const { error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(fileMeta.savedName, buffer, { contentType: fileMeta.mimeType });
+
+      if (error) {
+        return res.status(500).json({ message: error.message || "Erreur lors de l'upload vers le stockage" });
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(fileMeta.savedName);
+
+      res.json({
+        fileUrl: publicUrlData.publicUrl,
+        fileName: fileMeta.originalName,
+        fileSize: size,
+        mimeType: fileMeta.mimeType,
+      });
     });
 
     busboy.on("error", (err: Error) => {
-      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
       res.status(500).json({ message: err.message || "Erreur lors de l'upload" });
     });
 
