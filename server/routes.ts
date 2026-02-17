@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { storage } from "./storage";
-import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole } from "./auth";
+import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole, requirePermission } from "./auth";
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
   insertSessionSchema, insertEnrollmentSchema, insertEnterpriseSchema,
@@ -31,6 +31,57 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   setupAuth(app);
+
+  // ============================================================
+  // ROUTE PERMISSION MIDDLEWARE
+  // Applied via app.use() to preserve Express type inference
+  // ============================================================
+
+  // Auth-only routes (portals, shared resources)
+  app.use("/api/upload", requireAuth);
+  app.use("/api/user-documents", requireAuth);
+  app.use("/api/signatures", requireAuth);
+  app.use("/api/trainer-documents", requireAuth);
+  app.use("/api/trainer-invoices", requireAuth);
+  app.use("/api/expense-notes", requireAuth);
+
+  // Trainer routes: requireAuth for all, requirePermission only for CRUD (not portal sub-routes)
+  app.use("/api/trainers", requireAuth, (req, res, next) => {
+    // Portal sub-routes (/api/trainers/:id/sessions, /documents, etc.) skip permission check
+    const parts = req.path.split("/").filter(Boolean);
+    if (parts.length > 1) return next();
+    // Main CRUD routes need manage_trainers permission
+    requirePermission("manage_trainers")(req, res, next);
+  });
+
+  // Permission-protected routes
+  app.use("/api/enterprises", requireAuth, requirePermission("manage_enterprises"));
+  app.use("/api/enterprise-contacts", requireAuth, requirePermission("manage_enterprises"));
+  app.use("/api/trainees", requireAuth, requirePermission("manage_trainees"));
+  app.use("/api/programs", requireAuth, requirePermission("manage_programs"));
+  app.use("/api/sessions", requireAuth, requirePermission("manage_sessions"));
+  app.use("/api/enrollments", requireAuth, requirePermission("manage_enrollments"));
+  app.use("/api/email-templates", requireAuth, requirePermission("manage_templates"));
+  app.use("/api/email-logs", requireAuth, requirePermission("manage_templates"));
+  app.use("/api/document-templates", requireAuth, requirePermission("manage_documents"));
+  app.use("/api/generated-documents", requireAuth, requirePermission("manage_documents"));
+  app.use("/api/documents", requireAuth, requirePermission("manage_documents"));
+  app.use("/api/prospects", requireAuth, requirePermission("manage_prospects"));
+  app.use("/api/quotes", requireAuth, requirePermission("manage_quotes"));
+  app.use("/api/invoices", requireAuth, requirePermission("manage_invoices"));
+  app.use("/api/payments", requireAuth, requirePermission("manage_invoices"));
+  app.use("/api/elearning-modules", requireAuth, requirePermission("manage_elearning"));
+  app.use("/api/elearning-blocks", requireAuth, requirePermission("manage_elearning"));
+  app.use("/api/quiz-questions", requireAuth, requirePermission("manage_elearning"));
+  app.use("/api/learner-progress", requireAuth, requirePermission("manage_elearning"));
+  app.use("/api/survey-templates", requireAuth, requirePermission("manage_surveys"));
+  app.use("/api/survey-responses", requireAuth, requirePermission("manage_surveys"));
+  app.use("/api/quality-actions", requireAuth, requirePermission("manage_quality_actions"));
+  app.use("/api/attendance-sheets", requireAuth, requirePermission("manage_attendance"));
+  app.use("/api/attendance-records", requireAuth, requirePermission("manage_attendance"));
+  app.use("/api/automation-rules", requireAuth, requirePermission("manage_automation"));
+  app.use("/api/settings", requireAuth, requirePermission("manage_settings"));
+  app.use("/api/users", requireAuth, requirePermission("manage_users"));
 
   // ============================================================
   // FILE UPLOAD (busboy → Supabase Storage)

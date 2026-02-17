@@ -41,8 +41,10 @@ import {
   Pencil,
   Trash2,
   Shield,
+  ShieldAlert,
   Settings as SettingsIcon,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import type {
   AutomationRule,
   InsertAutomationRule,
@@ -824,6 +826,20 @@ function UtilisateursTab() {
 // ============================================================
 
 export default function Settings() {
+  const { user } = useAuth();
+
+  if (user?.role !== "admin") {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh]">
+        <ShieldAlert className="w-16 h-16 text-muted-foreground/40 mb-4" />
+        <h1 className="text-2xl font-bold mb-2">Accès réservé aux administrateurs</h1>
+        <p className="text-muted-foreground">
+          Vous n'avez pas les droits nécessaires pour accéder à cette page.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div>

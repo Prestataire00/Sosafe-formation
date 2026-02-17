@@ -32,7 +32,7 @@ import {
   SidebarFooter,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { useAuth } from "@/lib/auth";
+import { useAuth, hasPermission } from "@/lib/auth";
 
 type NavItem = {
   title: string;
@@ -40,6 +40,7 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   roles: string[];
   group: string;
+  permission?: string;
 };
 
 const allNav: NavItem[] = [
@@ -47,33 +48,33 @@ const allNav: NavItem[] = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard, roles: ["admin", "trainer", "trainee", "enterprise"], group: "principal" },
 
   // Formation
-  { title: "Formations", url: "/programs", icon: BookOpen, roles: ["admin", "trainer", "trainee", "enterprise"], group: "formation" },
-  { title: "Sessions", url: "/sessions", icon: Calendar, roles: ["admin", "trainer", "trainee", "enterprise"], group: "formation" },
-  { title: "Inscriptions", url: "/enrollments", icon: ClipboardList, roles: ["admin", "trainer"], group: "formation" },
-  { title: "E-Learning", url: "/elearning", icon: MonitorPlay, roles: ["admin", "trainer"], group: "formation" },
+  { title: "Formations", url: "/programs", icon: BookOpen, roles: ["admin", "trainer", "trainee", "enterprise"], permission: "manage_programs", group: "formation" },
+  { title: "Sessions", url: "/sessions", icon: Calendar, roles: ["admin", "trainer", "trainee", "enterprise"], permission: "manage_sessions", group: "formation" },
+  { title: "Inscriptions", url: "/enrollments", icon: ClipboardList, roles: ["admin", "trainer"], permission: "manage_enrollments", group: "formation" },
+  { title: "E-Learning", url: "/elearning", icon: MonitorPlay, roles: ["admin", "trainer"], permission: "manage_elearning", group: "formation" },
   { title: "Portail Apprenant", url: "/learner-portal", icon: BookMarked, roles: ["trainee"], group: "formation" },
   { title: "Portail Formateur", url: "/trainer-portal", icon: BookMarked, roles: ["trainer"], group: "formation" },
   { title: "Portail Entreprise", url: "/enterprise-portal", icon: Building2, roles: ["enterprise"], group: "formation" },
 
   // Contacts
-  { title: "Apprenants", url: "/trainees", icon: GraduationCap, roles: ["admin", "trainer"], group: "contacts" },
-  { title: "Formateurs", url: "/trainers", icon: Users, roles: ["admin"], group: "contacts" },
-  { title: "Entreprises", url: "/enterprises", icon: Building2, roles: ["admin"], group: "contacts" },
+  { title: "Apprenants", url: "/trainees", icon: GraduationCap, roles: ["admin", "trainer"], permission: "manage_trainees", group: "contacts" },
+  { title: "Formateurs", url: "/trainers", icon: Users, roles: ["admin"], permission: "manage_trainers", group: "contacts" },
+  { title: "Entreprises", url: "/enterprises", icon: Building2, roles: ["admin"], permission: "manage_enterprises", group: "contacts" },
 
   // Commercial
-  { title: "Prospects", url: "/prospects", icon: UserPlus, roles: ["admin"], group: "commercial" },
-  { title: "Devis", url: "/quotes", icon: Receipt, roles: ["admin"], group: "commercial" },
-  { title: "Factures", url: "/invoices", icon: CreditCard, roles: ["admin"], group: "commercial" },
-  { title: "Rapports financiers", url: "/financial-reports", icon: BarChart3, roles: ["admin"], group: "commercial" },
+  { title: "Prospects", url: "/prospects", icon: UserPlus, roles: ["admin"], permission: "manage_prospects", group: "commercial" },
+  { title: "Devis", url: "/quotes", icon: Receipt, roles: ["admin"], permission: "manage_quotes", group: "commercial" },
+  { title: "Factures", url: "/invoices", icon: CreditCard, roles: ["admin"], permission: "manage_invoices", group: "commercial" },
+  { title: "Rapports financiers", url: "/financial-reports", icon: BarChart3, roles: ["admin"], permission: "view_financial_reports", group: "commercial" },
 
   // Administration
-  { title: "Modèles d'emails", url: "/email-templates", icon: Mail, roles: ["admin"], group: "administration" },
-  { title: "Documents", url: "/documents", icon: FileText, roles: ["admin"], group: "administration" },
-  { title: "Émargement", url: "/attendance", icon: CheckSquare, roles: ["admin", "trainer"], group: "administration" },
+  { title: "Modèles d'emails", url: "/email-templates", icon: Mail, roles: ["admin"], permission: "manage_templates", group: "administration" },
+  { title: "Documents", url: "/documents", icon: FileText, roles: ["admin"], permission: "manage_documents", group: "administration" },
+  { title: "Émargement", url: "/attendance", icon: CheckSquare, roles: ["admin", "trainer"], permission: "manage_attendance", group: "administration" },
 
   // Qualite
-  { title: "Qualité Qualiopi", url: "/quality", icon: Star, roles: ["admin"], group: "qualite" },
-  { title: "Enquêtes", url: "/surveys", icon: ClipboardList, roles: ["admin"], group: "qualite" },
+  { title: "Qualité Qualiopi", url: "/quality", icon: Star, roles: ["admin"], permission: "manage_quality_actions", group: "qualite" },
+  { title: "Enquêtes", url: "/surveys", icon: ClipboardList, roles: ["admin"], permission: "manage_surveys", group: "qualite" },
 ];
 
 const groupConfig: Record<string, { label: string; order: number }> = {
@@ -90,7 +91,13 @@ export function AppSidebar() {
   const { user } = useAuth();
   const role = user?.role || "admin";
 
-  const visibleNav = allNav.filter((item) => item.roles.includes(role));
+  const visibleNav = allNav.filter((item) => {
+    if (!item.roles.includes(role)) return false;
+    if (item.permission && user) {
+      return hasPermission(user, item.permission);
+    }
+    return true;
+  });
 
   const groups = Object.entries(groupConfig)
     .sort(([, a], [, b]) => a.order - b.order)
@@ -142,18 +149,20 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={location === "/settings"} tooltip="Paramètres">
-              <Link href="/settings" data-testid="link-settings">
-                <Settings />
-                <span>Paramètres</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+      {role === "admin" && (
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={location === "/settings"} tooltip="Paramètres">
+                <Link href="/settings" data-testid="link-settings">
+                  <Settings />
+                  <span>Paramètres</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }
