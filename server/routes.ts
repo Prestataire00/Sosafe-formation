@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import multer from "multer";
+import Busboy from "busboy";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole } from "./auth";
 import {
@@ -31,7 +32,7 @@ export async function registerRoutes(
   setupAuth(app);
 
   // ============================================================
-  // FILE UPLOAD (multer)
+  // FILE UPLOAD (busboy)
   // ============================================================
 
   const uploadsDir = path.join(process.cwd(), "uploads");
@@ -39,43 +40,80 @@ export async function registerRoutes(
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
 
-  const upload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, uploadsDir),
-      filename: (_req, file, cb) => {
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        const ext = path.extname(file.originalname);
-        cb(null, uniqueSuffix + ext);
-      },
-    }),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-    fileFilter: (_req, file, cb) => {
-      const allowed = [
-        "application/pdf",
-        "image/jpeg", "image/png", "image/gif", "image/webp",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ];
-      if (allowed.includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new Error("Type de fichier non autorisé"));
-      }
-    },
-  });
+  const ALLOWED_MIMETYPES = [
+    "application/pdf",
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ];
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-  app.post("/api/upload", upload.single("file"), (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ message: "Aucun fichier envoyé" });
+  app.post("/api/upload", (req, res) => {
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return res.status(400).json({ message: "Content-Type doit être multipart/form-data" });
     }
-    res.json({
-      fileUrl: `/uploads/${req.file.filename}`,
-      fileName: req.file.originalname,
-      fileSize: req.file.size,
-      mimeType: req.file.mimetype,
+
+    let fileHandled = false;
+    let fileInfo: { fileUrl: string; fileName: string; fileSize: number; mimeType: string } | null = null;
+    let writeStream: fs.WriteStream | null = null;
+    let filePath = "";
+
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: MAX_FILE_SIZE, files: 1 } });
+
+    busboy.on("file", (fieldname, stream, info) => {
+      const { filename: originalName, mimeType } = info;
+      fileHandled = true;
+
+      if (!ALLOWED_MIMETYPES.includes(mimeType)) {
+        stream.resume(); // drain
+        return;
+      }
+
+      const uniqueSuffix = Date.now() + "-" + crypto.randomBytes(6).toString("hex");
+      const ext = path.extname(originalName);
+      const savedName = uniqueSuffix + ext;
+      filePath = path.join(uploadsDir, savedName);
+      let size = 0;
+
+      writeStream = fs.createWriteStream(filePath);
+      stream.on("data", (chunk: Buffer) => { size += chunk.length; });
+      stream.pipe(writeStream);
+
+      stream.on("end", () => {
+        fileInfo = {
+          fileUrl: `/uploads/${savedName}`,
+          fileName: originalName,
+          fileSize: size,
+          mimeType,
+        };
+      });
+
+      stream.on("limit", () => {
+        writeStream?.destroy();
+        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        fileInfo = null;
+      });
     });
+
+    busboy.on("finish", () => {
+      if (!fileHandled) {
+        return res.status(400).json({ message: "Aucun fichier envoyé" });
+      }
+      if (!fileInfo) {
+        return res.status(400).json({ message: "Type de fichier non autorisé ou fichier trop volumineux" });
+      }
+      res.json(fileInfo);
+    });
+
+    busboy.on("error", (err: Error) => {
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      res.status(500).json({ message: err.message || "Erreur lors de l'upload" });
+    });
+
+    req.pipe(busboy);
   });
 
   // ============================================================
