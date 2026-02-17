@@ -167,9 +167,10 @@ function TrainerForm({
   isPending,
 }: {
   trainer?: Trainer;
-  onSubmit: (data: InsertTrainer) => void;
+  onSubmit: (data: InsertTrainer & { password?: string }) => void;
   isPending: boolean;
 }) {
+  const { toast } = useToast();
   const [firstName, setFirstName] = useState(trainer?.firstName || "");
   const [lastName, setLastName] = useState(trainer?.lastName || "");
   const [email, setEmail] = useState(trainer?.email || "");
@@ -177,10 +178,21 @@ function TrainerForm({
   const [specialty, setSpecialty] = useState(trainer?.specialty || "");
   const [bio, setBio] = useState(trainer?.bio || "");
   const [status, setStatus] = useState(trainer?.status || "active");
+  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (pw: string) => apiRequest("PATCH", `/api/trainers/${trainer!.id}/password`, { password: pw }),
+    onSuccess: () => {
+      setNewPassword("");
+      toast({ title: "Mot de passe modifié" });
+    },
+    onError: (error: Error) => toast({ title: error.message || "Erreur", variant: "destructive" }),
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
+    const data: InsertTrainer & { password?: string } = {
       firstName,
       lastName,
       email,
@@ -189,7 +201,11 @@ function TrainerForm({
       bio: bio || null,
       status,
       avatarUrl: null,
-    });
+    };
+    if (!trainer && password) {
+      data.password = password;
+    }
+    onSubmit(data);
   };
 
   return (
@@ -238,6 +254,47 @@ function TrainerForm({
           </SelectContent>
         </Select>
       </div>
+
+      {!trainer && (
+        <>
+          <div className="border-t pt-4 mt-4">
+            <p className="text-sm font-medium mb-1">Compte d'accès portail (optionnel)</p>
+            <p className="text-xs text-muted-foreground mb-3">Si renseigné, un compte sera créé automatiquement. Le formateur se connectera avec son email.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Mot de passe</Label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} placeholder="min. 6 caractères" data-testid="input-trainer-password" />
+          </div>
+        </>
+      )}
+
+      {trainer && (
+        <div className="border-t pt-4 mt-4">
+          <p className="text-sm font-medium mb-1">Modifier le mot de passe</p>
+          <p className="text-xs text-muted-foreground mb-3">Réinitialiser le mot de passe du compte associé à ce formateur.</p>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Nouveau mot de passe (min. 6 car.)"
+              minLength={6}
+              className="flex-1"
+              data-testid="input-trainer-new-password"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!newPassword || newPassword.length < 6 || resetPasswordMutation.isPending}
+              onClick={() => resetPasswordMutation.mutate(newPassword)}
+              data-testid="button-trainer-reset-password"
+            >
+              {resetPasswordMutation.isPending ? "..." : "Modifier"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending} data-testid="button-trainer-submit">
           {isPending ? "Enregistrement..." : trainer ? "Modifier" : "Ajouter"}
@@ -856,13 +913,14 @@ export default function Trainers() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: InsertTrainer) => apiRequest("POST", "/api/trainers", data),
+    mutationFn: (data: InsertTrainer & { password?: string }) =>
+      apiRequest("POST", "/api/trainers", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trainers"] });
       setDialogOpen(false);
       toast({ title: "Formateur ajouté avec succès" });
     },
-    onError: () => toast({ title: "Erreur lors de l'ajout", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: error.message || "Erreur lors de l'ajout", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({

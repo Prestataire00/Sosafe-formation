@@ -133,13 +133,14 @@ export default function AuthPage() {
                 </>
               )}
               <div className="space-y-2">
-                <Label htmlFor="username">Nom d'utilisateur</Label>
+                <Label htmlFor="username">Nom d'utilisateur ou email</Label>
                 <Input
                   id="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
                   autoComplete="username"
+                  placeholder="nom d'utilisateur ou email"
                   data-testid="input-username"
                 />
               </div>

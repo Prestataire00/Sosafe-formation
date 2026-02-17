@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
+import fs from "fs";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -25,11 +27,9 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 
 app.get("/uploads/:filename", (req, res) => {
-  const { default: path } = require("path");
-  const { existsSync } = require("fs");
   const localPath = path.resolve(process.cwd(), "uploads", req.params.filename);
 
-  if (existsSync(localPath)) {
+  if (fs.existsSync(localPath)) {
     return res.sendFile(localPath);
   }
 

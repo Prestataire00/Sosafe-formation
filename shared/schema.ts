@@ -829,6 +829,19 @@ export const ENTERPRISE_CONTACT_ROLES = [
   { value: "autre", label: "Autre" },
 ] as const;
 
+export const ENTERPRISE_DOCUMENT_CATEGORIES = [
+  { value: "convention", label: "Convention" },
+  { value: "attestation", label: "Attestation" },
+  { value: "facture", label: "Facture" },
+  { value: "devis", label: "Devis" },
+  { value: "certificat", label: "Certificat" },
+  { value: "programme", label: "Programme" },
+  { value: "bpf", label: "Bilan Pédagogique et Financier" },
+  { value: "reglement", label: "Règlement intérieur" },
+  { value: "administratif", label: "Administratif" },
+  { value: "autre", label: "Autre" },
+] as const;
+
 // Trainee constants
 export const TRAINEE_CIVILITIES = [
   { value: "M.", label: "M." },

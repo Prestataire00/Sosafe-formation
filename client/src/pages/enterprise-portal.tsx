@@ -23,9 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, FileText, ClipboardList, AlertCircle, Loader2, Upload, Eye, Download, X, UserPlus, Pencil, Trash2 } from "lucide-react";
-import type { Enterprise, Enrollment, Session, Trainee, Quote, Invoice, EnterpriseContact } from "@shared/schema";
-import { ENTERPRISE_CONTACT_ROLES } from "@shared/schema";
+import { Building2, Users, FileText, ClipboardList, AlertCircle, Loader2, Upload, Eye, Download, UserPlus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from "lucide-react";
+import type { Enterprise, Enrollment, Session, Trainee, Quote, Invoice, EnterpriseContact, Program, GeneratedDocument } from "@shared/schema";
+import { ENTERPRISE_CONTACT_ROLES, ENTERPRISE_DOCUMENT_CATEGORIES } from "@shared/schema";
 
 // ============================================================
 // HELPERS
@@ -80,6 +80,26 @@ function EnrollmentStatusBadge({ status }: { status: string }) {
   );
 }
 
+function DocumentTypeBadge({ type }: { type: string }) {
+  const variants: Record<string, string> = {
+    convention: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    attestation: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    certificat: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    bpf: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  };
+  const labels: Record<string, string> = {
+    convention: "Convention",
+    attestation: "Attestation",
+    certificat: "Certificat",
+    bpf: "BPF",
+  };
+  return (
+    <Badge variant="outline" className={variants[type] || "bg-gray-100 text-gray-700"}>
+      {labels[type] || type}
+    </Badge>
+  );
+}
+
 // ============================================================
 // DOCUMENT PREVIEW DIALOG
 // ============================================================
@@ -90,17 +110,19 @@ function DocumentPreviewDialog({
   fileUrl,
   fileName,
   mimeType,
+  htmlContent,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   fileUrl: string | null;
   fileName: string | null;
   mimeType: string | null;
+  htmlContent?: string | null;
 }) {
-  if (!fileUrl) return null;
+  if (!fileUrl && !htmlContent) return null;
 
-  const isPdf = mimeType === "application/pdf" || fileUrl.endsWith(".pdf");
-  const isImage = mimeType?.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
+  const isPdf = mimeType === "application/pdf" || fileUrl?.endsWith(".pdf");
+  const isImage = mimeType?.startsWith("image/") || (fileUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -111,13 +133,18 @@ function DocumentPreviewDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="mt-2">
-          {isPdf ? (
+          {htmlContent ? (
+            <div
+              className="prose prose-sm max-w-none p-4 border rounded-lg max-h-[70vh] overflow-auto bg-white dark:bg-gray-900"
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            />
+          ) : isPdf && fileUrl ? (
             <iframe
               src={fileUrl}
               className="w-full h-[70vh] rounded-lg border"
               title={fileName || "PDF"}
             />
-          ) : isImage ? (
+          ) : isImage && fileUrl ? (
             <div className="flex items-center justify-center">
               <img
                 src={fileUrl}
@@ -131,12 +158,14 @@ function DocumentPreviewDialog({
               <p className="text-muted-foreground">
                 L'apercu n'est pas disponible pour ce type de fichier.
               </p>
-              <Button asChild>
-                <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-                  <Download className="w-4 h-4 mr-2" />
-                  Telecharger le fichier
-                </a>
-              </Button>
+              {fileUrl && (
+                <Button asChild>
+                  <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                    <Download className="w-4 h-4 mr-2" />
+                    Telecharger le fichier
+                  </a>
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -210,11 +239,9 @@ function UploadDocumentDialog({
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="convention">Convention</SelectItem>
-                <SelectItem value="attestation">Attestation</SelectItem>
-                <SelectItem value="facture">Facture</SelectItem>
-                <SelectItem value="administratif">Administratif</SelectItem>
-                <SelectItem value="autre">Autre</SelectItem>
+                {ENTERPRISE_DOCUMENT_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -323,22 +350,21 @@ export default function EnterprisePortal() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("formations");
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<UserDocument | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ fileUrl: string | null; fileName: string | null; mimeType: string | null; htmlContent?: string | null } | null>(null);
   const [yearFilter, setYearFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [editContact, setEditContact] = useState<EnterpriseContact | undefined>();
+  const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
+  const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
 
   const enterpriseId = user?.enterpriseId;
 
-  // Fetch enterprise details
-  const { data: enterprises } = useQuery<Enterprise[]>({
-    queryKey: ["/api/enterprises"],
+  // Fetch enterprise details by ID (not the full list)
+  const { data: enterprise, isLoading: enterpriseLoading } = useQuery<Enterprise>({
+    queryKey: [`/api/enterprises/${enterpriseId}`],
+    enabled: !!enterpriseId,
   });
-
-  const enterprise = useMemo(() => {
-    if (!enterprises || !enterpriseId) return null;
-    return enterprises.find((e) => e.id === enterpriseId) || null;
-  }, [enterprises, enterpriseId]);
 
   // Fetch enrollments for this enterprise
   const { data: enrollments, isLoading: enrollmentsLoading } = useQuery<Enrollment[]>({
@@ -346,14 +372,28 @@ export default function EnterprisePortal() {
     enabled: !!enterpriseId,
   });
 
-  // Fetch sessions for enrollment details
+  // Fetch enterprise-scoped sessions
   const { data: sessions } = useQuery<Session[]>({
-    queryKey: ["/api/sessions"],
+    queryKey: [`/api/enterprises/${enterpriseId}/sessions`],
+    enabled: !!enterpriseId,
   });
 
-  // Fetch trainees to list employees
+  // Fetch enterprise-scoped trainees
   const { data: trainees, isLoading: traineesLoading } = useQuery<Trainee[]>({
-    queryKey: ["/api/trainees"],
+    queryKey: [`/api/enterprises/${enterpriseId}/trainees`],
+    enabled: !!enterpriseId,
+  });
+
+  // Fetch enterprise-scoped programs
+  const { data: programs } = useQuery<Program[]>({
+    queryKey: [`/api/enterprises/${enterpriseId}/programs`],
+    enabled: !!enterpriseId,
+  });
+
+  // Fetch generated documents for enterprise
+  const { data: generatedDocs } = useQuery<GeneratedDocument[]>({
+    queryKey: [`/api/enterprises/${enterpriseId}/generated-documents`],
+    enabled: !!enterpriseId,
   });
 
   // Fetch user documents for enterprise
@@ -391,7 +431,7 @@ export default function EnterprisePortal() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/enterprises/${enterpriseId}/contacts`] });
       setContactDialogOpen(false);
-      toast({ title: "Contact ajouté" });
+      toast({ title: "Contact ajoute" });
     },
   });
 
@@ -401,7 +441,7 @@ export default function EnterprisePortal() {
       queryClient.invalidateQueries({ queryKey: [`/api/enterprises/${enterpriseId}/contacts`] });
       setContactDialogOpen(false);
       setEditContact(undefined);
-      toast({ title: "Contact modifié" });
+      toast({ title: "Contact modifie" });
     },
   });
 
@@ -409,24 +449,37 @@ export default function EnterprisePortal() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/enterprise-contacts/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/enterprises/${enterpriseId}/contacts`] });
-      toast({ title: "Contact supprimé" });
+      toast({ title: "Contact supprime" });
     },
   });
 
-  // Filter trainees linked to this enterprise
-  const enterpriseTrainees = useMemo(() => {
-    if (!trainees || !enterpriseId) return [];
-    return trainees.filter((t) => t.enterpriseId === enterpriseId);
-  }, [trainees, enterpriseId]);
+  const deleteDocMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/user-documents/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/user-documents?ownerId=${enterpriseId}&ownerType=enterprise`] });
+      setDeleteDocId(null);
+      toast({ title: "Document supprime" });
+    },
+  });
 
-  // Build session lookup map
+  // Build lookup maps
   const sessionMap = useMemo(() => {
     const map = new Map<string, Session>();
-    if (sessions) {
-      sessions.forEach((s) => map.set(s.id, s));
-    }
+    if (sessions) sessions.forEach((s) => map.set(s.id, s));
     return map;
   }, [sessions]);
+
+  const traineeMap = useMemo(() => {
+    const map = new Map<string, Trainee>();
+    if (trainees) trainees.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [trainees]);
+
+  const programMap = useMemo(() => {
+    const map = new Map<string, Program>();
+    if (programs) programs.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [programs]);
 
   // Calculate available years from sessions
   const availableYears = useMemo(() => {
@@ -441,29 +494,60 @@ export default function EnterprisePortal() {
     return Array.from(years).sort().reverse();
   }, [enrollments, sessions, sessionMap]);
 
-  // Filter enrollments by year
+  // Filter enrollments by year and search
   const filteredEnrollments = useMemo(() => {
     if (!enrollments) return [];
-    if (yearFilter === "all") return enrollments;
-    return enrollments.filter((enrollment) => {
-      const session = sessionMap.get(enrollment.sessionId);
-      if (!session) return false;
-      return new Date(session.startDate).getFullYear().toString() === yearFilter;
+    let filtered = enrollments;
+    if (yearFilter !== "all") {
+      filtered = filtered.filter((enrollment) => {
+        const session = sessionMap.get(enrollment.sessionId);
+        if (!session) return false;
+        return new Date(session.startDate).getFullYear().toString() === yearFilter;
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter((enrollment) => {
+        const session = sessionMap.get(enrollment.sessionId);
+        const trainee = traineeMap.get(enrollment.traineeId);
+        const program = session ? programMap.get(session.programId) : undefined;
+        const traineeName = trainee ? `${trainee.firstName} ${trainee.lastName}`.toLowerCase() : "";
+        const sessionTitle = session?.title?.toLowerCase() || "";
+        const programTitle = program?.title?.toLowerCase() || "";
+        return traineeName.includes(q) || sessionTitle.includes(q) || programTitle.includes(q);
+      });
+    }
+    return filtered;
+  }, [enrollments, yearFilter, searchQuery, sessionMap, traineeMap, programMap]);
+
+  // Employee enrollment counts & last session
+  const employeeStats = useMemo(() => {
+    const stats = new Map<string, { count: number; lastDate: string | null; enrollments: Enrollment[] }>();
+    if (!enrollments) return stats;
+    enrollments.forEach((e) => {
+      const existing = stats.get(e.traineeId) || { count: 0, lastDate: null, enrollments: [] };
+      existing.count++;
+      existing.enrollments.push(e);
+      const session = sessionMap.get(e.sessionId);
+      if (session) {
+        if (!existing.lastDate || session.startDate > existing.lastDate) {
+          existing.lastDate = session.startDate;
+        }
+      }
+      stats.set(e.traineeId, existing);
     });
-  }, [enrollments, yearFilter, sessionMap]);
+    return stats;
+  }, [enrollments, sessionMap]);
 
   // Stats
   const totalEmployeesEnrolled = useMemo(() => {
     if (!enrollments) return 0;
-    const uniqueTrainees = new Set(enrollments.map((e) => e.traineeId));
-    return uniqueTrainees.size;
+    return new Set(enrollments.map((e) => e.traineeId)).size;
   }, [enrollments]);
 
   const activeSessions = useMemo(() => {
     if (!enrollments) return 0;
-    return enrollments.filter(
-      (e) => e.status !== "completed" && e.status !== "cancelled"
-    ).length;
+    return enrollments.filter((e) => e.status !== "completed" && e.status !== "cancelled").length;
   }, [enrollments]);
 
   const completedFormations = useMemo(() => {
@@ -471,7 +555,7 @@ export default function EnterprisePortal() {
     return enrollments.filter((e) => e.status === "completed").length;
   }, [enrollments]);
 
-  const isLoading = enrollmentsLoading || !enterprises;
+  const isLoading = enrollmentsLoading || enterpriseLoading;
 
   // Not authenticated
   if (!user) {
@@ -479,9 +563,7 @@ export default function EnterprisePortal() {
       <div className="p-6 flex items-center justify-center min-h-[50vh]">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">
-            Acces non autorise
-          </h3>
+          <h3 className="text-lg font-medium mb-1">Acces non autorise</h3>
           <p className="text-sm text-muted-foreground">
             Veuillez vous connecter pour acceder a votre espace entreprise.
           </p>
@@ -518,9 +600,7 @@ export default function EnterprisePortal() {
           <CardContent className="p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium">
-                Profil entreprise non associe
-              </p>
+              <p className="text-sm font-medium">Profil entreprise non associe</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Votre compte utilisateur n'est pas encore lie a une entreprise.
                 Contactez votre administrateur pour qu'il associe votre compte.
@@ -539,9 +619,7 @@ export default function EnterprisePortal() {
             </div>
             <div>
               <p className="text-2xl font-bold">{totalEmployeesEnrolled}</p>
-              <p className="text-xs text-muted-foreground">
-                Employes inscrits
-              </p>
+              <p className="text-xs text-muted-foreground">Employes inscrits</p>
             </div>
           </CardContent>
         </Card>
@@ -552,9 +630,7 @@ export default function EnterprisePortal() {
             </div>
             <div>
               <p className="text-2xl font-bold">{activeSessions}</p>
-              <p className="text-xs text-muted-foreground">
-                Sessions en cours
-              </p>
+              <p className="text-xs text-muted-foreground">Sessions en cours</p>
             </div>
           </CardContent>
         </Card>
@@ -565,9 +641,7 @@ export default function EnterprisePortal() {
             </div>
             <div>
               <p className="text-2xl font-bold">{completedFormations}</p>
-              <p className="text-xs text-muted-foreground">
-                Formations terminees
-              </p>
+              <p className="text-xs text-muted-foreground">Formations terminees</p>
             </div>
           </CardContent>
         </Card>
@@ -600,7 +674,9 @@ export default function EnterprisePortal() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab: Formations with year filter */}
+          {/* ============================================ */}
+          {/* Tab: Formations (enriched with employee + program + search) */}
+          {/* ============================================ */}
           <TabsContent value="formations" className="mt-4">
             {!enrollments || enrollments.length === 0 ? (
               <div className="text-center py-16">
@@ -613,28 +689,41 @@ export default function EnterprisePortal() {
             ) : (
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
                     <CardTitle className="text-lg">Inscriptions aux formations</CardTitle>
-                    {availableYears.length > 0 && (
-                      <Select value={yearFilter} onValueChange={setYearFilter}>
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Filtrer par annee" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Toutes les annees</SelectItem>
-                          {availableYears.map((year) => (
-                            <SelectItem key={year} value={year}>{year}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Rechercher..."
+                          className="pl-9 w-[220px]"
+                        />
+                      </div>
+                      {availableYears.length > 0 && (
+                        <Select value={yearFilter} onValueChange={setYearFilter}>
+                          <SelectTrigger className="w-[160px]">
+                            <SelectValue placeholder="Filtrer par annee" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Toutes les annees</SelectItem>
+                            {availableYears.map((year) => (
+                              <SelectItem key={year} value={year}>{year}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Employe</TableHead>
                         <TableHead>Session</TableHead>
+                        <TableHead>Formation</TableHead>
                         <TableHead>Date de debut</TableHead>
                         <TableHead>Date de fin</TableHead>
                         <TableHead>Lieu</TableHead>
@@ -644,10 +733,18 @@ export default function EnterprisePortal() {
                     <TableBody>
                       {filteredEnrollments.map((enrollment) => {
                         const session = sessionMap.get(enrollment.sessionId);
+                        const trainee = traineeMap.get(enrollment.traineeId);
+                        const program = session ? programMap.get(session.programId) : undefined;
                         return (
                           <TableRow key={enrollment.id}>
                             <TableCell className="font-medium">
+                              {trainee ? `${trainee.firstName} ${trainee.lastName}` : "-"}
+                            </TableCell>
+                            <TableCell>
                               {session?.title || "Session inconnue"}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {program?.title || "-"}
                             </TableCell>
                             <TableCell>
                               {session ? formatDate(session.startDate) : "-"}
@@ -666,12 +763,19 @@ export default function EnterprisePortal() {
                       })}
                     </TableBody>
                   </Table>
+                  {filteredEnrollments.length === 0 && searchQuery && (
+                    <div className="text-center py-8 text-sm text-muted-foreground">
+                      Aucun resultat pour "{searchQuery}"
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
           </TabsContent>
 
-          {/* Tab: Documents with cross-referencing and upload */}
+          {/* ============================================ */}
+          {/* Tab: Documents (enriched with generated docs + extended categories + delete) */}
+          {/* ============================================ */}
           <TabsContent value="documents" className="mt-4 space-y-6">
             {/* Devis section */}
             {enterpriseQuotes && enterpriseQuotes.length > 0 && (
@@ -741,7 +845,62 @@ export default function EnterprisePortal() {
               </Card>
             )}
 
-            {/* Documents deposes */}
+            {/* Conventions & Attestations (generated documents) */}
+            {generatedDocs && generatedDocs.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Conventions & Attestations</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Titre</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Session</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {generatedDocs.map((doc) => {
+                        const session = doc.sessionId ? sessionMap.get(doc.sessionId) : undefined;
+                        return (
+                          <TableRow key={doc.id}>
+                            <TableCell className="font-medium">{doc.title}</TableCell>
+                            <TableCell>
+                              <DocumentTypeBadge type={doc.type} />
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {session?.title || "-"}
+                            </TableCell>
+                            <TableCell>
+                              {doc.createdAt ? formatDate(doc.createdAt as unknown as string) : "-"}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setPreviewDoc({
+                                  fileUrl: null,
+                                  fileName: doc.title,
+                                  mimeType: null,
+                                  htmlContent: doc.content,
+                                })}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Documents deposes (with delete) */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -776,40 +935,49 @@ export default function EnterprisePortal() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {documents.map((doc) => (
-                        <TableRow key={doc.id}>
-                          <TableCell className="font-medium">{doc.title}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {doc.category || "Autre"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{doc.fileName || "-"}</TableCell>
-                          <TableCell>
-                            {doc.uploadedAt ? formatDate(doc.uploadedAt) : "-"}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              {doc.fileUrl && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setPreviewDoc(doc)}
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="sm" asChild>
-                                    <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
-                                      <Download className="w-4 h-4" />
-                                    </a>
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {documents.map((doc) => {
+                        const catLabel = ENTERPRISE_DOCUMENT_CATEGORIES.find(c => c.value === doc.category)?.label || doc.category || "Autre";
+                        return (
+                          <TableRow key={doc.id}>
+                            <TableCell className="font-medium">{doc.title}</TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">{catLabel}</Badge>
+                            </TableCell>
+                            <TableCell>{doc.fileName || "-"}</TableCell>
+                            <TableCell>
+                              {doc.uploadedAt ? formatDate(doc.uploadedAt) : "-"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {doc.fileUrl && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setPreviewDoc({ fileUrl: doc.fileUrl, fileName: doc.fileName, mimeType: doc.mimeType })}
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" asChild>
+                                      <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                                        <Download className="w-4 h-4" />
+                                      </a>
+                                    </Button>
+                                  </>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive"
+                                  onClick={() => setDeleteDocId(doc.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}
@@ -817,7 +985,9 @@ export default function EnterprisePortal() {
             </Card>
           </TabsContent>
 
+          {/* ============================================ */}
           {/* Tab: Contacts */}
+          {/* ============================================ */}
           <TabsContent value="contacts" className="mt-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -854,8 +1024,8 @@ export default function EnterprisePortal() {
                             {c.firstName} {c.lastName}
                             {c.isPrimary && <Badge variant="outline" className="ml-2 text-xs">Principal</Badge>}
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{c.email || "—"}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{c.phone || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{c.email || "\u2014"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{c.phone || "\u2014"}</TableCell>
                           <TableCell><Badge variant="outline" className="text-xs">{roleLabels[c.role] || c.role}</Badge></TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -893,13 +1063,15 @@ export default function EnterprisePortal() {
             </Dialog>
           </TabsContent>
 
-          {/* Tab: Employes */}
+          {/* ============================================ */}
+          {/* Tab: Employes (enriched with training count + expandable rows) */}
+          {/* ============================================ */}
           <TabsContent value="employes" className="mt-4">
             {traineesLoading ? (
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
               </div>
-            ) : enterpriseTrainees.length === 0 ? (
+            ) : !trainees || trainees.length === 0 ? (
               <div className="text-center py-16">
                 <Users className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
                 <h3 className="text-lg font-medium mb-1">Aucun employe</h3>
@@ -916,34 +1088,93 @@ export default function EnterprisePortal() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[40px]"></TableHead>
                         <TableHead>Nom</TableHead>
                         <TableHead>Prenom</TableHead>
                         <TableHead>Email</TableHead>
-                        <TableHead>Telephone</TableHead>
+                        <TableHead>Formations</TableHead>
+                        <TableHead>Derniere session</TableHead>
                         <TableHead>Statut</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {enterpriseTrainees.map((trainee) => (
-                        <TableRow key={trainee.id}>
-                          <TableCell className="font-medium">{trainee.lastName}</TableCell>
-                          <TableCell>{trainee.firstName}</TableCell>
-                          <TableCell>{trainee.email}</TableCell>
-                          <TableCell>{trainee.phone || "-"}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                trainee.status === "active"
-                                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                  : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                              }
+                      {trainees.map((trainee) => {
+                        const stats = employeeStats.get(trainee.id);
+                        const isExpanded = expandedEmployee === trainee.id;
+                        return (
+                          <>
+                            <TableRow
+                              key={trainee.id}
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => setExpandedEmployee(isExpanded ? null : trainee.id)}
                             >
-                              {trainee.status === "active" ? "Actif" : "Inactif"}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                              <TableCell>
+                                {stats && stats.count > 0 ? (
+                                  isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                  )
+                                ) : null}
+                              </TableCell>
+                              <TableCell className="font-medium">{trainee.lastName}</TableCell>
+                              <TableCell>{trainee.firstName}</TableCell>
+                              <TableCell>{trainee.email}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{stats?.count || 0}</Badge>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {stats?.lastDate ? formatDate(stats.lastDate) : "-"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    trainee.status === "active"
+                                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                      : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                  }
+                                >
+                                  {trainee.status === "active" ? "Actif" : "Inactif"}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded && stats && stats.enrollments.length > 0 && (
+                              <TableRow key={`${trainee.id}-detail`}>
+                                <TableCell colSpan={7} className="bg-muted/30 p-0">
+                                  <div className="px-8 py-3">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">Historique des formations</p>
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="text-xs">Session</TableHead>
+                                          <TableHead className="text-xs">Formation</TableHead>
+                                          <TableHead className="text-xs">Date</TableHead>
+                                          <TableHead className="text-xs">Statut</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {stats.enrollments.map((enr) => {
+                                          const session = sessionMap.get(enr.sessionId);
+                                          const program = session ? programMap.get(session.programId) : undefined;
+                                          return (
+                                            <TableRow key={enr.id}>
+                                              <TableCell className="text-sm">{session?.title || "-"}</TableCell>
+                                              <TableCell className="text-sm text-muted-foreground">{program?.title || "-"}</TableCell>
+                                              <TableCell className="text-sm">{session ? formatDate(session.startDate) : "-"}</TableCell>
+                                              <TableCell><EnrollmentStatusBadge status={enr.status} /></TableCell>
+                                            </TableRow>
+                                          );
+                                        })}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -963,6 +1194,28 @@ export default function EnterprisePortal() {
         />
       )}
 
+      {/* Delete document confirmation dialog */}
+      <Dialog open={!!deleteDocId} onOpenChange={(open) => { if (!open) setDeleteDocId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmer la suppression</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Etes-vous sur de vouloir supprimer ce document ? Cette action est irreversible.
+          </p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setDeleteDocId(null)}>Annuler</Button>
+            <Button
+              variant="destructive"
+              onClick={() => { if (deleteDocId) deleteDocMutation.mutate(deleteDocId); }}
+              disabled={deleteDocMutation.isPending}
+            >
+              {deleteDocMutation.isPending ? "Suppression..." : "Supprimer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Document preview dialog */}
       <DocumentPreviewDialog
         open={!!previewDoc}
@@ -970,6 +1223,7 @@ export default function EnterprisePortal() {
         fileUrl={previewDoc?.fileUrl || null}
         fileName={previewDoc?.fileName || null}
         mimeType={previewDoc?.mimeType || null}
+        htmlContent={previewDoc?.htmlContent}
       />
     </div>
   );

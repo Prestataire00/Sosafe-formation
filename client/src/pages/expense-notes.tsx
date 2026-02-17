@@ -75,7 +75,7 @@ async function uploadFile(file: File) {
 }
 
 export default function ExpenseNotes() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -83,12 +83,29 @@ export default function ExpenseNotes() {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("deplacement");
+  const [customCategory, setCustomCategory] = useState("");
   const [date, setDate] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isAdmin = user?.role === "admin";
   const trainerId = user?.trainerId;
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="p-6 text-center py-16">
+        <p className="text-muted-foreground">Veuillez vous connecter.</p>
+      </div>
+    );
+  }
 
   const { data: allNotes, isLoading } = useQuery<ExpenseNote[]>({
     queryKey: isAdmin ? ["/api/expense-notes"] : [`/api/trainers/${trainerId}/expense-notes`],
@@ -123,7 +140,7 @@ export default function ExpenseNotes() {
       await apiRequest("POST", `/api/trainers/${trainerId}/expense-notes`, {
         title,
         amount: Math.round(parseFloat(amount) * 100),
-        category,
+        category: category === "autre" && customCategory ? customCategory : category,
         date,
         notes: notes || null,
         fileUrl,
@@ -132,7 +149,7 @@ export default function ExpenseNotes() {
       });
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/expense-notes`] });
       toast({ title: "Note de frais créée" });
-      setTitle(""); setAmount(""); setCategory("deplacement"); setDate(""); setNotes(""); setFile(null);
+      setTitle(""); setAmount(""); setCategory("deplacement"); setCustomCategory(""); setDate(""); setNotes(""); setFile(null);
       setShowCreateDialog(false);
     } catch {
       toast({ title: "Erreur lors de la création", variant: "destructive" });
@@ -144,8 +161,10 @@ export default function ExpenseNotes() {
   const trainerMap: Record<string, string> = {};
   trainers?.forEach((t) => { trainerMap[t.id] = `${t.firstName} ${t.lastName}`; });
 
-  const getCategoryLabel = (cat: string) =>
-    EXPENSE_CATEGORIES.find((c) => c.value === cat)?.label || cat;
+  const getCategoryLabel = (cat: string) => {
+    const found = EXPENSE_CATEGORIES.find((c) => c.value === cat);
+    return found ? found.label : cat.charAt(0).toUpperCase() + cat.slice(1);
+  };
 
   const getStatusInfo = (status: string) =>
     EXPENSE_STATUSES.find((s) => s.value === status) || { label: status, color: "" };
@@ -275,7 +294,7 @@ export default function ExpenseNotes() {
                         <Badge variant="secondary">{getCategoryLabel(note.category)}</Badge>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {new Date(note.date).toLocaleDateString("fr-FR")}
+                        {note.date ? new Date(note.date).toLocaleDateString("fr-FR") : "—"}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusInfo.color}>{statusInfo.label}</Badge>
@@ -298,26 +317,25 @@ export default function ExpenseNotes() {
                               <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {note.status === "submitted" && (
-                                <>
-                                  <DropdownMenuItem onClick={() => updateMutation.mutate({ id: note.id, data: { status: "approved", reviewedBy: user?.id } })}>
-                                    <CheckCircle className="w-4 h-4 mr-2 text-green-600" />Approuver
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => updateMutation.mutate({ id: note.id, data: { status: "rejected", reviewedBy: user?.id } })}>
-                                    <XCircle className="w-4 h-4 mr-2 text-red-600" />Rejeter
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {note.status === "approved" && (
-                                <DropdownMenuItem onClick={() => updateMutation.mutate({ id: note.id, data: { status: "paid" } })}>
-                                  <Banknote className="w-4 h-4 mr-2 text-indigo-600" />Marquer payée
+                              {EXPENSE_STATUSES.filter((s) => s.value !== note.status).map((s) => (
+                                <DropdownMenuItem
+                                  key={s.value}
+                                  onClick={() => updateMutation.mutate({
+                                    id: note.id,
+                                    data: {
+                                      status: s.value,
+                                      ...(s.value === "approved" || s.value === "rejected" ? { reviewedBy: user?.id } : {}),
+                                      ...(s.value === "submitted" ? { reviewedBy: null } : {}),
+                                    },
+                                  })}
+                                >
+                                  {s.value === "approved" && <CheckCircle className="w-4 h-4 mr-2 text-green-600" />}
+                                  {s.value === "rejected" && <XCircle className="w-4 h-4 mr-2 text-red-600" />}
+                                  {s.value === "paid" && <Banknote className="w-4 h-4 mr-2 text-indigo-600" />}
+                                  {s.value === "submitted" && <Receipt className="w-4 h-4 mr-2" />}
+                                  {s.label}
                                 </DropdownMenuItem>
-                              )}
-                              {note.status === "rejected" && (
-                                <DropdownMenuItem onClick={() => updateMutation.mutate({ id: note.id, data: { status: "submitted", reviewedBy: null } })}>
-                                  <Receipt className="w-4 h-4 mr-2" />Remettre en attente
-                                </DropdownMenuItem>
-                              )}
+                              ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -349,7 +367,7 @@ export default function ExpenseNotes() {
               </div>
               <div className="space-y-2">
                 <Label>Catégorie</Label>
-                <Select value={category} onValueChange={setCategory}>
+                <Select value={category} onValueChange={(v) => { setCategory(v); if (v !== "autre") setCustomCategory(""); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {EXPENSE_CATEGORIES.map((cat) => (
@@ -359,6 +377,12 @@ export default function ExpenseNotes() {
                 </Select>
               </div>
             </div>
+            {category === "autre" && (
+              <div className="space-y-2">
+                <Label>Préciser la catégorie</Label>
+                <Input value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} placeholder="Ex: Fournitures, Impression..." required />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Date</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -371,7 +395,7 @@ export default function ExpenseNotes() {
               <Label>Pièce jointe (optionnel)</Label>
               <Input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </div>
-            <Button onClick={handleCreate} disabled={!title || !amount || !date || isSubmitting} className="w-full">
+            <Button onClick={handleCreate} disabled={!title || !amount || !date || (category === "autre" && !customCategory) || isSubmitting} className="w-full">
               {isSubmitting ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Création en cours...</>
               ) : (

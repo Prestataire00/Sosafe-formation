@@ -56,8 +56,19 @@ export async function registerRoutes(
     requirePermission("manage_trainers")(req, res, next);
   });
 
-  // Permission-protected routes
-  app.use("/api/enterprises", requireAuth, requirePermission("manage_enterprises"));
+  // Enterprise routes: requireAuth for all, enterprise users can access their own sub-routes
+  app.use("/api/enterprises", requireAuth, async (req, res, next) => {
+    // Sub-routes (/api/enterprises/:id/...) - allow enterprise users to access their own data
+    const parts = req.path.split("/").filter(Boolean);
+    if (parts.length > 1 && req.session.userId) {
+      const user = await storage.getUser(req.session.userId);
+      if (user && user.role === "enterprise" && user.enterpriseId === parts[0]) {
+        return next();
+      }
+    }
+    // Main CRUD routes need manage_enterprises permission
+    requirePermission("manage_enterprises")(req, res, next);
+  });
   app.use("/api/enterprise-contacts", requireAuth, requirePermission("manage_enterprises"));
   app.use("/api/trainees", requireAuth, requirePermission("manage_trainees"));
   app.use("/api/programs", requireAuth, requirePermission("manage_programs"));
@@ -204,14 +215,17 @@ export async function registerRoutes(
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
 
-    const user = await storage.getUserByUsername(parsed.data.username);
+    const identifier = parsed.data.username;
+    const user = identifier.includes("@")
+      ? await storage.getUserByEmail(identifier)
+      : await storage.getUserByUsername(identifier);
     if (!user) return res.status(401).json({ message: "Identifiants incorrects" });
 
     const valid = await comparePasswords(parsed.data.password, user.password);
     if (!valid) return res.status(401).json({ message: "Identifiants incorrects" });
 
     req.session.userId = user.id;
-    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName });
+    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions || [], trainerId: user.trainerId, traineeId: user.traineeId, enterpriseId: user.enterpriseId });
   });
 
   app.post("/api/auth/logout", (req, res) => {
@@ -279,9 +293,39 @@ export async function registerRoutes(
   });
 
   app.post("/api/trainers", async (req, res) => {
-    const parsed = insertTrainerSchema.safeParse(req.body);
+    const { password, ...trainerData } = req.body;
+    const parsed = insertTrainerSchema.safeParse(trainerData);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+
     const trainer = await storage.createTrainer(parsed.data);
+
+    // Auto-create user account if password provided (uses trainer email as login)
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Mot de passe trop court (min 6 caractères)" });
+      }
+      if (!parsed.data.email) {
+        return res.status(400).json({ message: "L'email est requis pour créer un compte d'accès" });
+      }
+      const existingByEmail = await storage.getUserByEmail(parsed.data.email);
+      const existingByUsername = await storage.getUserByUsername(parsed.data.email);
+      if (existingByEmail || existingByUsername) {
+        return res.status(409).json({ message: "Un compte existe déjà avec cet email" });
+      }
+      const hashedPassword = await hashPassword(password);
+      await storage.createUser({
+        username: parsed.data.email,
+        password: hashedPassword,
+        role: "trainer",
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        email: parsed.data.email,
+        trainerId: trainer.id,
+        traineeId: null,
+        enterpriseId: null,
+      });
+    }
+
     res.status(201).json(trainer);
   });
 
@@ -291,6 +335,18 @@ export async function registerRoutes(
     const trainer = await storage.updateTrainer(req.params.id, parsed.data);
     if (!trainer) return res.status(404).json({ message: "Formateur non trouvé" });
     res.json(trainer);
+  });
+
+  app.patch("/api/trainers/:id/password", async (req, res) => {
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: "Mot de passe requis (min 6 caractères)" });
+    }
+    const user = await storage.getUserByTrainerId(req.params.id);
+    if (!user) return res.status(404).json({ message: "Aucun compte utilisateur associé à ce formateur" });
+    const hashedPassword = await hashPassword(password);
+    await storage.updateUser(user.id, { password: hashedPassword });
+    res.json({ message: "Mot de passe modifié" });
   });
 
   app.delete("/api/trainers/:id", async (req, res) => {
@@ -1567,6 +1623,26 @@ export async function registerRoutes(
 
   app.get("/api/enterprises/:id/invoices", async (req, res) => {
     const result = await storage.getInvoicesByEnterprise(req.params.id);
+    res.json(result);
+  });
+
+  app.get("/api/enterprises/:id/trainees", async (req, res) => {
+    const result = await storage.getEnterpriseTrainees(req.params.id);
+    res.json(result);
+  });
+
+  app.get("/api/enterprises/:id/sessions", async (req, res) => {
+    const result = await storage.getEnterpriseSessions(req.params.id);
+    res.json(result);
+  });
+
+  app.get("/api/enterprises/:id/programs", async (req, res) => {
+    const result = await storage.getEnterprisePrograms(req.params.id);
+    res.json(result);
+  });
+
+  app.get("/api/enterprises/:id/generated-documents", async (req, res) => {
+    const result = await storage.getGeneratedDocumentsByEnterprise(req.params.id);
     res.json(result);
   });
 

@@ -44,7 +44,7 @@ import {
   userDocuments, signatures, expenseNotes, trainerInvoices,
   trainerCompetencies,
 } from "@shared/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 
@@ -52,6 +52,8 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByTrainerId(trainerId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
@@ -274,6 +276,10 @@ export interface IStorage {
   // Enterprise-specific queries
   getQuotesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Quote[]>;
   getInvoicesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Invoice[]>;
+  getEnterpriseTrainees(enterpriseId: string): Promise<Trainee[]>;
+  getEnterpriseSessions(enterpriseId: string): Promise<Session[]>;
+  getEnterprisePrograms(enterpriseId: string): Promise<Program[]>;
+  getGeneratedDocumentsByEnterprise(enterpriseId: string): Promise<GeneratedDocument[]>;
 }
 
 const pool = new pg.Pool({
@@ -291,6 +297,16 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserByTrainerId(trainerId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.trainerId, trainerId));
     return user;
   }
 
@@ -1062,6 +1078,36 @@ export class DatabaseStorage implements IStorage {
 
   async getInvoicesByEnterprise(enterpriseId: string): Promise<import("@shared/schema").Invoice[]> {
     return db.select().from(invoices).where(eq(invoices.enterpriseId, enterpriseId)).orderBy(desc(invoices.createdAt));
+  }
+
+  async getEnterpriseTrainees(enterpriseId: string): Promise<Trainee[]> {
+    return db.select().from(trainees).where(eq(trainees.enterpriseId, enterpriseId));
+  }
+
+  async getEnterpriseSessions(enterpriseId: string): Promise<Session[]> {
+    const enterpriseEnrollments = await db.select().from(enrollments).where(eq(enrollments.enterpriseId, enterpriseId));
+    if (enterpriseEnrollments.length === 0) return [];
+    const sessionIds = Array.from(new Set(enterpriseEnrollments.map(e => e.sessionId)));
+    return db.select().from(sessions).where(inArray(sessions.id, sessionIds)).orderBy(desc(sessions.startDate));
+  }
+
+  async getEnterprisePrograms(enterpriseId: string): Promise<Program[]> {
+    const enterpriseSessions = await this.getEnterpriseSessions(enterpriseId);
+    if (enterpriseSessions.length === 0) return [];
+    const programIds = Array.from(new Set(enterpriseSessions.map(s => s.programId)));
+    return db.select().from(programs).where(inArray(programs.id, programIds));
+  }
+
+  async getGeneratedDocumentsByEnterprise(enterpriseId: string): Promise<GeneratedDocument[]> {
+    const enterpriseSessions = await this.getEnterpriseSessions(enterpriseId);
+    if (enterpriseSessions.length === 0) return [];
+    const sessionIds = enterpriseSessions.map(s => s.id);
+    return db.select().from(generatedDocuments)
+      .where(and(
+        inArray(generatedDocuments.sessionId, sessionIds),
+        inArray(generatedDocuments.type, ["convention", "attestation", "certificat", "bpf"])
+      ))
+      .orderBy(desc(generatedDocuments.createdAt));
   }
 }
 

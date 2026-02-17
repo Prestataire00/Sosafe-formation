@@ -184,10 +184,22 @@ function DocumentPreviewDialog({
 // ============================================================
 
 function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+  const [mode, setMode] = useState<"draw" | "auto">("draw");
+  const [selectedFont, setSelectedFont] = useState("Dancing Script");
+
+  const fonts = [
+    { name: "Dancing Script", label: "Cursive" },
+    { name: "Great Vibes", label: "Elegante" },
+    { name: "Caveat", label: "Manuscrite" },
+    { name: "Satisfy", label: "Fluide" },
+  ];
+
+  const fullName = user ? `${user.firstName} ${user.lastName}` : "";
 
   interface SignatureRecord {
     id: string;
@@ -212,6 +224,7 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
   }, []);
 
   const startDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (mode !== "draw") return;
     const ctx = getCtx();
     if (!ctx) return;
     setIsDrawing(true);
@@ -221,10 +234,10 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     ctx.beginPath();
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
-  }, [getCtx]);
+  }, [getCtx, mode]);
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || mode !== "draw") return;
     const ctx = getCtx();
     if (!ctx) return;
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -235,7 +248,7 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
     ctx.strokeStyle = "#1a1a1a";
     ctx.lineTo(clientX - rect.left, clientY - rect.top);
     ctx.stroke();
-  }, [isDrawing, getCtx]);
+  }, [isDrawing, getCtx, mode]);
 
   const endDraw = useCallback(() => {
     setIsDrawing(false);
@@ -250,6 +263,20 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
     }
     setHasSignature(false);
   }, []);
+
+  const generateAutoSignature = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !fullName) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.font = `italic 48px '${selectedFont}', cursive`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(fullName, canvas.width / 2, canvas.height / 2);
+    setHasSignature(true);
+  }, [fullName, selectedFont]);
 
   const submitSignatureMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
@@ -278,6 +305,9 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Load Google Fonts for auto-signature */}
+      <link href="https://fonts.googleapis.com/css2?family=Dancing+Script&family=Great+Vibes&family=Caveat&family=Satisfy&display=swap" rel="stylesheet" />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -287,14 +317,59 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Utilisez cette zone pour signer les contrats et documents de formation.
+            Choisissez votre mode de signature pour les contrats et documents.
           </p>
+
+          {/* Mode selector */}
+          <div className="flex gap-2">
+            <Button
+              variant={mode === "draw" ? "default" : "outline"}
+              size="sm"
+              onClick={() => { setMode("draw"); clearCanvas(); }}
+            >
+              <PenTool className="w-4 h-4 mr-2" />
+              Dessiner
+            </Button>
+            <Button
+              variant={mode === "auto" ? "default" : "outline"}
+              size="sm"
+              onClick={() => { setMode("auto"); clearCanvas(); }}
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Generer automatiquement
+            </Button>
+          </div>
+
+          {/* Auto-generate options */}
+          {mode === "auto" && (
+            <div className="space-y-3">
+              <Label className="text-sm">Style de signature</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {fonts.map((f) => (
+                  <button
+                    key={f.name}
+                    type="button"
+                    onClick={() => setSelectedFont(f.name)}
+                    className={`p-3 rounded-lg border text-center transition-colors ${selectedFont === f.name ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                  >
+                    <span style={{ fontFamily: `'${f.name}', cursive`, fontSize: "22px" }}>{fullName || "Prenom Nom"}</span>
+                    <p className="text-xs text-muted-foreground mt-1">{f.label}</p>
+                  </button>
+                ))}
+              </div>
+              <Button size="sm" variant="outline" onClick={generateAutoSignature} disabled={!fullName}>
+                Appliquer sur le canevas
+              </Button>
+            </div>
+          )}
+
+          {/* Canvas */}
           <div className="border rounded-lg p-1 bg-white dark:bg-gray-950">
             <canvas
               ref={canvasRef}
               width={500}
               height={200}
-              className="w-full cursor-crosshair touch-none"
+              className={`w-full touch-none ${mode === "draw" ? "cursor-crosshair" : "cursor-default"}`}
               onMouseDown={startDraw}
               onMouseMove={draw}
               onMouseUp={endDraw}
@@ -329,13 +404,18 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
             <div className="space-y-2">
               {existingSignatures.map((sig) => (
                 <div key={sig.id} className="flex items-center justify-between p-3 rounded-lg border">
-                  <div>
-                    <p className="text-sm font-medium">
-                      {sig.documentType === "contrat" ? "Contrat" : sig.documentType}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Signe le {sig.signedAt ? formatDate(sig.signedAt) : "—"}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    {sig.signatureData && (
+                      <img src={sig.signatureData} alt="Signature" className="h-10 w-auto rounded border bg-white" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">
+                        {sig.documentType === "contrat" ? "Contrat" : sig.documentType}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Signe le {sig.signedAt ? formatDate(sig.signedAt) : "—"}
+                      </p>
+                    </div>
                   </div>
                   <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                     Signee
@@ -360,6 +440,7 @@ function ExpenseNotesTab({ trainerId }: { trainerId: string }) {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("deplacement");
+  const [customCategory, setCustomCategory] = useState("");
   const [date, setDate] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -382,7 +463,7 @@ function ExpenseNotesTab({ trainerId }: { trainerId: string }) {
       await apiRequest("POST", `/api/trainers/${trainerId}/expense-notes`, {
         title,
         amount: Math.round(parseFloat(amount) * 100),
-        category,
+        category: category === "autre" && customCategory ? customCategory : category,
         date,
         notes: notes || null,
         fileUrl,
@@ -394,6 +475,7 @@ function ExpenseNotesTab({ trainerId }: { trainerId: string }) {
       setTitle("");
       setAmount("");
       setCategory("deplacement");
+      setCustomCategory("");
       setDate("");
       setNotes("");
       setFile(null);
@@ -510,7 +592,7 @@ function ExpenseNotesTab({ trainerId }: { trainerId: string }) {
               </div>
               <div className="space-y-2">
                 <Label>Categorie</Label>
-                <Select value={category} onValueChange={setCategory}>
+                <Select value={category} onValueChange={(v) => { setCategory(v); if (v !== "autre") setCustomCategory(""); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {EXPENSE_CATEGORIES.map((cat) => (
@@ -520,6 +602,12 @@ function ExpenseNotesTab({ trainerId }: { trainerId: string }) {
                 </Select>
               </div>
             </div>
+            {category === "autre" && (
+              <div className="space-y-2">
+                <Label>Preciser la categorie</Label>
+                <Input value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} placeholder="Ex: Fournitures, Impression..." required />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Date</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -536,7 +624,7 @@ function ExpenseNotesTab({ trainerId }: { trainerId: string }) {
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
               />
             </div>
-            <Button onClick={handleCreate} disabled={!title || !amount || !date || isSubmitting} className="w-full">
+            <Button onClick={handleCreate} disabled={!title || !amount || !date || (category === "autre" && !customCategory) || isSubmitting} className="w-full">
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
