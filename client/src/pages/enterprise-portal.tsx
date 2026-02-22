@@ -282,7 +282,7 @@ function ContactFormPortal({
   isPending,
 }: {
   contact?: EnterpriseContact;
-  onSubmit: (data: { firstName: string; lastName: string; email: string | null; phone: string | null; role: string; isPrimary: boolean }) => void;
+  onSubmit: (data: { firstName: string; lastName: string; email: string | null; phone: string | null; role: string; department: string | null; notes: string | null; isPrimary: boolean }) => void;
   isPending: boolean;
 }) {
   const [firstName, setFirstName] = useState(contact?.firstName || "");
@@ -290,10 +290,12 @@ function ContactFormPortal({
   const [email, setEmail] = useState(contact?.email || "");
   const [phone, setPhone] = useState(contact?.phone || "");
   const [role, setRole] = useState(contact?.role || "general");
+  const [department, setDepartment] = useState(contact?.department || "");
+  const [notes, setNotes] = useState(contact?.notes || "");
   const [isPrimary, setIsPrimary] = useState(contact?.isPrimary || false);
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ firstName, lastName, email: email || null, phone: phone || null, role, isPrimary }); }} className="space-y-4">
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ firstName, lastName, email: email || null, phone: phone || null, role, department: department || null, notes: notes || null, isPrimary }); }} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Prenom</Label>
@@ -326,12 +328,20 @@ function ContactFormPortal({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2 flex items-end">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} className="accent-primary" />
-            <span className="text-sm">Contact principal</span>
-          </label>
+        <div className="space-y-2">
+          <Label>Service / Departement</Label>
+          <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Ex: Comptabilite, RH, Direction..." />
         </div>
+      </div>
+      <div className="space-y-2 flex items-end">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} className="accent-primary" />
+          <span className="text-sm">Contact principal</span>
+        </label>
+      </div>
+      <div className="space-y-2">
+        <Label>Notes</Label>
+        <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Informations complementaires..." />
       </div>
       <div className="flex justify-end pt-2">
         <Button type="submit" disabled={isPending}>
@@ -1013,6 +1023,7 @@ export default function EnterprisePortal() {
                         <TableHead>Nom</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Telephone</TableHead>
+                        <TableHead>Service</TableHead>
                         <TableHead>Role</TableHead>
                         <TableHead className="w-[80px]">Actions</TableHead>
                       </TableRow>
@@ -1026,6 +1037,7 @@ export default function EnterprisePortal() {
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{c.email || "\u2014"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{c.phone || "\u2014"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{c.department || "\u2014"}</TableCell>
                           <TableCell><Badge variant="outline" className="text-xs">{roleLabels[c.role] || c.role}</Badge></TableCell>
                           <TableCell>
                             <div className="flex gap-1">

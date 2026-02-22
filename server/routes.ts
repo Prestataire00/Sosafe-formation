@@ -22,6 +22,8 @@ import {
   insertExpenseNoteSchema,
   insertTrainerInvoiceSchema,
   insertTrainerCompetencySchema,
+  insertProgramPrerequisiteSchema,
+  insertTraineeCertificationSchema,
   loginSchema, registerSchema,
   TEMPLATE_VARIABLES,
 } from "@shared/schema";
@@ -95,6 +97,8 @@ export async function registerRoutes(
   app.use("/api/automation-rules", requireAuth, requirePermission("manage_automation"));
   app.use("/api/settings", requireAuth, requirePermission("manage_settings"));
   app.use("/api/users", requireAuth, requirePermission("manage_users"));
+  app.use("/api/program-prerequisites", requireAuth, requirePermission("manage_programs"));
+  app.use("/api/trainee-certifications", requireAuth, requirePermission("manage_trainees"));
 
   // ============================================================
   // FILE UPLOAD (busboy → Supabase Storage)
@@ -398,6 +402,39 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  app.get("/api/programs/catalog-pdf", async (req, res) => {
+    try {
+      const allPrograms = await storage.getPrograms();
+      const published = allPrograms.filter((p) => p.status === "published");
+
+      // Optional category filter
+      const categoriesParam = req.query.categories as string | undefined;
+      let filtered = published;
+      if (categoriesParam) {
+        const cats = categoriesParam.split(",").map((c) => c.trim());
+        filtered = published.filter((p) =>
+          p.categories?.some((c) => cats.includes(c)),
+        );
+      }
+
+      const settings = await storage.getOrganizationSettings();
+      const { generateCatalogPdf } = await import("./catalog-pdf");
+      const buffer = await generateCatalogPdf(filtered, settings);
+
+      const orgSettings = Object.fromEntries(settings.map((s) => [s.key, s.value]));
+      const orgName = orgSettings["org_name"] || "Catalogue";
+      const fileName = `Catalogue_Formations_${orgName.replace(/[^a-zA-Z0-9]/g, "_")}_${new Date().getFullYear()}.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      res.setHeader("Content-Length", buffer.length);
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error generating catalog PDF:", error);
+      res.status(500).json({ message: "Erreur lors de la génération du catalogue PDF" });
+    }
+  });
+
   app.get("/api/programs/:id", async (req, res) => {
     const program = await storage.getProgram(req.params.id);
     if (!program) return res.status(404).json({ message: "Formation non trouvée" });
@@ -477,8 +514,53 @@ export async function registerRoutes(
   app.post("/api/enrollments", async (req, res) => {
     const parsed = insertEnrollmentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+
+    // Check prerequisites and return warnings (non-blocking)
+    const _warnings: string[] = [];
+    try {
+      const session = await storage.getSession(parsed.data.sessionId);
+      if (session) {
+        const prerequisites = await storage.getProgramPrerequisites(session.programId);
+        if (prerequisites.length > 0) {
+          const trainee = await storage.getTrainee(parsed.data.traineeId);
+          if (trainee) {
+            const traineeCerts = await storage.getTraineeCertifications(trainee.id);
+            for (const prereq of prerequisites) {
+              if (prereq.requiresRpps && !trainee.rppsNumber) {
+                _warnings.push("N° RPPS requis mais non renseigné pour ce stagiaire");
+              }
+              if (prereq.requiredProfessions && (prereq.requiredProfessions as string[]).length > 0) {
+                if (!trainee.profession || !(prereq.requiredProfessions as string[]).includes(trainee.profession)) {
+                  _warnings.push(`Profession requise : ${(prereq.requiredProfessions as string[]).join(", ")}`);
+                }
+              }
+              if (prereq.requiredProgramId || prereq.requiredCategory) {
+                const matchingCert = traineeCerts.find(c => {
+                  if (prereq.requiredProgramId && c.programId === prereq.requiredProgramId) return true;
+                  if (prereq.requiredCategory && c.type.toLowerCase().includes(prereq.requiredCategory.toLowerCase())) return true;
+                  return false;
+                });
+                if (!matchingCert) {
+                  _warnings.push(prereq.description || "Certification préalable requise manquante");
+                } else if (prereq.maxMonthsSinceCompletion && matchingCert.obtainedAt) {
+                  const obtainedDate = new Date(matchingCert.obtainedAt);
+                  const maxDate = new Date(obtainedDate);
+                  maxDate.setMonth(maxDate.getMonth() + prereq.maxMonthsSinceCompletion);
+                  if (new Date() > maxDate) {
+                    _warnings.push(`Certification expirée (obtenue le ${matchingCert.obtainedAt}, validité ${prereq.maxMonthsSinceCompletion} mois)`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Don't block enrollment on prerequisite check errors
+    }
+
     const enrollment = await storage.createEnrollment(parsed.data);
-    res.status(201).json(enrollment);
+    res.status(201).json({ ...enrollment, _warnings });
   });
 
   app.patch("/api/enrollments/:id", async (req, res) => {
@@ -486,6 +568,52 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const enrollment = await storage.updateEnrollment(req.params.id, parsed.data);
     if (!enrollment) return res.status(404).json({ message: "Inscription non trouvée" });
+
+    // Auto-create certification when enrollment is completed on a certifying program
+    if (parsed.data.status === "completed") {
+      try {
+        const session = await storage.getSession(enrollment.sessionId);
+        if (session) {
+          const program = await storage.getProgram(session.programId);
+          if (program && program.certifying) {
+            const now = new Date().toISOString().split("T")[0];
+            let expiresAt: string | null = null;
+            if (program.recyclingMonths) {
+              const expDate = new Date();
+              expDate.setMonth(expDate.getMonth() + program.recyclingMonths);
+              expiresAt = expDate.toISOString().split("T")[0];
+            }
+            // Derive certification type from program categories
+            let certType = "autre";
+            const cats = program.categories as string[] || [];
+            if (cats.includes("AFGSU")) {
+              certType = program.title.includes("2") ? "AFGSU2" : "AFGSU1";
+            } else if (cats.includes("Certibiocide")) {
+              certType = "Certibiocide";
+            } else if (cats.includes("Certificat de décès")) {
+              certType = "CertificatDeces";
+            } else if (cats.includes("DPC")) {
+              certType = "DPC";
+            }
+            await storage.createTraineeCertification({
+              traineeId: enrollment.traineeId,
+              programId: program.id,
+              enrollmentId: enrollment.id,
+              type: certType,
+              label: program.title,
+              obtainedAt: now,
+              expiresAt,
+              status: "valid",
+              documentUrl: enrollment.certificateUrl,
+            });
+          }
+        }
+      } catch (e) {
+        // Don't block enrollment update on certification creation error
+        console.error("Error auto-creating certification:", e);
+      }
+    }
+
     res.json(enrollment);
   });
 
@@ -1644,6 +1772,62 @@ export async function registerRoutes(
   app.get("/api/enterprises/:id/generated-documents", async (req, res) => {
     const result = await storage.getGeneratedDocumentsByEnterprise(req.params.id);
     res.json(result);
+  });
+
+  // ============================================================
+  // PROGRAM PREREQUISITES
+  // ============================================================
+
+  app.get("/api/programs/:id/prerequisites", async (req, res) => {
+    const prerequisites = await storage.getProgramPrerequisites(req.params.id);
+    res.json(prerequisites);
+  });
+
+  app.post("/api/programs/:id/prerequisites", async (req, res) => {
+    const parsed = insertProgramPrerequisiteSchema.safeParse({ ...req.body, programId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const prerequisite = await storage.createProgramPrerequisite(parsed.data);
+    res.status(201).json(prerequisite);
+  });
+
+  app.delete("/api/program-prerequisites/:id", async (req, res) => {
+    await storage.deleteProgramPrerequisite(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // TRAINEE CERTIFICATIONS
+  // ============================================================
+
+  app.get("/api/trainees/:id/certifications", async (req, res) => {
+    const certifications = await storage.getTraineeCertifications(req.params.id);
+    res.json(certifications);
+  });
+
+  app.post("/api/trainees/:id/certifications", async (req, res) => {
+    const parsed = insertTraineeCertificationSchema.safeParse({ ...req.body, traineeId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const certification = await storage.createTraineeCertification(parsed.data);
+    res.status(201).json(certification);
+  });
+
+  app.patch("/api/trainee-certifications/:id", async (req, res) => {
+    const parsed = insertTraineeCertificationSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const certification = await storage.updateTraineeCertification(req.params.id, parsed.data);
+    if (!certification) return res.status(404).json({ message: "Certification non trouvée" });
+    res.json(certification);
+  });
+
+  app.delete("/api/trainee-certifications/:id", async (req, res) => {
+    await storage.deleteTraineeCertification(req.params.id);
+    res.status(204).send();
+  });
+
+  app.get("/api/certifications/expiring", async (req, res) => {
+    const days = parseInt(req.query.days as string) || 90;
+    const certifications = await storage.getExpiringCertifications(days);
+    res.json(certifications);
   });
 
   return httpServer;

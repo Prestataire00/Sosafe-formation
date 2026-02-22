@@ -52,7 +52,14 @@
       "Bash(__NEW_LINE_35296a37c2fec705__ echo \"\")",
       "Bash(__NEW_LINE_d3053a6ae3617543__ echo \"=== 11. Supprimer la compétence ===\")",
       "Bash(__NEW_LINE_d3053a6ae3617543__ echo \"\")",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(head:*)",
+      "Bash(echo Trying $region...:*)",
+      "Bash(psql $SUPABASE_URL:*)",
+      "Bash(export:*)",
+      "Bash(timeout 15 npx tsx:*)",
+      "Bash(npx tsx:*)",
+      "Bash(netstat -tlnp)"
     ]
   }
 }

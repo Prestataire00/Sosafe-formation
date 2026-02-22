@@ -44,7 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Trainee, InsertTrainee, Enterprise } from "@shared/schema";
-import { TRAINEE_CIVILITIES, TRAINEE_PROFILE_TYPES, PRO_STATUT_TYPES, DIETARY_REGIMES } from "@shared/schema";
+import { TRAINEE_CIVILITIES, TRAINEE_PROFILE_TYPES, PRO_STATUT_TYPES, DIETARY_REGIMES, TRAINEE_PROFESSIONS } from "@shared/schema";
 
 function ProfileTypeBadge({ profileType }: { profileType: string | null }) {
   const pt = TRAINEE_PROFILE_TYPES.find((p) => p.value === profileType);
@@ -92,6 +92,10 @@ function TraineeForm({
   const [proDenomination, setProDenomination] = useState(trainee?.proDenomination || "");
   const [proSiret, setProSiret] = useState(trainee?.proSiret || "");
   const [proTva, setProTva] = useState(trainee?.proTva || "");
+
+  // Santé
+  const [profession, setProfession] = useState(trainee?.profession || "");
+  const [rppsNumber, setRppsNumber] = useState(trainee?.rppsNumber || "");
 
   // Complémentaire
   const [poleEmploiId, setPoleEmploiId] = useState(trainee?.poleEmploiId || "");
@@ -151,6 +155,8 @@ function TraineeForm({
       proSiret: isLiberal ? (proSiret || null) : null,
       proTva: isLiberal ? (proTva || null) : null,
       avatarUrl: avatarUrl || null,
+      rppsNumber: rppsNumber || null,
+      profession: profession || null,
     });
   };
 
@@ -363,6 +369,30 @@ function TraineeForm({
               </p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Section: Informations professionnelles de santé */}
+      <div className="border-t pt-4">
+        <h4 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Informations professionnelles de santé</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Profession</Label>
+            <Select value={profession} onValueChange={setProfession}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionner une profession" />
+              </SelectTrigger>
+              <SelectContent>
+                {TRAINEE_PROFESSIONS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="trainee-rppsNumber">N° RPPS</Label>
+            <Input id="trainee-rppsNumber" value={rppsNumber} onChange={(e) => setRppsNumber(e.target.value)} placeholder="Ex: 12345678901" />
+          </div>
         </div>
       </div>
 

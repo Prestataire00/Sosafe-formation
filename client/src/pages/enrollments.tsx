@@ -47,7 +47,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Enrollment, InsertEnrollment, Session, Trainee, Enterprise } from "@shared/schema";
+import { AlertTriangle } from "lucide-react";
+import type { Enrollment, InsertEnrollment, Session, Trainee, Enterprise, Program, ProgramPrerequisite } from "@shared/schema";
+import { VAE_STATUSES } from "@shared/schema";
 
 const ENROLLMENT_STATUSES = [
   { value: "registered", label: "Inscrit", icon: Clock, className: "bg-accent text-accent-foreground" },
@@ -73,14 +75,18 @@ function EnrollmentForm({
   sessions,
   trainees,
   enterprises,
+  enrollments: existingEnrollments,
   onSubmit,
   isPending,
+  batchCount,
 }: {
   sessions: Session[];
   trainees: Trainee[];
   enterprises: Enterprise[];
+  enrollments: Enrollment[];
   onSubmit: (data: InsertEnrollment) => void;
   isPending: boolean;
+  batchCount: number;
 }) {
   const plannedSessions = sessions.filter((s) => s.status === "planned" || s.status === "ongoing");
 
@@ -103,6 +109,14 @@ function EnrollmentForm({
   const [enterpriseId, setEnterpriseId] = useState(savedValues.enterpriseId);
   const [notes, setNotes] = useState("");
 
+  // Filter out trainees already enrolled in the selected session
+  const enrolledTraineeIds = sessionId
+    ? existingEnrollments
+        .filter((e) => e.sessionId === sessionId && e.status !== "cancelled")
+        .map((e) => e.traineeId)
+    : [];
+  const availableTrainees = trainees.filter((t) => !enrolledTraineeIds.includes(t.id));
+
   const handleTraineeChange = (id: string) => {
     setTraineeId(id);
     const trainee = trainees.find((t) => t.id === id);
@@ -124,12 +138,26 @@ function EnrollmentForm({
     });
   };
 
+  const selectedSession = plannedSessions.find((s) => s.id === sessionId);
+  const hasSavedSession = savedValues.sessionId !== "";
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {hasSavedSession && batchCount === 0 && (
+        <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+          Session et entreprise pre-remplies depuis la derniere inscription.
+        </div>
+      )}
+      {batchCount > 0 && (
+        <div className="text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-md px-3 py-2 flex items-center gap-2">
+          <CheckCircle className="w-3.5 h-3.5" />
+          {batchCount} inscription{batchCount > 1 ? "s" : ""} ajoutee{batchCount > 1 ? "s" : ""} — continuez ou fermez la fenetre.
+        </div>
+      )}
       <div className="space-y-2">
         <Label>Session</Label>
-        <Select value={sessionId} onValueChange={setSessionId} required>
-          <SelectTrigger data-testid="select-enrollment-session"><SelectValue placeholder="Sélectionner une session" /></SelectTrigger>
+        <Select value={sessionId} onValueChange={(v) => { setSessionId(v); setTraineeId(""); }} required>
+          <SelectTrigger data-testid="select-enrollment-session"><SelectValue placeholder="Selectionner une session" /></SelectTrigger>
           <SelectContent>
             {plannedSessions.map((s) => (
               <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
@@ -138,15 +166,20 @@ function EnrollmentForm({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Stagiaire</Label>
+        <Label>Stagiaire {sessionId && availableTrainees.length < trainees.length && (
+          <span className="text-xs text-muted-foreground ml-1">({enrolledTraineeIds.length} deja inscrit{enrolledTraineeIds.length > 1 ? "s" : ""})</span>
+        )}</Label>
         <Select value={traineeId} onValueChange={handleTraineeChange} required>
-          <SelectTrigger data-testid="select-enrollment-trainee"><SelectValue placeholder="Sélectionner un stagiaire" /></SelectTrigger>
+          <SelectTrigger data-testid="select-enrollment-trainee"><SelectValue placeholder="Selectionner un stagiaire" /></SelectTrigger>
           <SelectContent>
-            {trainees.map((t) => (
+            {availableTrainees.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {sessionId && availableTrainees.length === 0 && (
+          <p className="text-xs text-muted-foreground">Tous les stagiaires sont deja inscrits a cette session.</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label>Entreprise (optionnel)</Label>
@@ -177,6 +210,8 @@ export default function Enrollments() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [batchCount, setBatchCount] = useState(0);
+  const [formKey, setFormKey] = useState(0);
   const { toast } = useToast();
 
   const { data: enrollments, isLoading } = useQuery<Enrollment[]>({
@@ -192,20 +227,36 @@ export default function Enrollments() {
     queryKey: ["/api/enterprises"],
   });
 
+  const [prereqWarnings, setPrereqWarnings] = useState<string[]>([]);
+
+  const { data: programs } = useQuery<Program[]>({
+    queryKey: ["/api/programs"],
+  });
+
   const createMutation = useMutation({
-    mutationFn: (data: InsertEnrollment) => apiRequest("POST", "/api/enrollments", data),
-    onSuccess: () => {
+    mutationFn: async (data: InsertEnrollment) => {
+      const res = await apiRequest("POST", "/api/enrollments", data);
+      return res.json();
+    },
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/enrollment-counts"] });
-      setDialogOpen(false);
-      toast({ title: "Inscription créée avec succès" });
+      setBatchCount((c) => c + 1);
+      setFormKey((k) => k + 1);
+      if (result._warnings && result._warnings.length > 0) {
+        setPrereqWarnings(result._warnings);
+        toast({ title: "Inscription ajoutée avec avertissements" });
+      } else {
+        setPrereqWarnings([]);
+        toast({ title: "Inscription ajoutee" });
+      }
     },
     onError: () => toast({ title: "Erreur lors de l'inscription", variant: "destructive" }),
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      apiRequest("PATCH", `/api/enrollments/${id}`, { status }),
+    mutationFn: ({ id, ...data }: { id: string; status?: string; vaeStatus?: string }) =>
+      apiRequest("PATCH", `/api/enrollments/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/enrollment-counts"] });
@@ -310,6 +361,7 @@ export default function Enrollments() {
                   <TableHead>Session</TableHead>
                   <TableHead>Entreprise</TableHead>
                   <TableHead>Statut</TableHead>
+                  <TableHead>VAE</TableHead>
                   <TableHead>Date d'inscription</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
@@ -319,6 +371,8 @@ export default function Enrollments() {
                   const session = sessions?.find((s) => s.id === enrollment.sessionId);
                   const trainee = trainees?.find((t) => t.id === enrollment.traineeId);
                   const enterprise = enterprises?.find((e) => e.id === enrollment.enterpriseId);
+                  const program = session ? programs?.find((p) => p.id === session.programId) : null;
+                  const isVaeProgram = program?.categories?.includes("VAE");
                   return (
                     <TableRow key={enrollment.id} data-testid={`row-enrollment-${enrollment.id}`}>
                       <TableCell>
@@ -335,6 +389,25 @@ export default function Enrollments() {
                       </TableCell>
                       <TableCell>
                         <EnrollmentStatusBadge status={enrollment.status} />
+                      </TableCell>
+                      <TableCell>
+                        {isVaeProgram ? (
+                          <Select
+                            value={enrollment.vaeStatus || ""}
+                            onValueChange={(v) => updateStatusMutation.mutate({ id: enrollment.id, status: enrollment.status, vaeStatus: v } as any)}
+                          >
+                            <SelectTrigger className="h-7 text-xs w-[140px]">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {VAE_STATUSES.map((s) => (
+                                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <p className="text-sm text-muted-foreground">
@@ -377,15 +450,29 @@ export default function Enrollments() {
         </Card>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setBatchCount(0); setFormKey((k) => k + 1); setPrereqWarnings([]); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Nouvelle inscription</DialogTitle>
           </DialogHeader>
+          {prereqWarnings.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-3 space-y-1">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-sm font-medium">
+                <AlertTriangle className="w-4 h-4" />
+                Avertissements prérequis
+              </div>
+              <ul className="text-xs text-amber-600 dark:text-amber-400 space-y-0.5 ml-6 list-disc">
+                {prereqWarnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+              <p className="text-xs text-muted-foreground mt-1">L'inscription reste possible malgré ces alertes.</p>
+            </div>
+          )}
           <EnrollmentForm
+            key={formKey}
             sessions={sessions || []}
             trainees={trainees || []}
             enterprises={enterprises || []}
+            enrollments={enrollments || []}
             onSubmit={(data) => {
               const cleanData = {
                 ...data,
@@ -394,6 +481,7 @@ export default function Enrollments() {
               createMutation.mutate(cleanData);
             }}
             isPending={createMutation.isPending}
+            batchCount={batchCount}
           />
         </DialogContent>
       </Dialog>

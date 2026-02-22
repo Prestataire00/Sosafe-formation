@@ -50,6 +50,8 @@ export const enterpriseContacts = pgTable("enterprise_contacts", {
   email: text("email"),
   phone: text("phone"),
   role: text("role").notNull().default("general"),
+  department: text("department"),
+  notes: text("notes"),
   isPrimary: boolean("is_primary").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -88,13 +90,15 @@ export const trainees = pgTable("trainees", {
   proDenomination: text("pro_denomination"),
   proSiret: text("pro_siret"),
   proTva: text("pro_tva"),
+  rppsNumber: text("rpps_number"),
+  profession: text("profession"),
 });
 
 export const programs = pgTable("programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description"),
-  category: text("category").notNull(),
+  categories: jsonb("categories").$type<string[]>().default([]),
   duration: integer("duration").notNull(),
   price: integer("price").notNull(),
   level: text("level").notNull().default("beginner"),
@@ -104,6 +108,18 @@ export const programs = pgTable("programs", {
   status: text("status").notNull().default("draft"),
   certifying: boolean("certifying").default(false),
   recyclingMonths: integer("recycling_months"),
+  programContent: text("program_content"),
+  targetAudience: text("target_audience"),
+  teachingMethods: text("teaching_methods"),
+  evaluationMethods: text("evaluation_methods"),
+  technicalMeans: text("technical_means"),
+  accessibilityInfo: text("accessibility_info"),
+  accessDelay: text("access_delay"),
+  resultIndicators: text("result_indicators"),
+  referentContact: text("referent_contact"),
+  referentHandicap: text("referent_handicap"),
+  fundingTypes: jsonb("funding_types").$type<string[]>().default([]),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const sessions = pgTable("sessions", {
@@ -114,10 +130,13 @@ export const sessions = pgTable("sessions", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   location: text("location"),
+  locationAddress: text("location_address"),
+  locationRoom: text("location_room"),
   modality: text("modality").notNull().default("presentiel"),
   maxParticipants: integer("max_participants").notNull().default(12),
   status: text("status").notNull().default("planned"),
   notes: text("notes"),
+  virtualClassUrl: text("virtual_class_url"),
 });
 
 export const enrollments = pgTable("enrollments", {
@@ -130,6 +149,35 @@ export const enrollments = pgTable("enrollments", {
   completedAt: timestamp("completed_at"),
   certificateUrl: text("certificate_url"),
   notes: text("notes"),
+  vaeStatus: text("vae_status"),
+});
+
+// ============================================================
+// NEW TABLES - PROGRAM PREREQUISITES & TRAINEE CERTIFICATIONS
+// ============================================================
+
+export const programPrerequisites = pgTable("program_prerequisites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  programId: varchar("program_id").notNull(),
+  requiredProgramId: varchar("required_program_id"),
+  requiredCategory: text("required_category"),
+  maxMonthsSinceCompletion: integer("max_months_since_completion"),
+  requiredProfessions: jsonb("required_professions").$type<string[]>().default([]),
+  requiresRpps: boolean("requires_rpps").default(false),
+  description: text("description"),
+});
+
+export const traineeCertifications = pgTable("trainee_certifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traineeId: varchar("trainee_id").notNull(),
+  programId: varchar("program_id"),
+  enrollmentId: varchar("enrollment_id"),
+  type: text("type").notNull(),
+  label: text("label").notNull(),
+  obtainedAt: date("obtained_at").notNull(),
+  expiresAt: date("expires_at"),
+  status: text("status").notNull().default("valid"),
+  documentUrl: text("document_url"),
 });
 
 // ============================================================
@@ -520,9 +568,11 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertEnterpriseSchema = createInsertSchema(enterprises).omit({ id: true });
 export const insertTrainerSchema = createInsertSchema(trainers).omit({ id: true });
 export const insertTraineeSchema = createInsertSchema(trainees).omit({ id: true });
-export const insertProgramSchema = createInsertSchema(programs).omit({ id: true });
+export const insertProgramSchema = createInsertSchema(programs).omit({ id: true, updatedAt: true });
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true });
 export const insertEnrollmentSchema = createInsertSchema(enrollments).omit({ id: true, enrolledAt: true, completedAt: true });
+export const insertProgramPrerequisiteSchema = createInsertSchema(programPrerequisites).omit({ id: true });
+export const insertTraineeCertificationSchema = createInsertSchema(traineeCertifications).omit({ id: true });
 
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({ id: true, createdAt: true });
@@ -588,6 +638,10 @@ export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type Session = typeof sessions.$inferSelect;
 export type InsertEnrollment = z.infer<typeof insertEnrollmentSchema>;
 export type Enrollment = typeof enrollments.$inferSelect;
+export type InsertProgramPrerequisite = z.infer<typeof insertProgramPrerequisiteSchema>;
+export type ProgramPrerequisite = typeof programPrerequisites.$inferSelect;
+export type InsertTraineeCertification = z.infer<typeof insertTraineeCertificationSchema>;
+export type TraineeCertification = typeof traineeCertifications.$inferSelect;
 
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
@@ -649,18 +703,44 @@ export type TrainerCompetency = typeof trainerCompetencies.$inferSelect;
 // ============================================================
 
 export const PROGRAM_CATEGORIES = [
-  "AFGSU",
-  "Certibiocide",
-  "Certificat de décès",
-  "VAE",
-  "Sécurité au travail",
-  "Soins infirmiers",
-  "Hygiène hospitalière",
-  "Gestes et postures",
-  "Prévention des risques",
-  "Formation continue santé",
-  "Management santé",
+  // Domaines
+  "Urgences", "AFGSU", "Hygiène", "Certibiocide", "Certificat de décès",
+  "Prévention des risques", "Gestes et postures", "Sécurité au travail",
+  "Soins infirmiers", "Pharmacie", "Gériatrie", "Pédiatrie",
+  "Santé mentale", "Douleur et soins palliatifs", "Management santé",
+  "Qualité et gestion des risques", "DPC", "VAE",
+  // Publics cibles
+  "Infirmière", "Aide-soignant", "Médecin", "Sage-femme",
+  "Kinésithérapeute", "Personnel administratif", "Cadre de santé",
+  "Tout public santé",
+  // Autre
   "Autre",
+] as const;
+
+export const PROGRAM_CATEGORY_GROUPS = [
+  {
+    label: "Domaines de formation",
+    categories: ["Urgences", "AFGSU", "Hygiène", "Certibiocide", "Certificat de décès",
+      "Prévention des risques", "Gestes et postures", "Sécurité au travail",
+      "Soins infirmiers", "Pharmacie", "Gériatrie", "Pédiatrie",
+      "Santé mentale", "Douleur et soins palliatifs", "Management santé",
+      "Qualité et gestion des risques", "DPC", "VAE"],
+  },
+  {
+    label: "Publics cibles",
+    categories: ["Infirmière", "Aide-soignant", "Médecin", "Sage-femme",
+      "Kinésithérapeute", "Personnel administratif", "Cadre de santé",
+      "Tout public santé"],
+  },
+  { label: "Autre", categories: ["Autre"] },
+] as const;
+
+export const FUNDING_TYPES = [
+  { value: "fifpl", label: "FIFPL", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "opco", label: "OPCO", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "dpc", label: "DPC", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
+  { value: "personnel", label: "Personnel", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  { value: "autre", label: "Autre", color: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400" },
 ] as const;
 
 export const MODALITIES = [
@@ -1023,4 +1103,43 @@ export const COMPETENCY_STATUSES = [
   { value: "active", label: "Active", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   { value: "expired", label: "Expirée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
   { value: "renewal", label: "Renouvellement en cours", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+] as const;
+
+// Trainee professions (health sector)
+export const TRAINEE_PROFESSIONS = [
+  { value: "infirmiere", label: "Infirmier(ère)" },
+  { value: "aide_soignant", label: "Aide-soignant(e)" },
+  { value: "medecin", label: "Médecin" },
+  { value: "sage_femme", label: "Sage-femme" },
+  { value: "kinesitherapeute", label: "Kinésithérapeute" },
+  { value: "pharmacien", label: "Pharmacien(ne)" },
+  { value: "cadre_sante", label: "Cadre de santé" },
+  { value: "personnel_administratif", label: "Personnel administratif" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+// Certification types
+export const CERTIFICATION_TYPES = [
+  { value: "AFGSU1", label: "AFGSU Niveau 1" },
+  { value: "AFGSU2", label: "AFGSU Niveau 2" },
+  { value: "Certibiocide", label: "Certibiocide" },
+  { value: "CertificatDeces", label: "Certificat de décès" },
+  { value: "DPC", label: "DPC" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+export const CERTIFICATION_STATUSES = [
+  { value: "valid", label: "Valide", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "expired", label: "Expirée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  { value: "revoked", label: "Révoquée", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+] as const;
+
+// VAE statuses
+export const VAE_STATUSES = [
+  { value: "dossier_recevabilite", label: "Dossier de recevabilité" },
+  { value: "accompagnement", label: "Accompagnement" },
+  { value: "redaction", label: "Rédaction" },
+  { value: "jury", label: "Jury" },
+  { value: "decision", label: "Décision" },
+  { value: "termine", label: "Terminé" },
 ] as const;

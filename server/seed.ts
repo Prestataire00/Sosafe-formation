@@ -210,6 +210,8 @@ export async function seedDatabase() {
     proDenomination: null,
     proSiret: null,
     proTva: null,
+    profession: "infirmiere",
+    rppsNumber: null,
   });
 
   const trainee2 = await storage.createTrainee({
@@ -233,6 +235,8 @@ export async function seedDatabase() {
     proDenomination: null,
     proSiret: null,
     proTva: null,
+    profession: "aide_soignant",
+    rppsNumber: null,
   });
 
   const trainee3 = await storage.createTrainee({
@@ -256,6 +260,8 @@ export async function seedDatabase() {
     proDenomination: null,
     proSiret: null,
     proTva: null,
+    profession: "medecin",
+    rppsNumber: "10003456789",
   });
 
   await storage.createTrainee({
@@ -279,6 +285,8 @@ export async function seedDatabase() {
     proDenomination: null,
     proSiret: null,
     proTva: null,
+    profession: "sage_femme",
+    rppsNumber: "10004567890",
   });
 
   await storage.createTrainee({
@@ -302,12 +310,14 @@ export async function seedDatabase() {
     proDenomination: "Cabinet Simon Soins",
     proSiret: "89012345600015",
     proTva: "FR45890123456",
+    profession: "infirmiere",
+    rppsNumber: "10001234567",
   });
 
   const prog1 = await storage.createProgram({
     title: "AFGSU Niveau 1",
     description: "Attestation de Formation aux Gestes et Soins d'Urgence de niveau 1. Formation obligatoire pour les personnels des établissements de santé.",
-    category: "AFGSU",
+    categories: ["AFGSU", "Urgences", "Tout public santé"],
     duration: 12,
     price: 350,
     level: "beginner",
@@ -317,12 +327,13 @@ export async function seedDatabase() {
     status: "published",
     certifying: true,
     recyclingMonths: 48,
+    fundingTypes: ["fifpl", "dpc"],
   });
 
   const prog2 = await storage.createProgram({
     title: "AFGSU Niveau 2",
     description: "Attestation de Formation aux Gestes et Soins d'Urgence de niveau 2. Destinée aux professionnels de santé inscrits dans la 4ème partie du code de la santé publique.",
-    category: "AFGSU",
+    categories: ["AFGSU", "Urgences", "Infirmière", "Aide-soignant"],
     duration: 21,
     price: 600,
     level: "intermediate",
@@ -332,12 +343,13 @@ export async function seedDatabase() {
     status: "published",
     certifying: true,
     recyclingMonths: 48,
+    fundingTypes: ["fifpl", "dpc", "opco"],
   });
 
   const prog3 = await storage.createProgram({
     title: "Certibiocide",
     description: "Certification pour l'utilisation professionnelle de produits biocides. Obligatoire pour les professionnels manipulant des désinfectants en milieu hospitalier.",
-    category: "Certibiocide",
+    categories: ["Certibiocide", "Hygiène", "Infirmière"],
     duration: 21,
     price: 800,
     level: "intermediate",
@@ -347,12 +359,13 @@ export async function seedDatabase() {
     status: "published",
     certifying: true,
     recyclingMonths: 60,
+    fundingTypes: ["opco", "personnel"],
   });
 
   await storage.createProgram({
     title: "Gestes et Postures - Soignants",
     description: "Prévention des troubles musculosquelettiques pour les professionnels de santé. Techniques de manutention des patients.",
-    category: "Gestes et postures",
+    categories: ["Gestes et postures", "Prévention des risques", "Aide-soignant", "Infirmière"],
     duration: 14,
     price: 450,
     level: "beginner",
@@ -362,12 +375,13 @@ export async function seedDatabase() {
     status: "published",
     certifying: false,
     recyclingMonths: null,
+    fundingTypes: ["opco", "personnel"],
   });
 
   await storage.createProgram({
     title: "Certificat de décès - Formation médecins",
     description: "Formation à la rédaction du certificat de décès selon les règles en vigueur. Cadre légal et médical.",
-    category: "Certificat de décès",
+    categories: ["Certificat de décès", "Médecin"],
     duration: 7,
     price: 300,
     level: "intermediate",
@@ -377,12 +391,13 @@ export async function seedDatabase() {
     status: "published",
     certifying: false,
     recyclingMonths: null,
+    fundingTypes: ["dpc"],
   });
 
   await storage.createProgram({
     title: "Management d'Équipe Soignante",
     description: "Développez vos compétences en management pour diriger efficacement vos équipes soignantes.",
-    category: "Management santé",
+    categories: ["Management santé", "Cadre de santé"],
     duration: 14,
     price: 900,
     level: "advanced",
@@ -394,6 +409,32 @@ export async function seedDatabase() {
     recyclingMonths: null,
   });
 
+  // Program prerequisites
+  // AFGSU 2 requires AFGSU 1 within 48 months
+  await storage.createProgramPrerequisite({
+    programId: prog2.id,
+    requiredProgramId: prog1.id,
+    requiredCategory: "AFGSU",
+    maxMonthsSinceCompletion: 48,
+    requiredProfessions: [],
+    requiresRpps: false,
+    description: "AFGSU Niveau 1 valide (moins de 48 mois)",
+  });
+
+  // Certificat de décès requires medecin + RPPS
+  const prog5 = (await storage.getPrograms()).find(p => p.title.includes("Certificat de décès"));
+  if (prog5) {
+    await storage.createProgramPrerequisite({
+      programId: prog5.id,
+      requiredProgramId: null,
+      requiredCategory: null,
+      maxMonthsSinceCompletion: null,
+      requiredProfessions: ["medecin"],
+      requiresRpps: true,
+      description: "Réservé aux médecins — N° RPPS obligatoire",
+    });
+  }
+
   const session1 = await storage.createSession({
     programId: prog1.id,
     trainerId: trainer1.id,
@@ -401,6 +442,8 @@ export async function seedDatabase() {
     startDate: "2026-03-15",
     endDate: "2026-03-17",
     location: "Bordeaux - Centre de Formation SO'SAFE",
+    locationAddress: "12 Rue Jean Burguet, 33000 Bordeaux",
+    locationRoom: "Salle A - RDC",
     modality: "presentiel",
     maxParticipants: 12,
     status: "planned",
@@ -414,6 +457,8 @@ export async function seedDatabase() {
     startDate: "2026-02-10",
     endDate: "2026-02-14",
     location: "Lyon - Espace Formation Santé",
+    locationAddress: "45 Avenue de la République, 69003 Lyon",
+    locationRoom: "Salle 201 - 2ème étage",
     modality: "presentiel",
     maxParticipants: 10,
     status: "ongoing",
@@ -427,10 +472,13 @@ export async function seedDatabase() {
     startDate: "2026-01-20",
     endDate: "2026-01-24",
     location: "En ligne + 1 jour présentiel Bordeaux",
+    locationAddress: "12 Rue Jean Burguet, 33000 Bordeaux",
+    locationRoom: null,
     modality: "blended",
     maxParticipants: 15,
     status: "completed",
     notes: null,
+    virtualClassUrl: "https://zoom.us/j/1234567890?pwd=exemple",
   });
 
   await storage.createSession({
@@ -440,6 +488,8 @@ export async function seedDatabase() {
     startDate: "2026-04-14",
     endDate: "2026-04-16",
     location: "Toulouse - Centre Hospitalier",
+    locationAddress: "8 Chemin des Roses, 31000 Toulouse",
+    locationRoom: "Salle de formation B",
     modality: "presentiel",
     maxParticipants: 12,
     status: "planned",

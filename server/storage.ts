@@ -33,6 +33,8 @@ import {
   type ExpenseNote, type InsertExpenseNote,
   type TrainerInvoice, type InsertTrainerInvoice,
   type TrainerCompetency, type InsertTrainerCompetency,
+  type ProgramPrerequisite, type InsertProgramPrerequisite,
+  type TraineeCertification, type InsertTraineeCertification,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
   emailTemplates, emailLogs, documentTemplates, generatedDocuments,
   prospects, quotes, invoices, payments,
@@ -42,7 +44,7 @@ import {
   automationRules, organizationSettings,
   enterpriseContacts, trainerDocuments, trainerEvaluations,
   userDocuments, signatures, expenseNotes, trainerInvoices,
-  trainerCompetencies,
+  trainerCompetencies, programPrerequisites, traineeCertifications,
 } from "@shared/schema";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -280,6 +282,19 @@ export interface IStorage {
   getEnterpriseSessions(enterpriseId: string): Promise<Session[]>;
   getEnterprisePrograms(enterpriseId: string): Promise<Program[]>;
   getGeneratedDocumentsByEnterprise(enterpriseId: string): Promise<GeneratedDocument[]>;
+
+  // Program Prerequisites
+  getProgramPrerequisites(programId: string): Promise<ProgramPrerequisite[]>;
+  createProgramPrerequisite(data: InsertProgramPrerequisite): Promise<ProgramPrerequisite>;
+  deleteProgramPrerequisite(id: string): Promise<void>;
+
+  // Trainee Certifications
+  getTraineeCertifications(traineeId: string): Promise<TraineeCertification[]>;
+  getAllTraineeCertifications(): Promise<TraineeCertification[]>;
+  createTraineeCertification(data: InsertTraineeCertification): Promise<TraineeCertification>;
+  updateTraineeCertification(id: string, data: Partial<InsertTraineeCertification>): Promise<TraineeCertification | undefined>;
+  deleteTraineeCertification(id: string): Promise<void>;
+  getExpiringCertifications(withinDays: number): Promise<TraineeCertification[]>;
 }
 
 const pool = new pg.Pool({
@@ -411,12 +426,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProgram(program: InsertProgram): Promise<Program> {
-    const [result] = await db.insert(programs).values(program).returning();
+    const [result] = await db.insert(programs).values(program as any).returning();
     return result;
   }
 
   async updateProgram(id: string, data: Partial<InsertProgram>): Promise<Program | undefined> {
-    const [result] = await db.update(programs).set(data).where(eq(programs.id, id)).returning();
+    const [result] = await db.update(programs).set({ ...data, updatedAt: new Date() } as any).where(eq(programs.id, id)).returning();
     return result;
   }
 
@@ -1108,6 +1123,53 @@ export class DatabaseStorage implements IStorage {
         inArray(generatedDocuments.type, ["convention", "attestation", "certificat", "bpf"])
       ))
       .orderBy(desc(generatedDocuments.createdAt));
+  }
+
+  // ---- Program Prerequisites ----
+  async getProgramPrerequisites(programId: string): Promise<ProgramPrerequisite[]> {
+    return db.select().from(programPrerequisites).where(eq(programPrerequisites.programId, programId));
+  }
+
+  async createProgramPrerequisite(data: InsertProgramPrerequisite): Promise<ProgramPrerequisite> {
+    const [result] = await db.insert(programPrerequisites).values(data as any).returning();
+    return result;
+  }
+
+  async deleteProgramPrerequisite(id: string): Promise<void> {
+    await db.delete(programPrerequisites).where(eq(programPrerequisites.id, id));
+  }
+
+  // ---- Trainee Certifications ----
+  async getTraineeCertifications(traineeId: string): Promise<TraineeCertification[]> {
+    return db.select().from(traineeCertifications).where(eq(traineeCertifications.traineeId, traineeId));
+  }
+
+  async getAllTraineeCertifications(): Promise<TraineeCertification[]> {
+    return db.select().from(traineeCertifications);
+  }
+
+  async createTraineeCertification(data: InsertTraineeCertification): Promise<TraineeCertification> {
+    const [result] = await db.insert(traineeCertifications).values(data).returning();
+    return result;
+  }
+
+  async updateTraineeCertification(id: string, data: Partial<InsertTraineeCertification>): Promise<TraineeCertification | undefined> {
+    const [result] = await db.update(traineeCertifications).set(data).where(eq(traineeCertifications.id, id)).returning();
+    return result;
+  }
+
+  async deleteTraineeCertification(id: string): Promise<void> {
+    await db.delete(traineeCertifications).where(eq(traineeCertifications.id, id));
+  }
+
+  async getExpiringCertifications(withinDays: number): Promise<TraineeCertification[]> {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + withinDays);
+    return db.select().from(traineeCertifications)
+      .where(and(
+        eq(traineeCertifications.status, "valid"),
+        sql`${traineeCertifications.expiresAt} IS NOT NULL AND ${traineeCertifications.expiresAt} <= ${futureDate.toISOString().split('T')[0]}`
+      ));
   }
 }
 
