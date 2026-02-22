@@ -36,6 +36,160 @@ export async function registerRoutes(
   setupAuth(app);
 
   // ============================================================
+  // PUBLIC ROUTES (no auth required)
+  // ============================================================
+
+  // GET /api/public/sessions — available sessions with remaining spots
+  app.get("/api/public/sessions", async (_req, res) => {
+    try {
+      const allSessions = await storage.getSessions();
+      const activeSessions = allSessions.filter(s => s.status === "planned" || s.status === "ongoing");
+
+      const results = [];
+      for (const session of activeSessions) {
+        const enrollmentCount = await storage.getEnrollmentCount(session.id);
+        if (enrollmentCount >= session.maxParticipants) continue;
+
+        const program = await storage.getProgram(session.programId);
+        results.push({
+          id: session.id,
+          title: session.title,
+          startDate: session.startDate,
+          endDate: session.endDate,
+          location: session.location,
+          modality: session.modality,
+          maxParticipants: session.maxParticipants,
+          enrollmentCount,
+          remainingSpots: session.maxParticipants - enrollmentCount,
+          status: session.status,
+          program: program ? {
+            id: program.id,
+            title: program.title,
+            duration: program.duration,
+            price: program.price,
+            categories: program.categories,
+            fundingTypes: program.fundingTypes,
+          } : null,
+        });
+      }
+
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors de la récupération des sessions" });
+    }
+  });
+
+  // GET /api/public/check-email — auto-detect existing trainee by email
+  app.get("/api/public/check-email", async (req, res) => {
+    const email = req.query.email as string;
+    if (!email) return res.status(400).json({ message: "Email requis" });
+
+    const trainee = await storage.getTraineeByEmail(email);
+    if (trainee) {
+      res.json({
+        exists: true,
+        trainee: {
+          firstName: trainee.firstName,
+          lastName: trainee.lastName,
+          phone: trainee.phone,
+          company: trainee.company,
+        },
+      });
+    } else {
+      res.json({ exists: false });
+    }
+  });
+
+  // POST /api/public/enrollments — public enrollment
+  app.post("/api/public/enrollments", async (req, res) => {
+    try {
+      const { sessionId, firstName, lastName, email, phone, company } = req.body;
+
+      // Validate required fields
+      if (!sessionId || !firstName || !lastName || !email) {
+        return res.status(400).json({ message: "Les champs sessionId, firstName, lastName et email sont requis" });
+      }
+
+      // Validate email format
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: "Format d'email invalide" });
+      }
+
+      // Check session exists and is available
+      const session = await storage.getSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session non trouvée" });
+      }
+      if (session.status !== "planned" && session.status !== "ongoing") {
+        return res.status(400).json({ message: "Cette session n'accepte plus les inscriptions" });
+      }
+
+      // Check remaining spots
+      const enrollmentCount = await storage.getEnrollmentCount(sessionId);
+      if (enrollmentCount >= session.maxParticipants) {
+        return res.status(400).json({ message: "Cette session est complète" });
+      }
+
+      // Find or create trainee
+      let trainee = await storage.getTraineeByEmail(email);
+      if (trainee) {
+        // Update phone/company if provided
+        const updates: Record<string, string> = {};
+        if (phone && !trainee.phone) updates.phone = phone;
+        if (company && !trainee.company) updates.company = company;
+        if (Object.keys(updates).length > 0) {
+          await storage.updateTrainee(trainee.id, updates);
+        }
+      } else {
+        trainee = await storage.createTrainee({
+          firstName,
+          lastName,
+          email,
+          phone: phone || null,
+          company: company || null,
+          status: "active",
+        });
+      }
+
+      // Check for duplicate enrollment
+      const existingEnrollments = await storage.getEnrollments(sessionId);
+      const alreadyEnrolled = existingEnrollments.some(e => e.traineeId === trainee!.id && e.status !== "cancelled");
+      if (alreadyEnrolled) {
+        return res.status(409).json({ message: "Vous êtes déjà inscrit(e) à cette session" });
+      }
+
+      // Create enrollment
+      const enrollment = await storage.createEnrollment({
+        sessionId,
+        traineeId: trainee.id,
+        status: "pending",
+      });
+
+      // Get program for response
+      const program = await storage.getProgram(session.programId);
+
+      res.status(201).json({
+        message: "Inscription enregistrée avec succès",
+        enrollment: {
+          id: enrollment.id,
+          status: enrollment.status,
+        },
+        session: {
+          title: session.title,
+          startDate: session.startDate,
+          endDate: session.endDate,
+          location: session.location,
+          modality: session.modality,
+        },
+        program: program ? { title: program.title } : null,
+      });
+    } catch (error) {
+      console.error("Public enrollment error:", error);
+      res.status(500).json({ message: "Erreur lors de l'inscription" });
+    }
+  });
+
+  // ============================================================
   // ROUTE PERMISSION MIDDLEWARE
   // Applied via app.use() to preserve Express type inference
   // ============================================================

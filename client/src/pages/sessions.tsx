@@ -56,6 +56,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Video,
+  Link2,
+  Check,
+  Copy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -735,7 +738,17 @@ export default function Sessions() {
   const [editSession, setEditSession] = useState<Session | undefined>();
   const [trombiSessionId, setTrombiSessionId] = useState<string | null>(null);
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const { toast } = useToast();
+
+  const publicEnrollmentUrl = `${window.location.origin}/inscription`;
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(publicEnrollmentUrl).then(() => {
+      setLinkCopied(true);
+      toast({ title: "Lien copié dans le presse-papiers" });
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
 
   const { data: sessions, isLoading } = useQuery<Session[]>({
     queryKey: ["/api/sessions"],
@@ -881,6 +894,18 @@ export default function Sessions() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" onClick={handleCopyLink} className="gap-2">
+                <Link2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Lien d'inscription</span>
+                {linkCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">{publicEnrollmentUrl}</p>
+            </TooltipContent>
+          </Tooltip>
           <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
             <Plus className="w-4 h-4 mr-2" />
             Nouvelle session

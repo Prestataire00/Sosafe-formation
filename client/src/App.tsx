@@ -38,6 +38,7 @@ import TrainerCompetencies from "@/pages/trainer-competencies";
 import SettingsPage from "@/pages/settings";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
+import PublicEnrollment from "@/pages/public-enrollment";
 
 function Router() {
   return (
@@ -137,9 +138,14 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <AuthProvider>
-            <AppShell />
-          </AuthProvider>
+          <Switch>
+            <Route path="/inscription" component={PublicEnrollment} />
+            <Route>
+              <AuthProvider>
+                <AppShell />
+              </AuthProvider>
+            </Route>
+          </Switch>
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>
