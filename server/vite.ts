@@ -8,6 +8,13 @@ import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
+// Suppress known PostCSS warning from tailwindcss v3 calling postcss.parse() without `from`
+const originalConsoleWarn = console.warn;
+console.warn = (...args: any[]) => {
+  if (typeof args[0] === "string" && args[0].includes("PostCSS plugin did not pass the `from` option")) return;
+  originalConsoleWarn.apply(console, args);
+};
+
 export async function setupVite(server: Server, app: Express) {
   const serverOptions = {
     middlewareMode: true,
