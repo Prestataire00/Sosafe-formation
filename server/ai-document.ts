@@ -6,6 +6,7 @@ interface AIAnalysisResult {
   extractedDate: string | null;
   confidence: "high" | "medium" | "low" | null;
   documentType: string | null;
+  isRelevantDocument: boolean;
   rawResponse: string;
   error?: string;
 }
@@ -20,6 +21,7 @@ export async function analyzeDocument(fileUrl: string): Promise<AIAnalysisResult
       extractedDate: null,
       confidence: null,
       documentType: null,
+      isRelevantDocument: false,
       rawResponse: "",
       error: "GEMINI_API_KEY non configurée",
     };
@@ -32,6 +34,7 @@ export async function analyzeDocument(fileUrl: string): Promise<AIAnalysisResult
       extractedDate: null,
       confidence: null,
       documentType: null,
+      isRelevantDocument: false,
       rawResponse: "",
       error: `Fichier non trouvé: ${fileUrl}`,
     };
@@ -57,19 +60,25 @@ export async function analyzeDocument(fileUrl: string): Promise<AIAnalysisResult
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const prompt = `Analyse ce document justificatif (attestation de formation, certificat, diplôme, etc.).
+    const prompt = `Analyse ce document et détermine s'il s'agit d'un justificatif de formation légitime (attestation de formation, certificat, diplôme, titre professionnel, etc.).
 
-Extrais les informations suivantes et réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks) :
+Réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks) :
 {
-  "documentType": "type du document (ex: attestation AFGSU, certificat, diplôme, etc.)",
+  "documentType": "type du document (ex: attestation AFGSU, certificat, diplôme, CV, lettre, facture, etc.)",
+  "isRelevantDocument": true/false,
   "extractedDate": "date du document au format YYYY-MM-DD (date d'obtention ou de délivrance). Si plusieurs dates, prends la date d'obtention ou de fin de formation. Si aucune date trouvée, mets null.",
   "confidence": "high si la date est clairement lisible, medium si partiellement lisible, low si incertaine",
-  "reasoning": "explication courte de comment tu as identifié la date"
+  "reasoning": "explication courte"
 }
+
+Règles CRITIQUES pour isRelevantDocument :
+- true UNIQUEMENT si le document est : un diplôme, une attestation de formation, un certificat, un titre professionnel, une attestation de réussite, un relevé de notes
+- false si le document est : un CV, une lettre de motivation, une facture, un devis, une carte d'identité, un bulletin de salaire, un contrat, ou tout document qui n'est PAS un justificatif de formation/diplôme
+- En cas de doute, mets false
 
 Important :
 - Réponds UNIQUEMENT avec le JSON, sans texte avant ou après
-- Si tu ne peux pas lire le document ou trouver de date, mets extractedDate à null et confidence à "low"
+- Si isRelevantDocument est false, mets extractedDate à null et confidence à "low"
 - Le format de date DOIT être YYYY-MM-DD`;
 
     const result = await model.generateContent([
@@ -97,6 +106,7 @@ Important :
         extractedDate: parsed.extractedDate || null,
         confidence: parsed.confidence || null,
         documentType: parsed.documentType || null,
+        isRelevantDocument: parsed.isRelevantDocument === true,
         rawResponse: responseText,
       };
     } catch {
@@ -104,6 +114,7 @@ Important :
         extractedDate: null,
         confidence: null,
         documentType: null,
+        isRelevantDocument: false,
         rawResponse: responseText,
         error: "Impossible de parser la réponse IA",
       };
@@ -114,6 +125,7 @@ Important :
       extractedDate: null,
       confidence: null,
       documentType: null,
+      isRelevantDocument: false,
       rawResponse: "",
       error: `Erreur Gemini: ${errorMessage}`,
     };
@@ -161,6 +173,20 @@ export async function processDocumentValidation(
 
     // Determine validation status based on extracted date and prerequisites
     let validationStatus: string = "pending";
+
+    // Reject non-relevant documents (CV, letters, invoices, etc.)
+    if (!result.isRelevantDocument) {
+      await storage.updateUserDocument(documentId, {
+        aiStatus: "completed",
+        status: "auto_invalid",
+        aiExtractedDate: result.extractedDate,
+        aiConfidence: result.confidence,
+        aiRawResponse: result.rawResponse,
+        aiAnalyzedAt: new Date(),
+        aiError: `Document non conforme : ${result.documentType || "type non reconnu"}. Un diplôme, attestation ou certificat de formation est requis.`,
+      });
+      return;
+    }
 
     if (result.extractedDate && sessionId) {
       try {
@@ -240,6 +266,43 @@ export async function processDocumentValidation(
       aiAnalyzedAt: new Date(),
       aiError: null,
     });
+
+    // Auto-create TraineeCertification if validated (Issue 4)
+    if (validationStatus === "auto_valid" && result.extractedDate && sessionId) {
+      try {
+        const sessionForCert = await storage.getSession(sessionId);
+        const programForCert = sessionForCert ? await storage.getProgram(sessionForCert.programId) : null;
+        if (programForCert) {
+          // Check for existing identical certification
+          const existingCerts = await storage.getTraineeCertifications(traineeId);
+          const alreadyExists = existingCerts.some(c =>
+            c.programId === programForCert.id && c.obtainedAt === result.extractedDate
+          );
+
+          if (!alreadyExists) {
+            let expiresAt: string | null = null;
+            if (programForCert.recyclingMonths) {
+              const expDate = new Date(result.extractedDate);
+              expDate.setMonth(expDate.getMonth() + programForCert.recyclingMonths);
+              expiresAt = expDate.toISOString().split("T")[0];
+            }
+
+            await storage.createTraineeCertification({
+              traineeId,
+              programId: programForCert.id,
+              type: result.documentType || "diplome",
+              label: `${result.documentType || "diplome"} - ${programForCert.title}`,
+              obtainedAt: result.extractedDate,
+              expiresAt,
+              status: "valid",
+              documentUrl: doc.fileUrl,
+            });
+          }
+        }
+      } catch (certErr) {
+        console.error(`Auto-certification creation failed for document ${documentId}:`, certErr);
+      }
+    }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Erreur inconnue";
     await storage.updateUserDocument(documentId, {

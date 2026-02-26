@@ -24,6 +24,7 @@ import {
   type AttendanceSheet, type InsertAttendanceSheet,
   type AttendanceRecord, type InsertAttendanceRecord,
   type AutomationRule, type InsertAutomationRule,
+  type AutomationLog, type InsertAutomationLog,
   type OrganizationSetting, type InsertOrganizationSetting,
   type EnterpriseContact, type InsertEnterpriseContact,
   type TrainerDocument, type InsertTrainerDocument,
@@ -41,7 +42,7 @@ import {
   elearningModules, elearningBlocks, quizQuestions, learnerProgress,
   surveyTemplates, surveyResponses, qualityActions,
   attendanceSheets, attendanceRecords,
-  automationRules, organizationSettings,
+  automationRules, automationLogs, organizationSettings,
   enterpriseContacts, trainerDocuments, trainerEvaluations,
   userDocuments, signatures, expenseNotes, trainerInvoices,
   trainerCompetencies, programPrerequisites, traineeCertifications,
@@ -216,6 +217,11 @@ export interface IStorage {
   createAutomationRule(rule: InsertAutomationRule): Promise<AutomationRule>;
   updateAutomationRule(id: string, rule: Partial<InsertAutomationRule>): Promise<AutomationRule | undefined>;
   deleteAutomationRule(id: string): Promise<void>;
+
+  // Automation Logs
+  getAutomationLogs(limit?: number): Promise<AutomationLog[]>;
+  createAutomationLog(log: InsertAutomationLog): Promise<AutomationLog>;
+  getAutomationRulesByEvent(event: string): Promise<AutomationRule[]>;
 
   // Organization Settings
   getOrganizationSettings(): Promise<OrganizationSetting[]>;
@@ -906,6 +912,22 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAutomationRule(id: string): Promise<void> {
     await db.delete(automationRules).where(eq(automationRules.id, id));
+  }
+
+  // ---- Automation Logs ----
+  async getAutomationLogs(limit = 100): Promise<AutomationLog[]> {
+    return db.select().from(automationLogs).orderBy(desc(automationLogs.executedAt)).limit(limit);
+  }
+
+  async createAutomationLog(log: InsertAutomationLog): Promise<AutomationLog> {
+    const [result] = await db.insert(automationLogs).values(log as any).returning();
+    return result;
+  }
+
+  async getAutomationRulesByEvent(event: string): Promise<AutomationRule[]> {
+    return db.select().from(automationRules).where(
+      and(eq(automationRules.event, event), eq(automationRules.active, true))
+    );
   }
 
   // ---- Organization Settings ----

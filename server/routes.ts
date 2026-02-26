@@ -6,6 +6,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole, requirePermission } from "./auth";
+import { triggerAutomation, triggerSessionAutomation, executeRuleManually } from "./automation-engine";
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
   insertSessionSchema, insertEnrollmentSchema, insertEnterpriseSchema,
@@ -212,6 +213,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Format d'email invalide" });
       }
 
+      // Validate RPPS format if provided (Issue 3)
+      if (rppsNumber && !/^\d{11}$/.test(rppsNumber)) {
+        return res.status(400).json({ message: "Le numéro RPPS doit contenir exactement 11 chiffres" });
+      }
+
       // Check session exists and is available
       const session = await storage.getSession(sessionId);
       if (!session) {
@@ -252,6 +258,48 @@ export async function registerRoutes(
         });
       }
 
+      // Validate prerequisites (Issue 1 — non-blocking warnings)
+      const program = await storage.getProgram(session.programId);
+      const prerequisites = program ? await storage.getProgramPrerequisites(program.id) : [];
+      const prerequisitesWarnings: string[] = [];
+
+      for (const prereq of prerequisites) {
+        if (prereq.requiresRpps && !trainee.rppsNumber && !rppsNumber) {
+          prerequisitesWarnings.push("Numéro RPPS requis mais non renseigné");
+        }
+        if (prereq.requiredProfessions && Array.isArray(prereq.requiredProfessions) && prereq.requiredProfessions.length > 0) {
+          const traineeProfession = trainee.profession || profession;
+          if (!traineeProfession || !(prereq.requiredProfessions as string[]).includes(traineeProfession)) {
+            prerequisitesWarnings.push(`Profession requise : ${(prereq.requiredProfessions as string[]).join(", ")}`);
+          }
+        }
+        if (prereq.requiresDiploma && (!documents || !Array.isArray(documents) || documents.length === 0)) {
+          prerequisitesWarnings.push("Un diplôme ou justificatif est requis mais aucun document n'a été fourni");
+        }
+        if (prereq.requiredProgramId || prereq.requiredCategory) {
+          const certifications = await storage.getTraineeCertifications(trainee.id);
+          const matchingCert = certifications.find(c => {
+            if (prereq.requiredProgramId && c.programId === prereq.requiredProgramId) return true;
+            if (prereq.requiredCategory && c.label && c.label.toLowerCase().includes((prereq.requiredCategory as string).toLowerCase())) return true;
+            return false;
+          });
+          if (!matchingCert) {
+            prerequisitesWarnings.push(
+              prereq.requiredCategory
+                ? `Certification requise dans la catégorie "${prereq.requiredCategory}" non trouvée`
+                : "Certification prérequise non trouvée"
+            );
+          } else if (prereq.maxMonthsSinceCompletion && matchingCert.obtainedAt) {
+            const obtainedDate = new Date(matchingCert.obtainedAt);
+            const expiryDate = new Date(obtainedDate);
+            expiryDate.setMonth(expiryDate.getMonth() + prereq.maxMonthsSinceCompletion);
+            if (new Date() > expiryDate) {
+              prerequisitesWarnings.push("La certification prérequise a expiré");
+            }
+          }
+        }
+      }
+
       // Check for duplicate enrollment
       const existingEnrollments = await storage.getEnrollments(sessionId);
       const alreadyEnrolled = existingEnrollments.some(e => e.traineeId === trainee!.id && e.status !== "cancelled");
@@ -267,6 +315,7 @@ export async function registerRoutes(
       });
 
       // Create user documents if provided
+      const documentIds: string[] = [];
       if (documents && Array.isArray(documents)) {
         for (const doc of documents) {
           if (doc.title && doc.fileUrl) {
@@ -282,6 +331,8 @@ export async function registerRoutes(
               uploadedBy: null,
             });
 
+            documentIds.push(userDoc.id);
+
             // Set linkedSessionId and trigger AI analysis (fire-and-forget)
             await storage.updateUserDocument(userDoc.id, { linkedSessionId: sessionId });
             import("./ai-document").then(m => m.processDocumentValidation(userDoc.id, trainee.id, sessionId)).catch((err) => {
@@ -290,9 +341,6 @@ export async function registerRoutes(
           }
         }
       }
-
-      // Get program for response
-      const program = await storage.getProgram(session.programId);
 
       res.status(201).json({
         message: "Inscription enregistrée avec succès",
@@ -308,7 +356,17 @@ export async function registerRoutes(
           modality: session.modality,
         },
         program: program ? { title: program.title } : null,
+        documentIds,
+        prerequisitesWarnings,
       });
+
+      // Fire-and-forget: trigger cascade automations for new enrollment
+      triggerAutomation("enrollment_created", {
+        enrollmentId: enrollment.id,
+        sessionId,
+        traineeId: trainee.id,
+        programId: session.programId,
+      }).catch(err => console.error("[automation] enrollment_created trigger error:", err));
     } catch (error) {
       console.error("Public enrollment error:", error);
       res.status(500).json({ message: "Erreur lors de l'inscription" });
@@ -389,6 +447,26 @@ export async function registerRoutes(
     req.pipe(busboy);
   });
 
+  // GET /api/public/documents/:id/status — public document AI status (Issue 2)
+  app.get("/api/public/documents/:id/status", async (req, res) => {
+    try {
+      const doc = await storage.getUserDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: "Document non trouvé" });
+      }
+      res.json({
+        id: doc.id,
+        status: doc.status,
+        aiStatus: doc.aiStatus,
+        aiExtractedDate: doc.aiExtractedDate,
+        aiConfidence: doc.aiConfidence,
+        aiError: doc.aiError,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors de la récupération du statut" });
+    }
+  });
+
   // ============================================================
   // ROUTE PERMISSION MIDDLEWARE
   // Applied via app.use() to preserve Express type inference
@@ -449,6 +527,7 @@ export async function registerRoutes(
   app.use("/api/attendance-sheets", requireAuth, requirePermission("manage_attendance"));
   app.use("/api/attendance-records", requireAuth, requirePermission("manage_attendance"));
   app.use("/api/automation-rules", requireAuth, requirePermission("manage_automation"));
+  app.use("/api/automation-logs", requireAuth, requirePermission("manage_automation"));
   app.use("/api/settings", requireAuth, requirePermission("manage_settings"));
   app.use("/api/users", requireAuth, requirePermission("manage_users"));
   app.use("/api/program-prerequisites", requireAuth, requirePermission("manage_programs"));
@@ -838,6 +917,19 @@ export async function registerRoutes(
     const session = await storage.updateSession(req.params.id, parsed.data);
     if (!session) return res.status(404).json({ message: "Session non trouvée" });
     res.json(session);
+
+    // Fire-and-forget: trigger cascade automations on session status change
+    if (parsed.data.status) {
+      const sessionEventMap: Record<string, string> = {
+        ongoing: "session_starting",
+        completed: "session_completed",
+      };
+      const event = sessionEventMap[parsed.data.status];
+      if (event) {
+        triggerSessionAutomation(event, session.id)
+          .catch(err => console.error(`[automation] ${event} trigger error:`, err));
+      }
+    }
   });
 
   app.delete("/api/sessions/:id", async (req, res) => {
@@ -905,6 +997,15 @@ export async function registerRoutes(
 
     const enrollment = await storage.createEnrollment(parsed.data);
     res.status(201).json({ ...enrollment, _warnings });
+
+    // Fire-and-forget: trigger cascade automations
+    const _session = await storage.getSession(parsed.data.sessionId);
+    triggerAutomation("enrollment_created", {
+      enrollmentId: enrollment.id,
+      sessionId: parsed.data.sessionId,
+      traineeId: parsed.data.traineeId,
+      programId: _session?.programId,
+    }).catch(err => console.error("[automation] enrollment_created trigger error:", err));
   });
 
   app.patch("/api/enrollments/:id", async (req, res) => {
@@ -959,6 +1060,25 @@ export async function registerRoutes(
     }
 
     res.json(enrollment);
+
+    // Fire-and-forget: trigger cascade automations on status change
+    if (parsed.data.status) {
+      const statusEventMap: Record<string, string> = {
+        confirmed: "enrollment_confirmed",
+        completed: "enrollment_completed",
+        cancelled: "enrollment_cancelled",
+      };
+      const event = statusEventMap[parsed.data.status];
+      if (event) {
+        const _session = await storage.getSession(enrollment.sessionId);
+        triggerAutomation(event, {
+          enrollmentId: enrollment.id,
+          sessionId: enrollment.sessionId,
+          traineeId: enrollment.traineeId,
+          programId: _session?.programId,
+        }).catch(err => console.error(`[automation] ${event} trigger error:`, err));
+      }
+    }
   });
 
   app.delete("/api/enrollments/:id", async (req, res) => {
@@ -1703,6 +1823,40 @@ export async function registerRoutes(
   app.delete("/api/automation-rules/:id", async (req, res) => {
     await storage.deleteAutomationRule(req.params.id);
     res.status(204).send();
+  });
+
+  // POST /api/automation-rules/:id/execute — manually trigger an automation rule
+  app.post("/api/automation-rules/:id/execute", async (req, res) => {
+    const { sessionId, traineeId, enrollmentId } = req.body;
+    if (!sessionId && !traineeId) {
+      return res.status(400).json({ message: "sessionId ou traineeId requis" });
+    }
+
+    let programId: string | undefined;
+    if (sessionId) {
+      const session = await storage.getSession(sessionId);
+      programId = session?.programId;
+    }
+
+    const result = await executeRuleManually(req.params.id, {
+      sessionId,
+      traineeId,
+      enrollmentId,
+      programId,
+    });
+
+    if (result.success) {
+      res.json({ message: result.message });
+    } else {
+      res.status(400).json({ message: result.message });
+    }
+  });
+
+  // GET /api/automation-logs — view execution history
+  app.get("/api/automation-logs", async (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const logs = await storage.getAutomationLogs(limit);
+    res.json(logs);
   });
 
   // ============================================================

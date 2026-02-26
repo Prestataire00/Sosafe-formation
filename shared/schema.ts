@@ -432,6 +432,19 @@ export const automationRules = pgTable("automation_rules", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const automationLogs = pgTable("automation_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleId: varchar("rule_id").notNull(),
+  event: text("event").notNull(),
+  action: text("action").notNull(),
+  status: text("status").notNull().default("success"),
+  targetType: text("target_type"),
+  targetId: varchar("target_id"),
+  details: jsonb("details").$type<Record<string, unknown>>().default({}),
+  error: text("error"),
+  executedAt: timestamp("executed_at").defaultNow(),
+});
+
 export const organizationSettings = pgTable("organization_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   key: text("key").notNull().unique(),
@@ -607,6 +620,7 @@ export const insertQualityActionSchema = createInsertSchema(qualityActions).omit
 export const insertAttendanceSheetSchema = createInsertSchema(attendanceSheets).omit({ id: true, createdAt: true });
 export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords).omit({ id: true });
 export const insertAutomationRuleSchema = createInsertSchema(automationRules).omit({ id: true, createdAt: true });
+export const insertAutomationLogSchema = createInsertSchema(automationLogs).omit({ id: true, executedAt: true });
 export const insertOrganizationSettingSchema = createInsertSchema(organizationSettings).omit({ id: true, updatedAt: true });
 export const insertEnterpriseContactSchema = createInsertSchema(enterpriseContacts).omit({ id: true, createdAt: true });
 export const insertTrainerDocumentSchema = createInsertSchema(trainerDocuments).omit({ id: true, uploadedAt: true });
@@ -694,6 +708,8 @@ export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;
 export type AutomationRule = typeof automationRules.$inferSelect;
+export type InsertAutomationLog = z.infer<typeof insertAutomationLogSchema>;
+export type AutomationLog = typeof automationLogs.$inferSelect;
 export type InsertOrganizationSetting = z.infer<typeof insertOrganizationSettingSchema>;
 export type OrganizationSetting = typeof organizationSettings.$inferSelect;
 export type InsertEnterpriseContact = z.infer<typeof insertEnterpriseContactSchema>;
@@ -889,6 +905,9 @@ export const ELEARNING_BLOCK_TYPES = [
 
 export const AUTOMATION_EVENTS = [
   { value: "enrollment_created", label: "Nouvelle inscription" },
+  { value: "enrollment_confirmed", label: "Inscription confirmée" },
+  { value: "enrollment_completed", label: "Formation terminée" },
+  { value: "enrollment_cancelled", label: "Inscription annulée" },
   { value: "session_starting", label: "Début de session" },
   { value: "session_completed", label: "Fin de session" },
   { value: "invoice_created", label: "Facture créée" },
@@ -900,6 +919,7 @@ export const AUTOMATION_ACTIONS = [
   { value: "send_email", label: "Envoyer un email" },
   { value: "generate_document", label: "Générer un document" },
   { value: "create_attendance", label: "Créer une feuille d'émargement" },
+  { value: "send_survey", label: "Envoyer une enquête de satisfaction" },
 ] as const;
 
 // Enterprise constants

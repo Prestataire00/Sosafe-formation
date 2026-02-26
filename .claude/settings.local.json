@@ -70,7 +70,9 @@
       "WebFetch(domain:www.lonasante.com)",
       "WebFetch(domain:www.anfh.fr)",
       "WebFetch(domain:www.cesu04.fr)",
-      "WebFetch(domain:centre-formation-garibaldi.fr)"
+      "WebFetch(domain:centre-formation-garibaldi.fr)",
+      "Bash(npm run:*)",
+      "Bash(find:*)"
     ]
   }
 }

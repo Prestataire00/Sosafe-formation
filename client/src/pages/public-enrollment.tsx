@@ -86,6 +86,8 @@ export default function PublicEnrollment() {
   });
   const [knownTrainee, setKnownTrainee] = useState<string | null>(null);
   const [confirmationData, setConfirmationData] = useState<any>(null);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [prerequisitesWarnings, setPrerequisitesWarnings] = useState<string[]>([]);
   const [uploadedDocs, setUploadedDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
   const [uploading, setUploading] = useState(false);
   // Prerequisite verification state
@@ -148,11 +150,45 @@ export default function PublicEnrollment() {
     },
   });
 
+  // Poll document AI analysis status (Issue 2)
+  type DocStatus = {
+    id: string;
+    status: string;
+    aiStatus: string;
+    aiExtractedDate: string | null;
+    aiConfidence: string | null;
+    aiError: string | null;
+  };
+
+  const { data: docStatuses } = useQuery<DocStatus[]>({
+    queryKey: ["document-statuses", documentIds],
+    queryFn: async () => {
+      const results = await Promise.all(
+        documentIds.map(async (id) => {
+          const res = await fetch(`/api/public/documents/${id}/status`);
+          return res.json();
+        })
+      );
+      return results;
+    },
+    enabled: documentIds.length > 0 && step === "confirmation",
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 3000;
+      const allDone = data.every(
+        (d: DocStatus) => d.aiStatus === "completed" || d.aiStatus === "failed"
+      );
+      return allDone ? false : 3000;
+    },
+  });
+
   const enrollMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/public/enrollments", data),
     onSuccess: async (res) => {
       const result = await res.json();
       setConfirmationData(result);
+      if (result.documentIds) setDocumentIds(result.documentIds);
+      if (result.prerequisitesWarnings) setPrerequisitesWarnings(result.prerequisitesWarnings);
       setStep("confirmation");
     },
     onError: async (error: any) => {
@@ -318,6 +354,8 @@ export default function PublicEnrollment() {
     setDiplomaDocs([]);
     setRecyclingEmail("");
     setRecyclingResult(null);
+    setDocumentIds([]);
+    setPrerequisitesWarnings([]);
   };
 
   const filteredSessions = sessions?.filter((s) => {
@@ -1086,6 +1124,80 @@ export default function PublicEnrollment() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Prerequisites warnings (Issue 2) */}
+              {prerequisitesWarnings.length > 0 && (
+                <Card className="text-left mb-8">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-sm text-amber-900 dark:text-amber-100">
+                          Avertissements sur les prérequis
+                        </p>
+                        {prerequisitesWarnings.map((w, i) => (
+                          <p key={i} className="text-sm text-amber-700 dark:text-amber-300">
+                            {w}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Document AI analysis status (Issue 2) */}
+              {docStatuses && docStatuses.length > 0 && (
+                <Card className="text-left mb-8">
+                  <CardContent className="p-6">
+                    <h3 className="font-semibold text-sm mb-3">Analyse de vos documents</h3>
+                    <div className="space-y-3">
+                      {docStatuses.map((doc) => (
+                        <div key={doc.id} className="flex items-center gap-3 text-sm">
+                          {(doc.aiStatus === "processing" || doc.aiStatus === "pending") && (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-blue-500 shrink-0" />
+                              <span className="text-muted-foreground">Analyse en cours...</span>
+                            </>
+                          )}
+                          {doc.aiStatus === "completed" && doc.status === "auto_valid" && (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                              <span className="text-green-700 dark:text-green-300">
+                                Document validé
+                                {doc.aiExtractedDate && ` — date extraite : ${formatDate(doc.aiExtractedDate)}`}
+                              </span>
+                            </>
+                          )}
+                          {doc.aiStatus === "completed" && doc.status === "auto_invalid" && (
+                            <>
+                              <X className="w-4 h-4 text-red-600 shrink-0" />
+                              <span className="text-red-700 dark:text-red-300">
+                                {doc.aiError || "Document non conforme"}
+                                {!doc.aiError && doc.aiExtractedDate && ` — date extraite : ${formatDate(doc.aiExtractedDate)}`}
+                              </span>
+                            </>
+                          )}
+                          {doc.aiStatus === "completed" && doc.status !== "auto_valid" && doc.status !== "auto_invalid" && (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
+                              <span className="text-muted-foreground">Analyse terminée — vérification manuelle requise</span>
+                            </>
+                          )}
+                          {doc.aiStatus === "failed" && (
+                            <>
+                              <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0" />
+                              <span className="text-orange-700 dark:text-orange-300">
+                                Vérification manuelle requise
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Button onClick={handleNewEnrollment} variant="outline">
                 S'inscrire à une autre session
