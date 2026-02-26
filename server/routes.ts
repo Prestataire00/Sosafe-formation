@@ -81,6 +81,8 @@ export async function registerRoutes(
             price: program.price,
             categories: program.categories,
             fundingTypes: program.fundingTypes,
+            certifying: program.certifying,
+            recyclingMonths: program.recyclingMonths,
           } : null,
           prerequisites: prerequisites.map(p => ({
             id: p.id,
@@ -120,6 +122,78 @@ export async function registerRoutes(
       });
     } else {
       res.json({ exists: false });
+    }
+  });
+
+  // GET /api/public/check-recycling — check certification validity for a trainee/program
+  app.get("/api/public/check-recycling", async (req, res) => {
+    try {
+      const email = req.query.email as string;
+      const programId = req.query.programId as string;
+      if (!email || !programId) {
+        return res.status(400).json({ message: "Email et programId requis" });
+      }
+
+      const trainee = await storage.getTraineeByEmail(email);
+      if (!trainee) {
+        return res.json({ found: false });
+      }
+
+      const program = await storage.getProgram(programId);
+      if (!program) {
+        return res.json({ found: false });
+      }
+
+      // Get certifications for this trainee
+      const certifications = await storage.getTraineeCertifications(trainee.id);
+
+      // Find certifications matching this program or its category
+      const matchingCerts = certifications.filter(c =>
+        c.programId === programId ||
+        (program.categories && c.label && (program.categories as string[]).some(cat =>
+          c.label.toLowerCase().includes(cat.toLowerCase())
+        ))
+      );
+
+      if (matchingCerts.length === 0) {
+        return res.json({ found: false });
+      }
+
+      // Get the most recent certification
+      const latestCert = matchingCerts.sort((a, b) =>
+        new Date(b.obtainedAt).getTime() - new Date(a.obtainedAt).getTime()
+      )[0];
+
+      const obtainedDate = new Date(latestCert.obtainedAt);
+      const now = new Date();
+      const recyclingMonths = program.recyclingMonths || 48;
+
+      // Month-to-month calculation: add recyclingMonths to obtainedDate
+      const expiryDate = new Date(obtainedDate);
+      expiryDate.setMonth(expiryDate.getMonth() + recyclingMonths);
+
+      const isValid = now < expiryDate;
+
+      // Calculate remaining months
+      const remainingMs = expiryDate.getTime() - now.getTime();
+      const remainingMonths = Math.floor(remainingMs / (1000 * 60 * 60 * 24 * 30.44));
+
+      res.json({
+        found: true,
+        certification: {
+          id: latestCert.id,
+          label: latestCert.label,
+          obtainedAt: latestCert.obtainedAt,
+          expiresAt: expiryDate.toISOString().split("T")[0],
+          status: latestCert.status,
+          isValid,
+          remainingMonths: isValid ? remainingMonths : 0,
+          recyclingMonths,
+        },
+      });
+    } catch (error) {
+      console.error("Check recycling error:", error);
+      res.status(500).json({ message: "Erreur lors de la vérification" });
     }
   });
 

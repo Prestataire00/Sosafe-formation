@@ -11,7 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
   ArrowLeft, CheckCircle2, Clock, Euro, Monitor, Building2,
-  Upload, FileText, X, Loader2, ShieldCheck, AlertTriangle,
+  Upload, FileText, X, Loader2, ShieldCheck, AlertTriangle, RefreshCw,
 } from "lucide-react";
 
 type Prerequisite = {
@@ -42,6 +42,8 @@ type PublicSession = {
     price: number;
     categories: string[] | null;
     fundingTypes: string[] | null;
+    certifying: boolean | null;
+    recyclingMonths: number | null;
   } | null;
   prerequisites: Prerequisite[];
 };
@@ -91,6 +93,19 @@ export default function PublicEnrollment() {
   const [rppsNumber, setRppsNumber] = useState("");
   const [diplomaDocs, setDiplomaDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
   const [diplomaUploading, setDiplomaUploading] = useState(false);
+  // Recycling check state
+  const [recyclingEmail, setRecyclingEmail] = useState("");
+  const [recyclingResult, setRecyclingResult] = useState<{
+    found: boolean;
+    certification?: {
+      label: string;
+      obtainedAt: string;
+      expiresAt: string;
+      isValid: boolean;
+      remainingMonths: number;
+      recyclingMonths: number;
+    };
+  } | null>(null);
   const { toast } = useToast();
 
   const { data: sessions, isLoading } = useQuery<PublicSession[]>({
@@ -118,6 +133,18 @@ export default function PublicEnrollment() {
       } else {
         setKnownTrainee(null);
       }
+    },
+  });
+
+  const checkRecyclingMutation = useMutation({
+    mutationFn: async ({ email, programId }: { email: string; programId: string }) => {
+      const res = await fetch(
+        `/api/public/check-recycling?email=${encodeURIComponent(email)}&programId=${encodeURIComponent(programId)}`
+      );
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setRecyclingResult(data);
     },
   });
 
@@ -265,6 +292,8 @@ export default function PublicEnrollment() {
     setVerificationMode(null);
     setRppsNumber("");
     setDiplomaDocs([]);
+    setRecyclingEmail("");
+    setRecyclingResult(null);
   };
 
   const handleBackToSessions = () => {
@@ -273,6 +302,8 @@ export default function PublicEnrollment() {
     setVerificationMode(null);
     setRppsNumber("");
     setDiplomaDocs([]);
+    setRecyclingEmail("");
+    setRecyclingResult(null);
   };
 
   const handleNewEnrollment = () => {
@@ -285,6 +316,8 @@ export default function PublicEnrollment() {
     setVerificationMode(null);
     setRppsNumber("");
     setDiplomaDocs([]);
+    setRecyclingEmail("");
+    setRecyclingResult(null);
   };
 
   const filteredSessions = sessions?.filter((s) => {
@@ -396,15 +429,19 @@ export default function PublicEnrollment() {
                         </h3>
                       </div>
 
-                      {session.program?.categories && session.program.categories.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {(session.program.categories as string[]).map((cat) => (
-                            <Badge key={cat} variant="secondary" className="text-xs">
-                              {cat}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {session.program?.categories && (session.program.categories as string[]).map((cat) => (
+                          <Badge key={cat} variant="secondary" className="text-xs">
+                            {cat}
+                          </Badge>
+                        ))}
+                        {session.program?.recyclingMonths && (
+                          <Badge variant="outline" className="text-xs">
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                            Recyclage {session.program.recyclingMonths / 12} ans
+                          </Badge>
+                        )}
+                      </div>
 
                       <div className="space-y-2 text-sm text-muted-foreground">
                         <div className="flex items-center gap-2">
@@ -509,6 +546,111 @@ export default function PublicEnrollment() {
                     </div>
                   </div>
                 </div>
+
+                {/* Recycling validation check */}
+                {selectedSession.program?.recyclingMonths && (
+                  <div className="space-y-3 rounded-lg border p-4">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 text-primary" />
+                      <p className="font-medium text-sm">
+                        Vérification de recyclage ({selectedSession.program.recyclingMonths / 12} ans)
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Saisissez votre email pour vérifier si vous disposez d'une attestation encore valide.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="votre@email.com"
+                        type="email"
+                        value={recyclingEmail}
+                        onChange={(e) => {
+                          setRecyclingEmail(e.target.value);
+                          setRecyclingResult(null);
+                        }}
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (!recyclingEmail.trim() || !selectedSession.program) return;
+                          checkRecyclingMutation.mutate({
+                            email: recyclingEmail.trim(),
+                            programId: selectedSession.program.id,
+                          });
+                        }}
+                        disabled={
+                          !recyclingEmail.trim() ||
+                          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recyclingEmail) ||
+                          checkRecyclingMutation.isPending
+                        }
+                      >
+                        {checkRecyclingMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          "Vérifier"
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Recycling result */}
+                    {recyclingResult && (
+                      <>
+                        {recyclingResult.found && recyclingResult.certification ? (
+                          recyclingResult.certification.isValid ? (
+                            <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30 p-3">
+                              <div className="flex items-start gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+                                <div className="text-sm">
+                                  <p className="font-medium text-green-900 dark:text-green-100">
+                                    Attestation valide
+                                  </p>
+                                  <p className="text-green-700 dark:text-green-300">
+                                    <strong>{recyclingResult.certification.label}</strong> obtenue le{" "}
+                                    {formatDate(recyclingResult.certification.obtainedAt)}
+                                  </p>
+                                  <p className="text-green-700 dark:text-green-300">
+                                    Valide jusqu'au{" "}
+                                    <strong>{formatDate(recyclingResult.certification.expiresAt)}</strong>
+                                    {" "}({recyclingResult.certification.remainingMonths} mois restant{recyclingResult.certification.remainingMonths > 1 ? "s" : ""})
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30 p-3">
+                              <div className="flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                                <div className="text-sm">
+                                  <p className="font-medium text-red-900 dark:text-red-100">
+                                    Attestation expirée — recyclage nécessaire
+                                  </p>
+                                  <p className="text-red-700 dark:text-red-300">
+                                    <strong>{recyclingResult.certification.label}</strong> obtenue le{" "}
+                                    {formatDate(recyclingResult.certification.obtainedAt)}
+                                  </p>
+                                  <p className="text-red-700 dark:text-red-300">
+                                    Expirée depuis le{" "}
+                                    <strong>{formatDate(recyclingResult.certification.expiresAt)}</strong>
+                                    {" "}(validité : {recyclingResult.certification.recyclingMonths} mois, de mois à mois)
+                                  </p>
+                                  <p className="text-red-700 dark:text-red-300 mt-1">
+                                    Vous devez suivre une formation de recyclage pour renouveler votre attestation.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                            Aucune attestation trouvée pour cet email. Si c'est votre première formation,
+                            poursuivez l'inscription ci-dessous.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <p className="text-sm text-muted-foreground">
                   Choisissez l'une des méthodes suivantes pour valider vos prérequis :

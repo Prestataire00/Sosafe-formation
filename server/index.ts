@@ -2,10 +2,32 @@ import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import fs from "fs";
+import { execSync } from "child_process";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
+
+// Kill any existing process on the target port before starting
+function freePort(port: number) {
+  try {
+    const result = execSync(
+      `lsof -ti:${port} 2>/dev/null || grep -l "0100007F:$(printf '%04X' ${port})\\|00000000:$(printf '%04X' ${port})" /proc/*/net/tcp /proc/*/net/tcp6 2>/dev/null | grep -oP '/proc/\\K[0-9]+' | sort -u`,
+      { encoding: "utf-8" },
+    ).trim();
+    if (result) {
+      for (const pid of result.split("\n").filter(Boolean)) {
+        if (pid !== String(process.pid)) {
+          try { process.kill(Number(pid), "SIGTERM"); } catch {}
+        }
+      }
+      // Give processes time to exit
+      execSync("sleep 1");
+    }
+  } catch {}
+}
+
+freePort(parseInt(process.env.PORT || "5000", 10));
 
 const app = express();
 const httpServer = createServer(app);

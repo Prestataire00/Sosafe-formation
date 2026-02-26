@@ -167,6 +167,7 @@ export async function processDocumentValidation(
         // Get the session to find its program
         const session = await storage.getSession(sessionId);
         if (session) {
+          const program = await storage.getProgram(session.programId);
           const prerequisites = await storage.getProgramPrerequisites(session.programId);
 
           if (prerequisites.length > 0) {
@@ -185,26 +186,36 @@ export async function processDocumentValidation(
                   .map(p => p.maxMonthsSinceCompletion!)
               );
 
+              // Month-to-month: add maxMonths to the extracted date
               const expirationDate = new Date(extractedDate);
               expirationDate.setMonth(expirationDate.getMonth() + maxMonths);
 
               validationStatus = expirationDate > now ? "auto_valid" : "auto_invalid";
             } else if (hasMinConstraint) {
-              // Diploma must have been obtained at least X months ago
+              // Diploma must have been obtained at least X months ago (month-to-month)
               const minMonths = Math.max(
                 ...prerequisites
                   .filter(p => p.minMonthsSinceCompletion)
                   .map(p => p.minMonthsSinceCompletion!)
               );
 
-              const monthsSinceObtained = (now.getFullYear() - extractedDate.getFullYear()) * 12
-                + (now.getMonth() - extractedDate.getMonth());
+              // Month-to-month: add minMonths to extracted date, compare to now
+              const minDate = new Date(extractedDate);
+              minDate.setMonth(minDate.getMonth() + minMonths);
 
-              validationStatus = monthsSinceObtained >= minMonths ? "auto_valid" : "auto_invalid";
+              validationStatus = now >= minDate ? "auto_valid" : "auto_invalid";
             } else {
               // No time constraint, just having a date is enough
               validationStatus = "auto_valid";
             }
+          } else if (program && program.recyclingMonths) {
+            // No prerequisites but program has a recycling period — validate against it
+            const extractedDate = new Date(result.extractedDate);
+            const now = new Date();
+            const expiryDate = new Date(extractedDate);
+            expiryDate.setMonth(expiryDate.getMonth() + program.recyclingMonths);
+
+            validationStatus = expiryDate > now ? "auto_valid" : "auto_invalid";
           } else {
             // No prerequisites defined, date extracted successfully
             validationStatus = result.extractedDate ? "auto_valid" : "pending";
