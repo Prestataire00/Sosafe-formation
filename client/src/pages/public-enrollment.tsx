@@ -11,8 +11,18 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
   ArrowLeft, CheckCircle2, Clock, Euro, Monitor, Building2,
-  Upload, FileText, X, Loader2,
+  Upload, FileText, X, Loader2, ShieldCheck, AlertTriangle,
 } from "lucide-react";
+
+type Prerequisite = {
+  id: string;
+  requiresRpps: boolean | null;
+  requiresDiploma: boolean | null;
+  maxMonthsSinceCompletion: number | null;
+  minMonthsSinceCompletion: number | null;
+  requiredProfessions: string[] | null;
+  description: string | null;
+};
 
 type PublicSession = {
   id: string;
@@ -33,9 +43,10 @@ type PublicSession = {
     categories: string[] | null;
     fundingTypes: string[] | null;
   } | null;
+  prerequisites: Prerequisite[];
 };
 
-type Step = "sessions" | "form" | "confirmation";
+type Step = "sessions" | "prerequisites" | "form" | "confirmation";
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("fr-FR", {
@@ -75,6 +86,11 @@ export default function PublicEnrollment() {
   const [confirmationData, setConfirmationData] = useState<any>(null);
   const [uploadedDocs, setUploadedDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
   const [uploading, setUploading] = useState(false);
+  // Prerequisite verification state
+  const [verificationMode, setVerificationMode] = useState<"rpps" | "diploma" | null>(null);
+  const [rppsNumber, setRppsNumber] = useState("");
+  const [diplomaDocs, setDiplomaDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
+  const [diplomaUploading, setDiplomaUploading] = useState(false);
   const { toast } = useToast();
 
   const { data: sessions, isLoading } = useQuery<PublicSession[]>({
@@ -96,6 +112,9 @@ export default function PublicEnrollment() {
           company: data.trainee.company || prev.company,
         }));
         setKnownTrainee(data.trainee.firstName);
+        if (data.trainee.rppsNumber) {
+          setRppsNumber(data.trainee.rppsNumber);
+        }
       } else {
         setKnownTrainee(null);
       }
@@ -118,9 +137,16 @@ export default function PublicEnrollment() {
     },
   });
 
+  const hasPrerequisites = (session: PublicSession) =>
+    session.prerequisites && session.prerequisites.length > 0;
+
   const handleSelectSession = (session: PublicSession) => {
     setSelectedSession(session);
-    setStep("form");
+    if (hasPrerequisites(session)) {
+      setStep("prerequisites");
+    } else {
+      setStep("form");
+    }
   };
 
   const handleEmailBlur = () => {
@@ -166,9 +192,54 @@ export default function PublicEnrollment() {
     setUploadedDocs((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleDiplomaUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setDiplomaUploading(true);
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: `${file.name} dépasse la taille maximale de 10 Mo`, variant: "destructive" });
+        continue;
+      }
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const res = await fetch("/api/public/upload", { method: "POST", body: fd });
+        if (!res.ok) {
+          const err = await res.json();
+          toast({ title: err.message || `Erreur lors de l'upload de ${file.name}`, variant: "destructive" });
+          continue;
+        }
+        const data = await res.json();
+        setDiplomaDocs((prev) => [...prev, {
+          title: file.name,
+          fileUrl: data.fileUrl,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          mimeType: data.mimeType,
+        }]);
+      } catch {
+        toast({ title: `Erreur lors de l'upload de ${file.name}`, variant: "destructive" });
+      }
+    }
+    setDiplomaUploading(false);
+  };
+
+  const handlePrerequisitesContinue = () => {
+    if (verificationMode === "rpps" && !rppsNumber.trim()) {
+      toast({ title: "Veuillez saisir votre numéro RPPS", variant: "destructive" });
+      return;
+    }
+    if (verificationMode === "diploma" && diplomaDocs.length === 0) {
+      toast({ title: "Veuillez télécharger votre diplôme", variant: "destructive" });
+      return;
+    }
+    setStep("form");
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSession) return;
+    const allDocs = [...uploadedDocs, ...diplomaDocs];
     enrollMutation.mutate({
       sessionId: selectedSession.id,
       firstName: formData.firstName.trim(),
@@ -176,16 +247,32 @@ export default function PublicEnrollment() {
       email: formData.email.trim(),
       phone: formData.phone.trim() || undefined,
       company: formData.company.trim() || undefined,
-      documents: uploadedDocs.length > 0 ? uploadedDocs : undefined,
+      rppsNumber: rppsNumber.trim() || undefined,
+      documents: allDocs.length > 0 ? allDocs : undefined,
     });
   };
 
   const handleBack = () => {
+    if (step === "form" && selectedSession && hasPrerequisites(selectedSession)) {
+      setStep("prerequisites");
+      return;
+    }
     setStep("sessions");
     setSelectedSession(null);
     setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "" });
     setKnownTrainee(null);
     setUploadedDocs([]);
+    setVerificationMode(null);
+    setRppsNumber("");
+    setDiplomaDocs([]);
+  };
+
+  const handleBackToSessions = () => {
+    setStep("sessions");
+    setSelectedSession(null);
+    setVerificationMode(null);
+    setRppsNumber("");
+    setDiplomaDocs([]);
   };
 
   const handleNewEnrollment = () => {
@@ -195,6 +282,9 @@ export default function PublicEnrollment() {
     setKnownTrainee(null);
     setConfirmationData(null);
     setUploadedDocs([]);
+    setVerificationMode(null);
+    setRppsNumber("");
+    setDiplomaDocs([]);
   };
 
   const filteredSessions = sessions?.filter((s) => {
@@ -226,37 +316,43 @@ export default function PublicEnrollment() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-8">
-          {[
-            { key: "sessions", label: "Choix de la session", num: 1 },
-            { key: "form", label: "Vos informations", num: 2 },
-            { key: "confirmation", label: "Confirmation", num: 3 },
-          ].map((s, i) => (
-            <div key={s.key} className="flex items-center gap-2">
-              {i > 0 && <div className="w-8 h-px bg-border" />}
-              <div
-                className={`flex items-center gap-2 text-sm ${
-                  step === s.key
-                    ? "text-primary font-semibold"
-                    : step === "confirmation" && s.key !== "confirmation"
-                    ? "text-green-600"
-                    : "text-muted-foreground"
-                }`}
-              >
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+          {(() => {
+            const showPrereq = selectedSession && hasPrerequisites(selectedSession);
+            const steps = [
+              { key: "sessions", label: "Choix de la session", num: 1 },
+              ...(showPrereq ? [{ key: "prerequisites", label: "Vérification des prérequis", num: 2 }] : []),
+              { key: "form", label: "Vos informations", num: showPrereq ? 3 : 2 },
+              { key: "confirmation", label: "Confirmation", num: showPrereq ? 4 : 3 },
+            ];
+            const currentIndex = steps.findIndex((s) => s.key === step);
+            return steps.map((s, i) => (
+              <div key={s.key} className="flex items-center gap-2">
+                {i > 0 && <div className="w-8 h-px bg-border" />}
+                <div
+                  className={`flex items-center gap-2 text-sm ${
                     step === s.key
-                      ? "bg-primary text-primary-foreground"
-                      : step === "confirmation" && s.key !== "confirmation"
-                      ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                      : "bg-muted text-muted-foreground"
+                      ? "text-primary font-semibold"
+                      : i < currentIndex
+                      ? "text-green-600"
+                      : "text-muted-foreground"
                   }`}
                 >
-                  {step === "confirmation" && s.key !== "confirmation" ? "✓" : s.num}
-                </span>
-                <span className="hidden sm:inline">{s.label}</span>
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      step === s.key
+                        ? "bg-primary text-primary-foreground"
+                        : i < currentIndex
+                        ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {i < currentIndex ? "✓" : s.num}
+                  </span>
+                  <span className="hidden sm:inline">{s.label}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            ));
+          })()}
         </div>
 
         {/* STEP 1: Session selection */}
@@ -375,7 +471,218 @@ export default function PublicEnrollment() {
           </>
         )}
 
-        {/* STEP 2: Enrollment form */}
+        {/* STEP: Prerequisite verification */}
+        {step === "prerequisites" && selectedSession && (
+          <div className="max-w-2xl mx-auto">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" onClick={handleBackToSessions}>
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5" />
+                    Vérification des prérequis
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Info about prerequisites */}
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+                        Cette formation nécessite la vérification de prérequis
+                      </p>
+                      {selectedSession.prerequisites.map((p) => (
+                        <p key={p.id} className="text-amber-700 dark:text-amber-300">
+                          {p.description || (
+                            p.requiresRpps
+                              ? "Numéro RPPS valide ou diplôme IDE requis"
+                              : p.maxMonthsSinceCompletion
+                              ? `Diplôme obtenu il y a plus de ${Math.floor(p.maxMonthsSinceCompletion / 12)} an(s)`
+                              : "Prérequis requis"
+                          )}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm text-muted-foreground">
+                  Choisissez l'une des méthodes suivantes pour valider vos prérequis :
+                </p>
+
+                {/* Verification mode selection */}
+                {(() => {
+                  const prereqs = selectedSession.prerequisites;
+                  const showRpps = prereqs.some(p => p.requiresRpps);
+                  const showDiploma = prereqs.some(p => p.requiresDiploma || p.minMonthsSinceCompletion || p.maxMonthsSinceCompletion);
+                  const minYears = prereqs.find(p => p.minMonthsSinceCompletion)?.minMonthsSinceCompletion;
+                  const minYearsLabel = minYears ? Math.floor(minYears / 12) : null;
+
+                  return (
+                    <div className={`grid gap-4 ${showRpps && showDiploma ? "sm:grid-cols-2" : ""}`}>
+                      {showRpps && (
+                        <Card
+                          className={`cursor-pointer transition-shadow hover:shadow-md ${
+                            verificationMode === "rpps"
+                              ? "border-primary ring-2 ring-primary/20"
+                              : "hover:border-primary/50"
+                          }`}
+                          onClick={() => setVerificationMode("rpps")}
+                        >
+                          <CardContent className="p-4 text-center">
+                            <ShieldCheck className="w-8 h-8 mx-auto mb-2 text-primary" />
+                            <p className="font-semibold mb-1">Numéro RPPS</p>
+                            <p className="text-xs text-muted-foreground">
+                              Saisissez votre numéro RPPS (11 chiffres) pour une vérification immédiate
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {showDiploma && (
+                        <Card
+                          className={`cursor-pointer transition-shadow hover:shadow-md ${
+                            verificationMode === "diploma"
+                              ? "border-primary ring-2 ring-primary/20"
+                              : "hover:border-primary/50"
+                          }`}
+                          onClick={() => setVerificationMode("diploma")}
+                        >
+                          <CardContent className="p-4 text-center">
+                            <Upload className="w-8 h-8 mx-auto mb-2 text-primary" />
+                            <p className="font-semibold mb-1">Télécharger un diplôme</p>
+                            <p className="text-xs text-muted-foreground">
+                              {minYearsLabel
+                                ? `Envoyez votre diplôme IDE (obtenu il y a plus de ${minYearsLabel} an${minYearsLabel > 1 ? "s" : ""}) pour vérification par IA`
+                                : "Envoyez votre diplôme IDE pour vérification (validation automatique par IA)"}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* RPPS input */}
+                {verificationMode === "rpps" && (
+                  <div className="space-y-3">
+                    <Label htmlFor="rpps">Numéro RPPS</Label>
+                    <Input
+                      id="rpps"
+                      placeholder="Ex : 10003456789"
+                      value={rppsNumber}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 11);
+                        setRppsNumber(val);
+                      }}
+                      maxLength={11}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Le numéro RPPS est composé de 11 chiffres. Vous le trouverez sur votre carte CPS
+                      ou sur le site de l'Ordre professionnel.
+                    </p>
+                    {rppsNumber.length > 0 && rppsNumber.length < 11 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        {11 - rppsNumber.length} chiffre{11 - rppsNumber.length > 1 ? "s" : ""} restant{11 - rppsNumber.length > 1 ? "s" : ""}
+                      </p>
+                    )}
+                    {rppsNumber.length === 11 && (
+                      <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Format RPPS valide
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Diploma upload */}
+                {verificationMode === "diploma" && (
+                  <div className="space-y-3">
+                    <Label>Diplôme IDE</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Téléchargez une copie de votre diplôme d'État d'infirmier(ère).
+                      Le document sera analysé automatiquement pour vérifier sa date d'obtention.
+                    </p>
+                    <div
+                      className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => document.getElementById("diploma-file-input")?.click()}
+                    >
+                      <input
+                        id="diploma-file-input"
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          handleDiplomaUpload(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                      {diplomaUploading ? (
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Upload en cours...</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Upload className="w-6 h-6" />
+                          <span className="text-sm">Cliquez pour envoyer votre diplôme</span>
+                          <span className="text-xs">PDF ou image (JPG, PNG) — 10 Mo max</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {diplomaDocs.length > 0 && (
+                      <div className="space-y-2">
+                        {diplomaDocs.map((doc, index) => (
+                          <div key={index} className="flex items-center justify-between gap-2 p-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md text-sm">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
+                              <span className="truncate">{doc.fileName}</span>
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                ({(doc.fileSize / 1024).toFixed(0)} Ko)
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0"
+                              onClick={() => setDiplomaDocs((prev) => prev.filter((_, i) => i !== index))}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Continue button */}
+                {verificationMode && (
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    onClick={handlePrerequisitesContinue}
+                    disabled={
+                      (verificationMode === "rpps" && rppsNumber.length !== 11) ||
+                      (verificationMode === "diploma" && diplomaDocs.length === 0) ||
+                      diplomaUploading
+                    }
+                  >
+                    Continuer vers l'inscription
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* STEP: Enrollment form */}
         {step === "form" && selectedSession && (
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">

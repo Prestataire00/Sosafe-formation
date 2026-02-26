@@ -85,7 +85,9 @@ export async function registerRoutes(
           prerequisites: prerequisites.map(p => ({
             id: p.id,
             requiresRpps: p.requiresRpps,
+            requiresDiploma: p.requiresDiploma,
             maxMonthsSinceCompletion: p.maxMonthsSinceCompletion,
+            minMonthsSinceCompletion: p.minMonthsSinceCompletion,
             requiredProfessions: p.requiredProfessions,
             description: p.description,
           })),
@@ -112,6 +114,8 @@ export async function registerRoutes(
           lastName: trainee.lastName,
           phone: trainee.phone,
           company: trainee.company,
+          rppsNumber: trainee.rppsNumber,
+          profession: trainee.profession,
         },
       });
     } else {
@@ -122,7 +126,7 @@ export async function registerRoutes(
   // POST /api/public/enrollments — public enrollment
   app.post("/api/public/enrollments", async (req, res) => {
     try {
-      const { sessionId, firstName, lastName, email, phone, company, documents } = req.body;
+      const { sessionId, firstName, lastName, email, phone, company, documents, rppsNumber, profession } = req.body;
 
       // Validate required fields
       if (!sessionId || !firstName || !lastName || !email) {
@@ -152,10 +156,12 @@ export async function registerRoutes(
       // Find or create trainee
       let trainee = await storage.getTraineeByEmail(email);
       if (trainee) {
-        // Update phone/company if provided
+        // Update phone/company/rpps/profession if provided
         const updates: Record<string, string> = {};
         if (phone && !trainee.phone) updates.phone = phone;
         if (company && !trainee.company) updates.company = company;
+        if (rppsNumber) updates.rppsNumber = rppsNumber;
+        if (profession && !trainee.profession) updates.profession = profession;
         if (Object.keys(updates).length > 0) {
           await storage.updateTrainee(trainee.id, updates);
         }
@@ -166,6 +172,8 @@ export async function registerRoutes(
           email,
           phone: phone || null,
           company: company || null,
+          rppsNumber: rppsNumber || null,
+          profession: profession || null,
           status: "active",
         });
       }

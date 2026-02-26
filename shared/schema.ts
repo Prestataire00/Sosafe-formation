@@ -162,8 +162,10 @@ export const programPrerequisites = pgTable("program_prerequisites", {
   requiredProgramId: varchar("required_program_id"),
   requiredCategory: text("required_category"),
   maxMonthsSinceCompletion: integer("max_months_since_completion"),
+  minMonthsSinceCompletion: integer("min_months_since_completion"), // diploma must be at least X months old
   requiredProfessions: jsonb("required_professions").$type<string[]>().default([]),
   requiresRpps: boolean("requires_rpps").default(false),
+  requiresDiploma: boolean("requires_diploma").default(false),
   description: text("description"),
 });
 

@@ -421,7 +421,7 @@ export async function seedDatabase() {
     description: "AFGSU Niveau 1 valide (moins de 48 mois)",
   });
 
-  // Certificat de décès requires medecin + RPPS
+  // Certificat de décès requires medecin + RPPS or IDE diploma > 3 years
   const prog5 = (await storage.getPrograms()).find(p => p.title.includes("Certificat de décès"));
   if (prog5) {
     await storage.createProgramPrerequisite({
@@ -429,9 +429,11 @@ export async function seedDatabase() {
       requiredProgramId: null,
       requiredCategory: null,
       maxMonthsSinceCompletion: null,
-      requiredProfessions: ["medecin"],
+      minMonthsSinceCompletion: 36,
+      requiredProfessions: ["medecin", "infirmiere"],
       requiresRpps: true,
-      description: "Réservé aux médecins — N° RPPS obligatoire",
+      requiresDiploma: true,
+      description: "N° RPPS obligatoire ou diplôme IDE obtenu il y a plus de 3 ans",
     });
   }
 

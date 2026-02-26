@@ -173,11 +173,12 @@ export async function processDocumentValidation(
             const extractedDate = new Date(result.extractedDate);
             const now = new Date();
 
-            // Check if any prerequisite has a maxMonthsSinceCompletion constraint
-            const hasTimeConstraint = prerequisites.some(p => p.maxMonthsSinceCompletion);
+            // Check if any prerequisite has a maxMonthsSinceCompletion constraint (document must be recent)
+            const hasMaxConstraint = prerequisites.some(p => p.maxMonthsSinceCompletion);
+            // Check if any prerequisite has a minMonthsSinceCompletion constraint (diploma must be old enough)
+            const hasMinConstraint = prerequisites.some(p => p.minMonthsSinceCompletion);
 
-            if (hasTimeConstraint) {
-              // Check against the most restrictive time constraint
+            if (hasMaxConstraint) {
               const maxMonths = Math.min(
                 ...prerequisites
                   .filter(p => p.maxMonthsSinceCompletion)
@@ -188,6 +189,18 @@ export async function processDocumentValidation(
               expirationDate.setMonth(expirationDate.getMonth() + maxMonths);
 
               validationStatus = expirationDate > now ? "auto_valid" : "auto_invalid";
+            } else if (hasMinConstraint) {
+              // Diploma must have been obtained at least X months ago
+              const minMonths = Math.max(
+                ...prerequisites
+                  .filter(p => p.minMonthsSinceCompletion)
+                  .map(p => p.minMonthsSinceCompletion!)
+              );
+
+              const monthsSinceObtained = (now.getFullYear() - extractedDate.getFullYear()) * 12
+                + (now.getMonth() - extractedDate.getMonth());
+
+              validationStatus = monthsSinceObtained >= minMonths ? "auto_valid" : "auto_invalid";
             } else {
               // No time constraint, just having a date is enough
               validationStatus = "auto_valid";
