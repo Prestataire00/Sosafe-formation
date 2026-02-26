@@ -150,6 +150,7 @@ export const enrollments = pgTable("enrollments", {
   certificateUrl: text("certificate_url"),
   notes: text("notes"),
   vaeStatus: text("vae_status"),
+  certificateBlocked: boolean("certificate_blocked").default(false),
 });
 
 // ============================================================
@@ -827,6 +828,8 @@ export const DOCUMENT_TYPES = [
   { value: "programme", label: "Programme de formation" },
   { value: "reglement", label: "Règlement intérieur" },
   { value: "autre", label: "Autre" },
+  { value: "fiche_fipl", label: "Fiche FIPL" },
+  { value: "rapport_emargement", label: "Rapport d'émargement" },
 ] as const;
 
 export const PROSPECT_STATUSES = [
@@ -913,6 +916,9 @@ export const AUTOMATION_EVENTS = [
   { value: "invoice_created", label: "Facture créée" },
   { value: "payment_received", label: "Paiement reçu" },
   { value: "survey_completed", label: "Enquête complétée" },
+  { value: "quote_signed", label: "Devis signé" },
+  { value: "convention_signed", label: "Convention signée" },
+  { value: "absence_detected", label: "Absence détectée" },
 ] as const;
 
 export const AUTOMATION_ACTIONS = [
@@ -920,6 +926,10 @@ export const AUTOMATION_ACTIONS = [
   { value: "generate_document", label: "Générer un document" },
   { value: "create_attendance", label: "Créer une feuille d'émargement" },
   { value: "send_survey", label: "Envoyer une enquête de satisfaction" },
+  { value: "send_email_enterprise", label: "Envoyer un email à l'entreprise" },
+  { value: "generate_document_and_send", label: "Générer et envoyer un document" },
+  { value: "create_invoice", label: "Créer une facture" },
+  { value: "block_certificate", label: "Bloquer le certificat" },
 ] as const;
 
 // Enterprise constants
@@ -1065,6 +1075,13 @@ export const TEMPLATE_VARIABLES = {
     { key: "{nom_famille_apprenant}", label: "Nom de famille" },
     { key: "{email_apprenant}", label: "Email de l'apprenant" },
     { key: "{entreprise_apprenant}", label: "Entreprise de l'apprenant" },
+    { key: "{profile_type_apprenant}", label: "Type de profil" },
+    { key: "{profession_apprenant}", label: "Profession" },
+  ],
+  entreprise: [
+    { key: "{nom_entreprise}", label: "Nom de l'entreprise" },
+    { key: "{contact_entreprise}", label: "Contact entreprise" },
+    { key: "{email_entreprise}", label: "Email entreprise" },
   ],
   session: [
     { key: "{titre_session}", label: "Titre de la session" },

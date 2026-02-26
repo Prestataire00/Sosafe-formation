@@ -98,6 +98,7 @@ export interface IStorage {
   deleteSession(id: string): Promise<void>;
 
   // Enrollments
+  getEnrollment(id: string): Promise<Enrollment | undefined>;
   getEnrollments(sessionId?: string): Promise<Enrollment[]>;
   getEnrollmentsByTrainee(traineeId: string): Promise<Enrollment[]>;
   getEnrollmentCount(sessionId: string): Promise<number>;
@@ -478,6 +479,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ---- Enrollments ----
+  async getEnrollment(id: string): Promise<Enrollment | undefined> {
+    const [result] = await db.select().from(enrollments).where(eq(enrollments.id, id));
+    return result;
+  }
+
   async getEnrollments(sessionId?: string): Promise<Enrollment[]> {
     if (sessionId) {
       return db.select().from(enrollments).where(eq(enrollments.sessionId, sessionId));

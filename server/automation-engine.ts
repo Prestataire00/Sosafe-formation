@@ -12,6 +12,10 @@ export interface AutomationContext {
   programId?: string;
   invoiceId?: string;
   surveyId?: string;
+  quoteId?: string;
+  enterpriseId?: string;
+  documentId?: string;
+  attendanceRecordId?: string;
   /** Allows passing extra metadata (e.g. old status) */
   meta?: Record<string, unknown>;
 }
@@ -47,14 +51,28 @@ async function resolveVariables(
   }
 
   // Trainee
+  let trainee: Awaited<ReturnType<typeof storage.getTrainee>> | undefined;
   if (ctx.traineeId) {
-    const trainee = await storage.getTrainee(ctx.traineeId);
+    trainee = await storage.getTrainee(ctx.traineeId);
     if (trainee) {
       r["{nom_apprenant}"] = `${trainee.firstName} ${trainee.lastName}`;
       r["{prenom_apprenant}"] = trainee.firstName;
       r["{nom_famille_apprenant}"] = trainee.lastName;
       r["{email_apprenant}"] = trainee.email;
       r["{entreprise_apprenant}"] = trainee.company || "";
+      r["{profile_type_apprenant}"] = trainee.profileType || "";
+      r["{profession_apprenant}"] = trainee.profession || "";
+    }
+  }
+
+  // Enterprise (from ctx.enterpriseId or trainee.enterpriseId)
+  const enterpriseId = ctx.enterpriseId || trainee?.enterpriseId;
+  if (enterpriseId) {
+    const enterprise = await storage.getEnterprise(enterpriseId);
+    if (enterprise) {
+      r["{nom_entreprise}"] = enterprise.name;
+      r["{contact_entreprise}"] = enterprise.contactName || "";
+      r["{email_entreprise}"] = enterprise.contactEmail || "";
     }
   }
 
@@ -178,6 +196,143 @@ async function handleSendSurvey(
   return handleSendEmail(rule, ctx);
 }
 
+async function handleSendEmailEnterprise(
+  rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  if (!rule.templateId) throw new Error("templateId manquant sur la règle");
+
+  const template = await storage.getEmailTemplate(rule.templateId);
+  if (!template) throw new Error(`Template email ${rule.templateId} introuvable`);
+
+  // Resolve enterprise recipient
+  let recipient = "";
+  const enterpriseId = ctx.enterpriseId || (ctx.traineeId ? (await storage.getTrainee(ctx.traineeId))?.enterpriseId : undefined);
+  if (enterpriseId) {
+    const enterprise = await storage.getEnterprise(enterpriseId);
+    if (enterprise) recipient = enterprise.contactEmail || "";
+  }
+  if (!recipient) throw new Error("Aucun email entreprise trouvable");
+
+  const subject = await resolveVariables(template.subject, ctx);
+  const body = await resolveVariables(template.body, ctx);
+
+  const log = await storage.createEmailLog({
+    templateId: rule.templateId,
+    recipient,
+    subject,
+    body,
+    status: "pending",
+  });
+
+  return `Email entreprise créé (log ${log.id}) pour ${recipient}`;
+}
+
+async function handleGenerateDocumentAndSend(
+  rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  // Step 1: Generate the document
+  const docMessage = await handleGenerateDocument(rule, ctx);
+
+  // Step 2: If an email template is specified in conditions, also send an email
+  const cond = rule.conditions as Record<string, unknown> | null;
+  const emailTemplateId = cond?.emailTemplateId as string | undefined;
+  if (emailTemplateId) {
+    const emailTemplate = await storage.getEmailTemplate(emailTemplateId);
+    if (emailTemplate) {
+      let recipient = "";
+      if (ctx.traineeId) {
+        const trainee = await storage.getTrainee(ctx.traineeId);
+        if (trainee) recipient = trainee.email;
+      }
+      if (recipient) {
+        const subject = await resolveVariables(emailTemplate.subject, ctx);
+        const body = await resolveVariables(emailTemplate.body, ctx);
+        await storage.createEmailLog({
+          templateId: emailTemplateId,
+          recipient,
+          subject,
+          body,
+          status: "pending",
+        });
+      }
+    }
+  }
+
+  return docMessage + " (+ envoi email)";
+}
+
+async function handleCreateInvoice(
+  _rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  // Resolve session and program for line items
+  let sessionTitle = "Formation";
+  let price = 0;
+  let enterpriseId = ctx.enterpriseId;
+
+  if (ctx.sessionId) {
+    const session = await storage.getSession(ctx.sessionId);
+    if (session) {
+      sessionTitle = session.title;
+      if (!enterpriseId && ctx.traineeId) {
+        const trainee = await storage.getTrainee(ctx.traineeId);
+        enterpriseId = trainee?.enterpriseId || undefined;
+      }
+      const program = await storage.getProgram(session.programId);
+      if (program) {
+        price = program.price || 0;
+      }
+    }
+  }
+
+  const invoiceNumber = await storage.getNextInvoiceNumber();
+  const lineItems = [
+    {
+      description: sessionTitle,
+      quantity: 1,
+      unitPrice: price,
+      total: price,
+    },
+  ];
+  const subtotal = price;
+  const taxRate = 2000; // 20%
+  const taxAmount = Math.round(subtotal * taxRate / 10000);
+  const total = subtotal + taxAmount;
+
+  const invoice = await storage.createInvoice({
+    number: invoiceNumber,
+    title: `Facture - ${sessionTitle}`,
+    enterpriseId: enterpriseId || null,
+    sessionId: ctx.sessionId || null,
+    lineItems,
+    subtotal,
+    taxRate,
+    taxAmount,
+    total,
+    paidAmount: 0,
+    status: "draft",
+    dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+  });
+
+  return `Facture ${invoiceNumber} créée (${invoice.id})`;
+}
+
+async function handleBlockCertificate(
+  _rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  if (!ctx.enrollmentId) throw new Error("enrollmentId manquant");
+
+  const enrollment = await storage.getEnrollment(ctx.enrollmentId);
+  if (!enrollment) throw new Error(`Enrollment ${ctx.enrollmentId} introuvable`);
+
+  await storage.updateEnrollment(ctx.enrollmentId, { certificateBlocked: true } as any);
+
+  return `Certificat bloqué pour l'inscription ${ctx.enrollmentId}`;
+}
+
 // ---------------------------------------------------------------------------
 // Core engine: execute a single rule
 // ---------------------------------------------------------------------------
@@ -201,6 +356,18 @@ async function executeRule(
           break;
         case "send_survey":
           message = await handleSendSurvey(rule, ctx);
+          break;
+        case "send_email_enterprise":
+          message = await handleSendEmailEnterprise(rule, ctx);
+          break;
+        case "generate_document_and_send":
+          message = await handleGenerateDocumentAndSend(rule, ctx);
+          break;
+        case "create_invoice":
+          message = await handleCreateInvoice(rule, ctx);
+          break;
+        case "block_certificate":
+          message = await handleBlockCertificate(rule, ctx);
           break;
         default:
           throw new Error(`Action inconnue: ${rule.action}`);
@@ -257,6 +424,16 @@ export async function triggerAutomation(
     const rules = await storage.getAutomationRulesByEvent(event);
     if (rules.length === 0) return;
 
+    // Pre-load trainee and program for condition checks
+    let traineeForConditions: Awaited<ReturnType<typeof storage.getTrainee>> | undefined;
+    let programForConditions: Awaited<ReturnType<typeof storage.getProgram>> | undefined;
+    if (ctx.traineeId) {
+      traineeForConditions = await storage.getTrainee(ctx.traineeId);
+    }
+    if (ctx.programId) {
+      programForConditions = await storage.getProgram(ctx.programId);
+    }
+
     // Check conditions for each rule
     const applicableRules = rules.filter((rule) => {
       const cond = rule.conditions as Record<string, unknown> | null;
@@ -265,6 +442,17 @@ export async function triggerAutomation(
       // Simple condition matching against context meta
       if (cond.programId && ctx.programId && cond.programId !== ctx.programId) return false;
       if (cond.sessionId && ctx.sessionId && cond.sessionId !== ctx.sessionId) return false;
+
+      // Profile type condition
+      if (cond.profileType && traineeForConditions) {
+        if (traineeForConditions.profileType !== cond.profileType) return false;
+      }
+
+      // Program category condition
+      if (cond.programCategory && programForConditions) {
+        const cats = (programForConditions.categories as string[]) || [];
+        if (!cats.includes(cond.programCategory as string)) return false;
+      }
 
       return true;
     });
@@ -305,6 +493,18 @@ export async function executeRuleManually(
         break;
       case "send_survey":
         message = await handleSendSurvey(rule, ctx);
+        break;
+      case "send_email_enterprise":
+        message = await handleSendEmailEnterprise(rule, ctx);
+        break;
+      case "generate_document_and_send":
+        message = await handleGenerateDocumentAndSend(rule, ctx);
+        break;
+      case "create_invoice":
+        message = await handleCreateInvoice(rule, ctx);
+        break;
+      case "block_certificate":
+        message = await handleBlockCertificate(rule, ctx);
         break;
       default:
         throw new Error(`Action inconnue: ${rule.action}`);

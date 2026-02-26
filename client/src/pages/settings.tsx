@@ -49,6 +49,7 @@ import type {
   AutomationRule,
   InsertAutomationRule,
   EmailTemplate,
+  DocumentTemplate,
   User,
   Trainer,
   Trainee,
@@ -57,6 +58,7 @@ import type {
 import {
   AUTOMATION_EVENTS,
   AUTOMATION_ACTIONS,
+  TRAINEE_PROFILE_TYPES,
   USER_ROLES,
   ADMIN_PERMISSIONS,
 } from "@shared/schema";
@@ -251,15 +253,31 @@ function AutomationRuleForm({
   onSubmit: (data: InsertAutomationRule) => void;
   isPending: boolean;
 }) {
+  const existingConditions = (rule?.conditions || {}) as Record<string, unknown>;
   const [name, setName] = useState(rule?.name || "");
   const [event, setEvent] = useState(rule?.event || AUTOMATION_EVENTS[0].value);
   const [action, setAction] = useState(rule?.action || AUTOMATION_ACTIONS[0].value);
   const [templateId, setTemplateId] = useState(rule?.templateId || "");
   const [delay, setDelay] = useState(rule?.delay?.toString() || "0");
   const [active, setActive] = useState(rule?.active ?? true);
+  const [profileType, setProfileType] = useState((existingConditions.profileType as string) || "");
+  const [programCategory, setProgramCategory] = useState((existingConditions.programCategory as string) || "");
+  const [emailTemplateId, setEmailTemplateId] = useState((existingConditions.emailTemplateId as string) || "");
+
+  // Fetch document templates for document-related actions
+  const { data: documentTemplates } = useQuery<DocumentTemplate[]>({
+    queryKey: ["/api/document-templates"],
+  });
+
+  const isDocumentAction = action === "generate_document" || action === "generate_document_and_send";
+  const showEmailTemplateCondition = action === "generate_document_and_send";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const conditions: Record<string, unknown> = {};
+    if (profileType) conditions.profileType = profileType;
+    if (programCategory) conditions.programCategory = programCategory;
+    if (emailTemplateId && showEmailTemplateCondition) conditions.emailTemplateId = emailTemplateId;
     onSubmit({
       name,
       event,
@@ -267,7 +285,7 @@ function AutomationRuleForm({
       templateId: templateId || null,
       delay: parseInt(delay) || 0,
       active,
-      conditions: null,
+      conditions: Object.keys(conditions).length > 0 ? conditions : null,
     });
   };
 
@@ -316,19 +334,69 @@ function AutomationRuleForm({
         </div>
       </div>
       <div className="space-y-2">
-        <Label>Template email</Label>
+        <Label>{isDocumentAction ? "Template document" : "Template email"}</Label>
         <Select value={templateId} onValueChange={setTemplateId}>
           <SelectTrigger>
-            <SelectValue placeholder="Sélectionner un template" />
+            <SelectValue placeholder={isDocumentAction ? "Sélectionner un template document" : "Sélectionner un template"} />
           </SelectTrigger>
           <SelectContent>
-            {templates.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
+            {isDocumentAction
+              ? (documentTemplates || []).map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))
+              : templates.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
           </SelectContent>
         </Select>
+      </div>
+      {showEmailTemplateCondition && (
+        <div className="space-y-2">
+          <Label>Template email associé (envoi après génération)</Label>
+          <Select value={emailTemplateId} onValueChange={setEmailTemplateId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sélectionner un template email" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Aucun</SelectItem>
+              {templates.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Type de profil (optionnel)</Label>
+          <Select value={profileType} onValueChange={setProfileType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tous les profils" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Tous</SelectItem>
+              {TRAINEE_PROFILE_TYPES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Catégorie formation (optionnel)</Label>
+          <Input
+            value={programCategory}
+            onChange={(e) => setProgramCategory(e.target.value)}
+            placeholder="Ex: AFGSU"
+          />
+        </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="rule-delay">Délai (minutes)</Label>

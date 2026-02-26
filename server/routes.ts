@@ -1016,7 +1016,9 @@ export async function registerRoutes(
 
     // Auto-create certification when enrollment is completed on a certifying program
     if (parsed.data.status === "completed") {
-      try {
+      if (enrollment.certificateBlocked) {
+        console.log(`[enrollment] Certificate blocked for ${enrollment.id} — skipping certification`);
+      } else try {
         const session = await storage.getSession(enrollment.sessionId);
         if (session) {
           const program = await storage.getProgram(session.programId);
@@ -1786,6 +1788,28 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const record = await storage.createAttendanceRecord(parsed.data);
     res.status(201).json(record);
+
+    // Fire-and-forget: trigger absence_detected if absent
+    if (record.status === "absent" && record.sheetId) {
+      try {
+        const sheet = await storage.getAttendanceSheet(record.sheetId);
+        if (sheet) {
+          const session = await storage.getSession(sheet.sessionId);
+          const allEnrollments = await storage.getEnrollments(sheet.sessionId);
+          const enrollment = allEnrollments.find(e => e.traineeId === record.traineeId);
+          triggerAutomation("absence_detected", {
+            sessionId: sheet.sessionId,
+            traineeId: record.traineeId,
+            enrollmentId: enrollment?.id,
+            programId: session?.programId,
+            enterpriseId: enrollment?.enterpriseId || undefined,
+            attendanceRecordId: record.id,
+          }).catch(err => console.error("[automation] absence_detected trigger error:", err));
+        }
+      } catch (err) {
+        console.error("[automation] attendance trigger error:", err);
+      }
+    }
   });
 
   app.patch("/api/attendance-records/:id", async (req, res) => {
@@ -1794,6 +1818,28 @@ export async function registerRoutes(
     const record = await storage.updateAttendanceRecord(req.params.id, parsed.data);
     if (!record) return res.status(404).json({ message: "Enregistrement non trouvé" });
     res.json(record);
+
+    // Fire-and-forget: trigger absence_detected if status changed to absent
+    if (parsed.data.status === "absent" && record.sheetId) {
+      try {
+        const sheet = await storage.getAttendanceSheet(record.sheetId);
+        if (sheet) {
+          const session = await storage.getSession(sheet.sessionId);
+          const allEnrollments = await storage.getEnrollments(sheet.sessionId);
+          const enrollment = allEnrollments.find(e => e.traineeId === record.traineeId);
+          triggerAutomation("absence_detected", {
+            sessionId: sheet.sessionId,
+            traineeId: record.traineeId,
+            enrollmentId: enrollment?.id,
+            programId: session?.programId,
+            enterpriseId: enrollment?.enterpriseId || undefined,
+            attendanceRecordId: record.id,
+          }).catch(err => console.error("[automation] absence_detected trigger error:", err));
+        }
+      } catch (err) {
+        console.error("[automation] attendance trigger error:", err);
+      }
+    }
   });
 
   // ============================================================
@@ -2110,6 +2156,56 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const sig = await storage.createSignature(parsed.data);
     res.status(201).json(sig);
+
+    // Fire-and-forget: trigger cascade automations on signature
+    try {
+      const docType = parsed.data.documentType;
+      if (docType === "quote" || docType === "devis") {
+        // Resolve context from signer
+        const traineeId = parsed.data.signerType === "trainee" ? parsed.data.signerId : undefined;
+        let enterpriseId: string | undefined;
+        if (traineeId) {
+          const trainee = await storage.getTrainee(traineeId);
+          enterpriseId = trainee?.enterpriseId || undefined;
+        } else if (parsed.data.signerType === "enterprise") {
+          enterpriseId = parsed.data.signerId;
+        }
+        triggerAutomation("quote_signed", {
+          quoteId: parsed.data.relatedId || undefined,
+          enterpriseId,
+          traineeId,
+        }).catch(err => console.error("[automation] quote_signed trigger error:", err));
+      } else if (docType === "convention") {
+        const traineeId = parsed.data.signerType === "trainee" ? parsed.data.signerId : undefined;
+        let sessionId: string | undefined;
+        let enterpriseId: string | undefined;
+        // Try to resolve sessionId from the related document
+        if (parsed.data.relatedId) {
+          const doc = await storage.getGeneratedDocument(parsed.data.relatedId);
+          if (doc) sessionId = doc.sessionId || undefined;
+        }
+        if (traineeId) {
+          const trainee = await storage.getTrainee(traineeId);
+          enterpriseId = trainee?.enterpriseId || undefined;
+        } else if (parsed.data.signerType === "enterprise") {
+          enterpriseId = parsed.data.signerId;
+        }
+        let programId: string | undefined;
+        if (sessionId) {
+          const session = await storage.getSession(sessionId);
+          programId = session?.programId;
+        }
+        triggerAutomation("convention_signed", {
+          documentId: parsed.data.relatedId || undefined,
+          sessionId,
+          traineeId,
+          enterpriseId,
+          programId,
+        }).catch(err => console.error("[automation] convention_signed trigger error:", err));
+      }
+    } catch (err) {
+      console.error("[automation] signature trigger error:", err);
+    }
   });
 
   // ============================================================
