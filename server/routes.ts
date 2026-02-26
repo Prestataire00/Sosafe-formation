@@ -5,7 +5,6 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { storage } from "./storage";
-import { processDocumentValidation } from "./ai-document";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole, requirePermission } from "./auth";
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
@@ -62,6 +61,8 @@ export async function registerRoutes(
         if (enrollmentCount >= session.maxParticipants) continue;
 
         const program = await storage.getProgram(session.programId);
+        const prerequisites = program ? await storage.getProgramPrerequisites(program.id) : [];
+
         results.push({
           id: session.id,
           title: session.title,
@@ -81,6 +82,13 @@ export async function registerRoutes(
             categories: program.categories,
             fundingTypes: program.fundingTypes,
           } : null,
+          prerequisites: prerequisites.map(p => ({
+            id: p.id,
+            requiresRpps: p.requiresRpps,
+            maxMonthsSinceCompletion: p.maxMonthsSinceCompletion,
+            requiredProfessions: p.requiredProfessions,
+            description: p.description,
+          })),
         });
       }
 
@@ -194,7 +202,7 @@ export async function registerRoutes(
 
             // Set linkedSessionId and trigger AI analysis (fire-and-forget)
             await storage.updateUserDocument(userDoc.id, { linkedSessionId: sessionId });
-            processDocumentValidation(userDoc.id, trainee.id, sessionId).catch((err) => {
+            import("./ai-document").then(m => m.processDocumentValidation(userDoc.id, trainee.id, sessionId)).catch((err) => {
               console.error(`AI analysis failed for document ${userDoc.id}:`, err);
             });
           }
@@ -1837,7 +1845,7 @@ export async function registerRoutes(
       aiRawResponse: null,
     });
 
-    processDocumentValidation(doc.id, doc.ownerId, doc.linkedSessionId || undefined).catch((err) => {
+    import("./ai-document").then(m => m.processDocumentValidation(doc.id, doc.ownerId, doc.linkedSessionId || undefined)).catch((err) => {
       console.error(`AI re-analysis failed for document ${doc.id}:`, err);
     });
 

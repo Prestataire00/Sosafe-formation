@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
@@ -54,6 +53,7 @@ export async function analyzeDocument(fileUrl: string): Promise<AIAnalysisResult
   const mimeType = mimeMap[ext] || "application/octet-stream";
 
   try {
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
