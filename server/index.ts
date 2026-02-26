@@ -7,6 +7,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
+import { startEmailWorker } from "./email-service";
+import { startScheduledTasks } from "./scheduled-tasks";
 
 // Kill any existing process on the target port before starting
 function freePort(port: number) {
@@ -104,6 +106,10 @@ app.use((req, res, next) => {
   } catch (err) {
     console.error("Seed error:", err);
   }
+
+  // Start background workers
+  startEmailWorker();
+  startScheduledTasks();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

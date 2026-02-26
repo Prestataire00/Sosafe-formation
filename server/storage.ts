@@ -96,6 +96,7 @@ export interface IStorage {
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: string, session: Partial<InsertSession>): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
+  getSessionsStartingBetween(from: Date, to: Date): Promise<Session[]>;
 
   // Enrollments
   getEnrollment(id: string): Promise<Enrollment | undefined>;
@@ -115,6 +116,9 @@ export interface IStorage {
 
   // Email Logs
   getEmailLogs(): Promise<EmailLog[]>;
+  getEmailLog(id: string): Promise<EmailLog | undefined>;
+  getPendingEmailLogs(): Promise<EmailLog[]>;
+  updateEmailLog(id: string, data: Partial<InsertEmailLog>): Promise<EmailLog | undefined>;
   createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
 
   // Document Templates
@@ -478,6 +482,17 @@ export class DatabaseStorage implements IStorage {
     await db.delete(sessions).where(eq(sessions.id, id));
   }
 
+  async getSessionsStartingBetween(from: Date, to: Date): Promise<Session[]> {
+    const fromStr = from.toISOString().split('T')[0];
+    const toStr = to.toISOString().split('T')[0];
+    return db.select().from(sessions).where(
+      and(
+        sql`${sessions.startDate} >= ${fromStr}`,
+        sql`${sessions.startDate} <= ${toStr}`
+      )
+    );
+  }
+
   // ---- Enrollments ----
   async getEnrollment(id: string): Promise<Enrollment | undefined> {
     const [result] = await db.select().from(enrollments).where(eq(enrollments.id, id));
@@ -549,6 +564,25 @@ export class DatabaseStorage implements IStorage {
 
   async createEmailLog(log: InsertEmailLog): Promise<EmailLog> {
     const [result] = await db.insert(emailLogs).values(log).returning();
+    return result;
+  }
+
+  async getEmailLog(id: string): Promise<EmailLog | undefined> {
+    const [result] = await db.select().from(emailLogs).where(eq(emailLogs.id, id));
+    return result;
+  }
+
+  async getPendingEmailLogs(): Promise<EmailLog[]> {
+    return db.select().from(emailLogs).where(
+      and(
+        eq(emailLogs.status, "pending"),
+        sql`(${emailLogs.scheduledAt} IS NULL OR ${emailLogs.scheduledAt} <= NOW())`
+      )
+    ).orderBy(emailLogs.createdAt);
+  }
+
+  async updateEmailLog(id: string, data: Partial<InsertEmailLog>): Promise<EmailLog | undefined> {
+    const [result] = await db.update(emailLogs).set(data as any).where(eq(emailLogs.id, id)).returning();
     return result;
   }
 

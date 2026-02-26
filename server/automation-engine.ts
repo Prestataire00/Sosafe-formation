@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { sendEmailNow } from "./email-service";
 import type { AutomationRule } from "@shared/schema";
 
 /**
@@ -30,7 +31,7 @@ async function resolveVariables(
   let out = template;
   const r: Record<string, string> = {};
 
-  // Session + Program
+  // Session + Program + Trainer
   if (ctx.sessionId) {
     const session = await storage.getSession(ctx.sessionId);
     if (session) {
@@ -39,6 +40,16 @@ async function resolveVariables(
       r["{date_fin}"] = new Date(session.endDate).toLocaleDateString("fr-FR");
       r["{lieu}"] = session.location || "";
       r["{modalite}"] = session.modality;
+      r["{adresse_lieu}"] = session.locationAddress || "";
+      r["{salle}"] = session.locationRoom || "";
+      r["{url_classe_virtuelle}"] = session.virtualClassUrl || "";
+      r["{max_participants}"] = String(session.maxParticipants || "");
+
+      // Conditional booleans based on session modality
+      const mod = session.modality?.toLowerCase() || "";
+      r["{modalite_presentiel}"] = mod === "presentiel" ? "true" : "";
+      r["{modalite_distanciel}"] = mod === "distanciel" ? "true" : "";
+      r["{modalite_mixte}"] = mod === "blended" ? "true" : "";
 
       const program = await storage.getProgram(session.programId);
       if (program) {
@@ -46,6 +57,21 @@ async function resolveVariables(
         r["{duree_formation}"] = `${program.duration} heures`;
         r["{prix_formation}"] = `${program.price} EUR`;
         r["{objectifs_formation}"] = program.objectives || "";
+        r["{prerequis_formation}"] = program.prerequisites || "";
+        r["{niveau_formation}"] = program.level || "";
+        r["{public_cible}"] = program.targetAudience || "";
+        r["{methodes_pedagogiques}"] = program.teachingMethods || "";
+        r["{contenu_formation}"] = program.programContent || "";
+        r["{est_certifiante}"] = program.certifying ? "true" : "";
+      }
+
+      // Trainer variables
+      if (session.trainerId) {
+        const trainer = await storage.getTrainer(session.trainerId);
+        if (trainer) {
+          r["{nom_formateur}"] = `${trainer.firstName} ${trainer.lastName}`;
+          r["{email_formateur}"] = trainer.email;
+        }
       }
     }
   }
@@ -62,6 +88,17 @@ async function resolveVariables(
       r["{entreprise_apprenant}"] = trainee.company || "";
       r["{profile_type_apprenant}"] = trainee.profileType || "";
       r["{profession_apprenant}"] = trainee.profession || "";
+    }
+  }
+
+  // Enrollment
+  if (ctx.enrollmentId) {
+    const enrollment = await storage.getEnrollment(ctx.enrollmentId);
+    if (enrollment) {
+      r["{date_inscription}"] = enrollment.enrolledAt
+        ? new Date(enrollment.enrolledAt).toLocaleDateString("fr-FR")
+        : "";
+      r["{statut_inscription}"] = enrollment.status || "";
     }
   }
 
@@ -85,24 +122,58 @@ async function resolveVariables(
   r["{email_organisme}"] = m["org_email"] || "";
   r["{telephone_organisme}"] = m["org_phone"] || "";
 
+  // Substitute all variables
   for (const [key, value] of Object.entries(r)) {
     out = out.replaceAll(key, value);
   }
+
+  // Process conditional blocks: {{#if variable_name}}content{{/if}}
+  out = processConditionalBlocks(out, r);
+
   return out;
+}
+
+/**
+ * Process conditional blocks in template text.
+ * Syntax: {{#if variable_name}}content{{/if}}
+ * If the variable is non-empty and not "false", the content is kept; otherwise removed.
+ * No nesting support.
+ */
+function processConditionalBlocks(
+  text: string,
+  vars: Record<string, string>,
+): string {
+  return text.replace(
+    /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
+    (_match, varName: string, content: string) => {
+      // Look up the variable by its template key form {var_name}
+      const value = vars[`{${varName}}`] || "";
+      return value && value !== "false" ? content : "";
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Action handlers
 // ---------------------------------------------------------------------------
 
+function resolveTemplateId(rule: AutomationRule, ctx: AutomationContext): string {
+  if (!rule.templateId) throw new Error("templateId manquant sur la règle");
+  const overrides = (rule.templateOverrides || {}) as Record<string, string>;
+  if (ctx.programId && overrides[ctx.programId]) {
+    return overrides[ctx.programId];
+  }
+  return rule.templateId;
+}
+
 async function handleSendEmail(
   rule: AutomationRule,
   ctx: AutomationContext,
 ): Promise<string> {
-  if (!rule.templateId) throw new Error("templateId manquant sur la règle");
+  const effectiveTemplateId = resolveTemplateId(rule, ctx);
 
-  const template = await storage.getEmailTemplate(rule.templateId);
-  if (!template) throw new Error(`Template email ${rule.templateId} introuvable`);
+  const template = await storage.getEmailTemplate(effectiveTemplateId);
+  if (!template) throw new Error(`Template email ${effectiveTemplateId} introuvable`);
 
   // Resolve recipient
   let recipient = "";
@@ -115,14 +186,17 @@ async function handleSendEmail(
   const subject = await resolveVariables(template.subject, ctx);
   const body = await resolveVariables(template.body, ctx);
 
-  // Create email log (ready to be sent by an SMTP worker)
+  // Create email log and attempt immediate send
   const log = await storage.createEmailLog({
-    templateId: rule.templateId,
+    templateId: effectiveTemplateId,
     recipient,
     subject,
     body,
     status: "pending",
   });
+
+  // Fire-and-forget: the worker will retry on failure
+  try { await sendEmailNow(log.id); } catch {}
 
   return `Email créé (log ${log.id}) pour ${recipient}`;
 }
@@ -200,10 +274,10 @@ async function handleSendEmailEnterprise(
   rule: AutomationRule,
   ctx: AutomationContext,
 ): Promise<string> {
-  if (!rule.templateId) throw new Error("templateId manquant sur la règle");
+  const effectiveTemplateId = resolveTemplateId(rule, ctx);
 
-  const template = await storage.getEmailTemplate(rule.templateId);
-  if (!template) throw new Error(`Template email ${rule.templateId} introuvable`);
+  const template = await storage.getEmailTemplate(effectiveTemplateId);
+  if (!template) throw new Error(`Template email ${effectiveTemplateId} introuvable`);
 
   // Resolve enterprise recipient
   let recipient = "";
@@ -218,12 +292,15 @@ async function handleSendEmailEnterprise(
   const body = await resolveVariables(template.body, ctx);
 
   const log = await storage.createEmailLog({
-    templateId: rule.templateId,
+    templateId: effectiveTemplateId,
     recipient,
     subject,
     body,
     status: "pending",
   });
+
+  // Fire-and-forget: the worker will retry on failure
+  try { await sendEmailNow(log.id); } catch {}
 
   return `Email entreprise créé (log ${log.id}) pour ${recipient}`;
 }
@@ -249,13 +326,15 @@ async function handleGenerateDocumentAndSend(
       if (recipient) {
         const subject = await resolveVariables(emailTemplate.subject, ctx);
         const body = await resolveVariables(emailTemplate.body, ctx);
-        await storage.createEmailLog({
+        const emailLog = await storage.createEmailLog({
           templateId: emailTemplateId,
           recipient,
           subject,
           body,
           status: "pending",
         });
+        // Fire-and-forget: the worker will retry on failure
+        try { await sendEmailNow(emailLog.id); } catch {}
       }
     }
   }

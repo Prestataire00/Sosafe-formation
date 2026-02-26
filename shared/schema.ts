@@ -209,6 +209,7 @@ export const emailLogs = pgTable("email_logs", {
   sentAt: timestamp("sent_at"),
   scheduledAt: timestamp("scheduled_at"),
   error: text("error"),
+  retryCount: integer("retry_count").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -430,6 +431,7 @@ export const automationRules = pgTable("automation_rules", {
   delay: integer("delay").default(0),
   active: boolean("active").default(true),
   conditions: jsonb("conditions").$type<Record<string, unknown>>().default({}),
+  templateOverrides: jsonb("template_overrides").$type<Record<string, string>>().default({}),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -919,6 +921,12 @@ export const AUTOMATION_EVENTS = [
   { value: "quote_signed", label: "Devis signé" },
   { value: "convention_signed", label: "Convention signée" },
   { value: "absence_detected", label: "Absence détectée" },
+  { value: "session_reminder_7d", label: "Rappel session J-7" },
+  { value: "session_reminder_3d", label: "Rappel session J-3" },
+  { value: "session_reminder_1d", label: "Rappel session J-1" },
+  { value: "post_session_followup", label: "Suivi post-formation J+1" },
+  { value: "certification_expiring_90d", label: "Certification expire dans 90j" },
+  { value: "certification_expiring_30d", label: "Certification expire dans 30j" },
 ] as const;
 
 export const AUTOMATION_ACTIONS = [
@@ -1089,12 +1097,35 @@ export const TEMPLATE_VARIABLES = {
     { key: "{date_fin}", label: "Date de fin" },
     { key: "{lieu}", label: "Lieu" },
     { key: "{modalite}", label: "Modalité" },
+    { key: "{adresse_lieu}", label: "Adresse du lieu" },
+    { key: "{salle}", label: "Salle" },
+    { key: "{url_classe_virtuelle}", label: "URL classe virtuelle" },
+    { key: "{max_participants}", label: "Nombre max de participants" },
   ],
   formation: [
     { key: "{titre_formation}", label: "Titre de la formation" },
     { key: "{duree_formation}", label: "Durée" },
     { key: "{prix_formation}", label: "Prix" },
     { key: "{objectifs_formation}", label: "Objectifs" },
+    { key: "{prerequis_formation}", label: "Prérequis" },
+    { key: "{niveau_formation}", label: "Niveau" },
+    { key: "{public_cible}", label: "Public cible" },
+    { key: "{methodes_pedagogiques}", label: "Méthodes pédagogiques" },
+    { key: "{contenu_formation}", label: "Contenu de la formation" },
+  ],
+  formateur: [
+    { key: "{nom_formateur}", label: "Nom du formateur" },
+    { key: "{email_formateur}", label: "Email du formateur" },
+  ],
+  inscription: [
+    { key: "{date_inscription}", label: "Date d'inscription" },
+    { key: "{statut_inscription}", label: "Statut de l'inscription" },
+  ],
+  conditionnel: [
+    { key: "{modalite_presentiel}", label: "Vrai si présentiel" },
+    { key: "{modalite_distanciel}", label: "Vrai si distanciel" },
+    { key: "{modalite_mixte}", label: "Vrai si blended/mixte" },
+    { key: "{est_certifiante}", label: "Vrai si formation certifiante" },
   ],
   organisme: [
     { key: "{nom_organisme}", label: "Nom de l'organisme" },

@@ -45,6 +45,13 @@ import {
   Shield,
   ShieldAlert,
   Settings as SettingsIcon,
+  Mail,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type {
@@ -58,6 +65,7 @@ import type {
   Enterprise,
   Session,
   AutomationLog,
+  Program,
 } from "@shared/schema";
 import {
   AUTOMATION_EVENTS,
@@ -65,6 +73,7 @@ import {
   TRAINEE_PROFILE_TYPES,
   USER_ROLES,
   ADMIN_PERMISSIONS,
+  TEMPLATE_VARIABLES,
 } from "@shared/schema";
 
 // ============================================================
@@ -267,21 +276,55 @@ function AutomationRuleForm({
   const [profileType, setProfileType] = useState((existingConditions.profileType as string) || "__all__");
   const [programCategory, setProgramCategory] = useState((existingConditions.programCategory as string) || "");
   const [emailTemplateId, setEmailTemplateId] = useState((existingConditions.emailTemplateId as string) || "__none__");
+  const [programId, setProgramId] = useState((existingConditions.programId as string) || "__all__");
+  const [templateOverrides, setTemplateOverrides] = useState<Record<string, string>>(
+    (rule?.templateOverrides as Record<string, string>) || {}
+  );
+  const [showVariablesHelp, setShowVariablesHelp] = useState(false);
 
   // Fetch document templates for document-related actions
   const { data: documentTemplates } = useQuery<DocumentTemplate[]>({
     queryKey: ["/api/document-templates"],
   });
 
+  // Fetch programs for program filter and template overrides
+  const { data: programs } = useQuery<Program[]>({
+    queryKey: ["/api/programs"],
+  });
+
   const isDocumentAction = action === "generate_document" || action === "generate_document_and_send";
+  const isEmailAction = action === "send_email" || action === "send_email_enterprise" || action === "send_survey";
   const showEmailTemplateCondition = action === "generate_document_and_send";
+  const showTemplateOverrides = isEmailAction || action === "generate_document_and_send";
+
+  const handleAddOverride = () => {
+    if (!programs || programs.length === 0) return;
+    const availableProgram = programs.find((p) => !templateOverrides[p.id]);
+    if (availableProgram) {
+      setTemplateOverrides({ ...templateOverrides, [availableProgram.id]: "" });
+    }
+  };
+
+  const handleRemoveOverride = (progId: string) => {
+    const next = { ...templateOverrides };
+    delete next[progId];
+    setTemplateOverrides(next);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const conditions: Record<string, unknown> = {};
     if (profileType && profileType !== "__all__") conditions.profileType = profileType;
     if (programCategory) conditions.programCategory = programCategory;
+    if (programId && programId !== "__all__") conditions.programId = programId;
     if (emailTemplateId && emailTemplateId !== "__none__" && showEmailTemplateCondition) conditions.emailTemplateId = emailTemplateId;
+
+    // Clean template overrides (remove empty values)
+    const cleanedOverrides: Record<string, string> = {};
+    for (const [k, v] of Object.entries(templateOverrides)) {
+      if (v) cleanedOverrides[k] = v;
+    }
+
     onSubmit({
       name,
       event,
@@ -290,7 +333,19 @@ function AutomationRuleForm({
       delay: parseInt(delay) || 0,
       active,
       conditions: Object.keys(conditions).length > 0 ? conditions : null,
+      templateOverrides: Object.keys(cleanedOverrides).length > 0 ? cleanedOverrides : null,
     });
+  };
+
+  const groupLabels: Record<string, string> = {
+    apprenant: "Apprenant",
+    entreprise: "Entreprise",
+    session: "Session",
+    formation: "Formation",
+    formateur: "Formateur",
+    inscription: "Inscription",
+    conditionnel: "Conditionnel",
+    organisme: "Organisme",
   };
 
   return (
@@ -403,6 +458,95 @@ function AutomationRuleForm({
         </div>
       </div>
       <div className="space-y-2">
+        <Label>Formation spécifique (optionnel)</Label>
+        <Select value={programId} onValueChange={setProgramId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Toutes les formations" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Toutes les formations</SelectItem>
+            {(programs || []).map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Template overrides per program */}
+      {showTemplateOverrides && (
+        <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Templates par formation</Label>
+            <Button type="button" variant="outline" size="sm" onClick={handleAddOverride}>
+              <Plus className="h-3 w-3 mr-1" /> Ajouter
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Utilisez un template différent selon la formation concernée. Si aucune surcharge ne correspond, le template par défaut sera utilisé.
+          </p>
+          {Object.entries(templateOverrides).map(([progId, tplId]) => (
+            <div key={progId} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+              <div>
+                <Label className="text-xs">Formation</Label>
+                <Select
+                  value={progId}
+                  onValueChange={(newProgId) => {
+                    const next = { ...templateOverrides };
+                    const val = next[progId];
+                    delete next[progId];
+                    next[newProgId] = val;
+                    setTemplateOverrides(next);
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(programs || []).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Template alternatif</Label>
+                <Select
+                  value={tplId}
+                  onValueChange={(newTplId) =>
+                    setTemplateOverrides({ ...templateOverrides, [progId]: newTplId })
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Choisir..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => handleRemoveOverride(progId)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2">
         <Label htmlFor="rule-delay">Délai (minutes)</Label>
         <Input
           id="rule-delay"
@@ -421,6 +565,49 @@ function AutomationRuleForm({
         />
         <Label htmlFor="rule-active">Règle active</Label>
       </div>
+
+      {/* Variables help panel */}
+      <div className="border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          className="flex items-center justify-between w-full p-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+          onClick={() => setShowVariablesHelp(!showVariablesHelp)}
+        >
+          <span className="flex items-center gap-2">
+            <HelpCircle className="h-4 w-4" />
+            Variables disponibles
+          </span>
+          {showVariablesHelp ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+        {showVariablesHelp && (
+          <div className="p-3 border-t space-y-3 max-h-64 overflow-y-auto">
+            {Object.entries(TEMPLATE_VARIABLES).map(([group, vars]) => (
+              <div key={group}>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                  {groupLabels[group] || group}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {vars.map((v) => (
+                    <Badge key={v.key} variant="secondary" className="text-[10px] font-mono cursor-help" title={v.label}>
+                      {v.key}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div className="mt-2 pt-2 border-t">
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Blocs conditionnels</p>
+              <p className="text-xs text-muted-foreground">
+                Syntaxe : <code className="bg-muted px-1 rounded">{"{{#if nom_variable}}contenu{{/if}}"}</code>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Le contenu est affiché uniquement si la variable est non vide. Utilisez les variables conditionnelles (modalite_presentiel, modalite_distanciel, etc.).
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending}>
           {isPending ? "Enregistrement..." : rule ? "Modifier" : "Créer"}
@@ -1189,6 +1376,189 @@ function UtilisateursTab() {
 // Main Settings Page
 // ============================================================
 
+function SmtpTab() {
+  const { toast } = useToast();
+  const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [testError, setTestError] = useState("");
+
+  const { data: settings, isLoading } = useQuery<Record<string, string>>({
+    queryKey: ["/api/settings"],
+  });
+
+  const [form, setForm] = useState({
+    smtp_host: "",
+    smtp_port: "587",
+    smtp_secure: "false",
+    smtp_user: "",
+    smtp_pass: "",
+    smtp_from_name: "",
+    smtp_from_email: "",
+  });
+
+  useEffect(() => {
+    if (settings) {
+      setForm({
+        smtp_host: settings.smtp_host || "",
+        smtp_port: settings.smtp_port || "587",
+        smtp_secure: settings.smtp_secure || "false",
+        smtp_user: settings.smtp_user || "",
+        smtp_pass: settings.smtp_pass || "",
+        smtp_from_name: settings.smtp_from_name || "",
+        smtp_from_email: settings.smtp_from_email || "",
+      });
+    }
+  }, [settings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: Record<string, string>) => {
+      const res = await apiRequest("PATCH", "/api/settings", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Configuration SMTP sauvegardée" });
+    },
+    onError: () => {
+      toast({ title: "Erreur lors de la sauvegarde", variant: "destructive" });
+    },
+  });
+
+  const handleTest = async () => {
+    setTestStatus("loading");
+    setTestError("");
+    try {
+      // Save first so the server uses current values
+      await saveMutation.mutateAsync(form);
+      const res = await apiRequest("POST", "/api/settings/smtp-test");
+      const result = await res.json();
+      if (result.success) {
+        setTestStatus("success");
+      } else {
+        setTestStatus("error");
+        setTestError(result.error || "Erreur inconnue");
+      }
+    } catch {
+      setTestStatus("error");
+      setTestError("Erreur de connexion au serveur");
+    }
+  };
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mail className="w-5 h-5" />
+          Configuration SMTP
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="smtp_host">Serveur SMTP</Label>
+            <Input
+              id="smtp_host"
+              placeholder="smtp.example.com"
+              value={form.smtp_host}
+              onChange={(e) => setForm({ ...form, smtp_host: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="smtp_port">Port</Label>
+            <Input
+              id="smtp_port"
+              placeholder="587"
+              value={form.smtp_port}
+              onChange={(e) => setForm({ ...form, smtp_port: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="smtp_secure"
+            checked={form.smtp_secure === "true"}
+            onCheckedChange={(checked) => setForm({ ...form, smtp_secure: checked ? "true" : "false" })}
+          />
+          <Label htmlFor="smtp_secure">Connexion sécurisée (SSL/TLS)</Label>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="smtp_user">Identifiant</Label>
+            <Input
+              id="smtp_user"
+              placeholder="user@example.com"
+              value={form.smtp_user}
+              onChange={(e) => setForm({ ...form, smtp_user: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="smtp_pass">Mot de passe</Label>
+            <Input
+              id="smtp_pass"
+              type="password"
+              placeholder="••••••••"
+              value={form.smtp_pass}
+              onChange={(e) => setForm({ ...form, smtp_pass: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="smtp_from_name">Nom de l'expéditeur</Label>
+            <Input
+              id="smtp_from_name"
+              placeholder="SO'SAFE Formation"
+              value={form.smtp_from_name}
+              onChange={(e) => setForm({ ...form, smtp_from_name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="smtp_from_email">Email de l'expéditeur</Label>
+            <Input
+              id="smtp_from_email"
+              placeholder="noreply@example.com"
+              value={form.smtp_from_email}
+              onChange={(e) => setForm({ ...form, smtp_from_email: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
+            <Save className="w-4 h-4 mr-2" />
+            {saveMutation.isPending ? "Enregistrement..." : "Enregistrer"}
+          </Button>
+          <Button variant="outline" onClick={handleTest} disabled={testStatus === "loading"}>
+            {testStatus === "loading" ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Mail className="w-4 h-4 mr-2" />
+            )}
+            Tester la connexion
+          </Button>
+        </div>
+
+        {testStatus === "success" && (
+          <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-md">
+            <CheckCircle className="w-4 h-4" />
+            Connexion SMTP réussie
+          </div>
+        )}
+        {testStatus === "error" && (
+          <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-md">
+            <XCircle className="w-4 h-4" />
+            Échec de la connexion : {testError}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { user } = useAuth();
 
@@ -1230,6 +1600,10 @@ export default function Settings() {
             <Users className="w-4 h-4" />
             Utilisateurs
           </TabsTrigger>
+          <TabsTrigger value="smtp" className="gap-2">
+            <Mail className="w-4 h-4" />
+            Email SMTP
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="organisme">
@@ -1242,6 +1616,10 @@ export default function Settings() {
 
         <TabsContent value="utilisateurs">
           <UtilisateursTab />
+        </TabsContent>
+
+        <TabsContent value="smtp">
+          <SmtpTab />
         </TabsContent>
       </Tabs>
     </div>

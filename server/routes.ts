@@ -1133,15 +1133,37 @@ export async function registerRoutes(
       "{nom_famille_apprenant}": "Dupont",
       "{email_apprenant}": "jean.dupont@example.com",
       "{entreprise_apprenant}": "Hôpital Saint-Louis",
+      "{profile_type_apprenant}": "salarie",
+      "{profession_apprenant}": "Infirmier(ère)",
+      "{nom_entreprise}": "Hôpital Saint-Louis",
+      "{contact_entreprise}": "Marie Martin",
+      "{email_entreprise}": "contact@hopital-stlouis.fr",
       "{titre_session}": "AFGSU Niveau 1 - Session Mars",
       "{date_debut}": "15/03/2026",
       "{date_fin}": "17/03/2026",
       "{lieu}": "Paris - Centre de formation",
       "{modalite}": "Présentiel",
+      "{adresse_lieu}": "12 rue de la Santé, 75013 Paris",
+      "{salle}": "Salle A - 2ème étage",
+      "{url_classe_virtuelle}": "https://meet.example.com/session-mars",
+      "{max_participants}": "12",
       "{titre_formation}": "AFGSU Niveau 1",
       "{duree_formation}": "14 heures",
       "{prix_formation}": "500 EUR",
       "{objectifs_formation}": "Maîtriser les gestes d'urgence",
+      "{prerequis_formation}": "Aucun prérequis",
+      "{niveau_formation}": "beginner",
+      "{public_cible}": "Professionnels de santé",
+      "{methodes_pedagogiques}": "Mises en situation, ateliers pratiques",
+      "{contenu_formation}": "Module 1: Urgences vitales, Module 2: Urgences potentielles",
+      "{nom_formateur}": "Dr. Sophie Bernard",
+      "{email_formateur}": "sophie.bernard@sosafe.fr",
+      "{date_inscription}": "01/02/2026",
+      "{statut_inscription}": "confirmed",
+      "{modalite_presentiel}": "true",
+      "{modalite_distanciel}": "",
+      "{modalite_mixte}": "",
+      "{est_certifiante}": "true",
       "{nom_organisme}": "SO'SAFE Formation",
       "{adresse_organisme}": "12 rue de la Santé, 75013 Paris",
       "{siret_organisme}": "123 456 789 00012",
@@ -1155,6 +1177,18 @@ export async function registerRoutes(
       renderedSubject = renderedSubject.replaceAll(key, value);
       renderedBody = renderedBody.replaceAll(key, value);
     }
+
+    // Process conditional blocks for preview
+    const processConditionalBlocks = (text: string) =>
+      text.replace(
+        /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
+        (_match: string, varName: string, content: string) => {
+          const value = exampleValues[`{${varName}}`] || "";
+          return value && value !== "false" ? content : "";
+        },
+      );
+    renderedSubject = processConditionalBlocks(renderedSubject);
+    renderedBody = processConditionalBlocks(renderedBody);
 
     res.json({ subject: renderedSubject, body: renderedBody });
   });
@@ -1917,12 +1951,54 @@ export async function registerRoutes(
 
   app.patch("/api/settings", async (req, res) => {
     const settings = req.body as Record<string, string>;
+    const smtpKeys = ["smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email"];
+    let smtpChanged = false;
     for (const [key, value] of Object.entries(settings)) {
       await storage.upsertOrganizationSetting({ key, value });
+      if (smtpKeys.includes(key)) smtpChanged = true;
+    }
+    if (smtpChanged) {
+      const { resetTransporter } = await import("./email-service");
+      resetTransporter();
     }
     const result = await storage.getOrganizationSettings();
     const settingsMap = Object.fromEntries(result.map(s => [s.key, s.value]));
     res.json(settingsMap);
+  });
+
+  // SMTP test connection
+  app.post("/api/settings/smtp-test", async (_req, res) => {
+    const { testSmtpConnection } = await import("./email-service");
+    const result = await testSmtpConnection();
+    res.json(result);
+  });
+
+  // Email log detail
+  app.get("/api/email-logs/:id", async (req, res) => {
+    const emailLog = await storage.getEmailLog(req.params.id);
+    if (!emailLog) return res.status(404).json({ message: "Email log introuvable" });
+    res.json(emailLog);
+  });
+
+  // Resend a failed email
+  app.post("/api/email-logs/:id/resend", async (req, res) => {
+    const emailLog = await storage.getEmailLog(req.params.id);
+    if (!emailLog) return res.status(404).json({ message: "Email log introuvable" });
+    // Reset status to pending and retry count
+    await storage.updateEmailLog(req.params.id, {
+      status: "pending",
+      error: null,
+      retryCount: 0,
+    } as any);
+    const { sendEmailNow } = await import("./email-service");
+    try {
+      await sendEmailNow(req.params.id);
+      const updated = await storage.getEmailLog(req.params.id);
+      res.json(updated);
+    } catch (err: any) {
+      const updated = await storage.getEmailLog(req.params.id);
+      res.json(updated);
+    }
   });
 
   // ============================================================
