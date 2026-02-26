@@ -40,6 +40,8 @@ import {
   Plus,
   Pencil,
   Trash2,
+  Play,
+  History,
   Shield,
   ShieldAlert,
   Settings as SettingsIcon,
@@ -54,6 +56,8 @@ import type {
   Trainer,
   Trainee,
   Enterprise,
+  Session,
+  AutomationLog,
 } from "@shared/schema";
 import {
   AUTOMATION_EVENTS,
@@ -260,9 +264,9 @@ function AutomationRuleForm({
   const [templateId, setTemplateId] = useState(rule?.templateId || "");
   const [delay, setDelay] = useState(rule?.delay?.toString() || "0");
   const [active, setActive] = useState(rule?.active ?? true);
-  const [profileType, setProfileType] = useState((existingConditions.profileType as string) || "");
+  const [profileType, setProfileType] = useState((existingConditions.profileType as string) || "__all__");
   const [programCategory, setProgramCategory] = useState((existingConditions.programCategory as string) || "");
-  const [emailTemplateId, setEmailTemplateId] = useState((existingConditions.emailTemplateId as string) || "");
+  const [emailTemplateId, setEmailTemplateId] = useState((existingConditions.emailTemplateId as string) || "__none__");
 
   // Fetch document templates for document-related actions
   const { data: documentTemplates } = useQuery<DocumentTemplate[]>({
@@ -275,9 +279,9 @@ function AutomationRuleForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const conditions: Record<string, unknown> = {};
-    if (profileType) conditions.profileType = profileType;
+    if (profileType && profileType !== "__all__") conditions.profileType = profileType;
     if (programCategory) conditions.programCategory = programCategory;
-    if (emailTemplateId && showEmailTemplateCondition) conditions.emailTemplateId = emailTemplateId;
+    if (emailTemplateId && emailTemplateId !== "__none__" && showEmailTemplateCondition) conditions.emailTemplateId = emailTemplateId;
     onSubmit({
       name,
       event,
@@ -362,7 +366,7 @@ function AutomationRuleForm({
               <SelectValue placeholder="Sélectionner un template email" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Aucun</SelectItem>
+              <SelectItem value="__none__">Aucun</SelectItem>
               {templates.map((t) => (
                 <SelectItem key={t.id} value={t.id}>
                   {t.name}
@@ -380,7 +384,7 @@ function AutomationRuleForm({
               <SelectValue placeholder="Tous les profils" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Tous</SelectItem>
+              <SelectItem value="__all__">Tous</SelectItem>
               {TRAINEE_PROFILE_TYPES.map((p) => (
                 <SelectItem key={p.value} value={p.value}>
                   {p.label}
@@ -426,10 +430,183 @@ function AutomationRuleForm({
   );
 }
 
+function ExecuteRuleDialog({
+  rule,
+  open,
+  onOpenChange,
+}: {
+  rule: AutomationRule | undefined;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [sessionId, setSessionId] = useState("");
+  const [traineeId, setTraineeId] = useState("");
+
+  const { data: sessions } = useQuery<Session[]>({
+    queryKey: ["/api/sessions"],
+    enabled: open,
+  });
+
+  const { data: trainees } = useQuery<Trainee[]>({
+    queryKey: ["/api/trainees"],
+    enabled: open,
+  });
+
+  const executeMutation = useMutation({
+    mutationFn: (data: { sessionId?: string; traineeId?: string }) =>
+      apiRequest("POST", `/api/automation-rules/${rule?.id}/execute`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/automation-logs"] });
+      toast({ title: "Règle exécutée avec succès" });
+      onOpenChange(false);
+      setSessionId("");
+      setTraineeId("");
+    },
+    onError: () =>
+      toast({ title: "Erreur lors de l'exécution", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Exécuter : {rule?.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Session</Label>
+            <Select value={sessionId} onValueChange={setSessionId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionner une session" />
+              </SelectTrigger>
+              <SelectContent>
+                {sessions?.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Apprenant</Label>
+            <Select value={traineeId} onValueChange={setTraineeId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionner un apprenant" />
+              </SelectTrigger>
+              <SelectContent>
+                {trainees?.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.firstName} {t.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            className="w-full"
+            disabled={(!sessionId && !traineeId) || executeMutation.isPending}
+            onClick={() =>
+              executeMutation.mutate({
+                sessionId: sessionId || undefined,
+                traineeId: traineeId || undefined,
+              })
+            }
+          >
+            <Play className="w-4 h-4 mr-2" />
+            {executeMutation.isPending ? "Exécution…" : "Exécuter"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AutomationLogsPanel({ rules }: { rules: AutomationRule[] }) {
+  const { data: logs } = useQuery<AutomationLog[]>({
+    queryKey: ["/api/automation-logs"],
+    refetchInterval: 30000,
+  });
+
+  const ruleNames: Record<string, string> = {};
+  rules.forEach((r) => {
+    ruleNames[r.id] = r.name;
+  });
+
+  return (
+    <div className="mt-8">
+      <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+        <History className="w-5 h-5" />
+        Historique des exécutions
+      </h3>
+      {!logs || logs.length === 0 ? (
+        <div className="text-center py-8">
+          <History className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+          <p className="text-sm text-muted-foreground">Aucune exécution enregistrée</p>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Règle</TableHead>
+              <TableHead>Événement</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead>Statut</TableHead>
+              <TableHead>Cible</TableHead>
+              <TableHead>Détails / Erreur</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {logs.map((log) => (
+              <TableRow key={log.id}>
+                <TableCell className="text-sm whitespace-nowrap">
+                  {log.executedAt
+                    ? new Date(log.executedAt).toLocaleString("fr-FR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-sm font-medium">
+                  {ruleNames[log.ruleId] || log.ruleId}
+                </TableCell>
+                <TableCell>
+                  <EventBadge event={log.event} />
+                </TableCell>
+                <TableCell>
+                  <ActionBadge action={log.action} />
+                </TableCell>
+                <TableCell>
+                  <Badge variant={log.status === "success" ? "default" : "destructive"}>
+                    {log.status === "success" ? "Succès" : "Erreur"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {log.targetType && log.targetId
+                    ? `${log.targetType}:${log.targetId.slice(0, 8)}`
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+                  {log.error || (log.details ? JSON.stringify(log.details) : "—")}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
 function AutomatisationTab() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editRule, setEditRule] = useState<AutomationRule | undefined>();
+  const [executeRule, setExecuteRule] = useState<AutomationRule | undefined>();
 
   const { data: rules, isLoading } = useQuery<AutomationRule[]>({
     queryKey: ["/api/automation-rules"],
@@ -585,6 +762,14 @@ function AutomatisationTab() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        title="Exécuter manuellement"
+                        onClick={() => setExecuteRule(rule)}
+                      >
+                        <Play className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => {
                           setEditRule(rule);
                           setDialogOpen(true);
@@ -637,6 +822,16 @@ function AutomatisationTab() {
             />
           </DialogContent>
         </Dialog>
+
+        <ExecuteRuleDialog
+          rule={executeRule}
+          open={!!executeRule}
+          onOpenChange={(open) => {
+            if (!open) setExecuteRule(undefined);
+          }}
+        />
+
+        <AutomationLogsPanel rules={rules || []} />
       </CardContent>
     </Card>
   );

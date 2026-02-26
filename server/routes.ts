@@ -2170,10 +2170,29 @@ export async function registerRoutes(
         } else if (parsed.data.signerType === "enterprise") {
           enterpriseId = parsed.data.signerId;
         }
+        // Resolve programId and sessionId from quote lineItems
+        let programId: string | undefined;
+        let sessionId: string | undefined;
+        const quoteId = parsed.data.relatedId || undefined;
+        if (quoteId) {
+          const quote = await storage.getQuote(quoteId);
+          if (quote?.lineItems && quote.lineItems.length > 0) {
+            programId = quote.lineItems[0].programId;
+          }
+          if (programId) {
+            const allSessions = await storage.getSessions();
+            const activeSession = allSessions.find(
+              (s) => s.programId === programId && s.status !== "cancelled"
+            );
+            if (activeSession) sessionId = activeSession.id;
+          }
+        }
         triggerAutomation("quote_signed", {
-          quoteId: parsed.data.relatedId || undefined,
+          quoteId,
           enterpriseId,
           traineeId,
+          programId,
+          sessionId,
         }).catch(err => console.error("[automation] quote_signed trigger error:", err));
       } else if (docType === "convention") {
         const traineeId = parsed.data.signerType === "trainee" ? parsed.data.signerId : undefined;
