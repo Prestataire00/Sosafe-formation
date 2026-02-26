@@ -485,6 +485,19 @@ export const userDocuments = pgTable("user_documents", {
   category: text("category").default("autre"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   uploadedBy: varchar("uploaded_by"),
+  // AI validation fields
+  status: text("status").default("pending"), // pending | analyzing | auto_valid | auto_invalid | manually_validated | rejected
+  aiStatus: text("ai_status").default("pending"), // pending | processing | completed | failed
+  aiExtractedDate: date("ai_extracted_date"),
+  aiConfidence: text("ai_confidence"), // high | medium | low
+  aiRawResponse: text("ai_raw_response"),
+  aiAnalyzedAt: timestamp("ai_analyzed_at"),
+  aiError: text("ai_error"),
+  isManuallyValidated: boolean("is_manually_validated").default(false),
+  validatedBy: varchar("validated_by"),
+  validatedAt: timestamp("validated_at"),
+  validationNotes: text("validation_notes"),
+  linkedSessionId: varchar("linked_session_id"),
 });
 
 export const signatures = pgTable("signatures", {
@@ -1132,6 +1145,29 @@ export const CERTIFICATION_STATUSES = [
   { value: "valid", label: "Valide", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   { value: "expired", label: "Expirée", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
   { value: "revoked", label: "Révoquée", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+] as const;
+
+// User document validation statuses
+export const USER_DOCUMENT_STATUSES = [
+  { value: "pending", label: "En attente", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+  { value: "analyzing", label: "Analyse en cours", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "auto_valid", label: "Validé (IA)", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "auto_invalid", label: "Invalide (IA)", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  { value: "manually_validated", label: "Validé manuellement", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  { value: "rejected", label: "Rejeté", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+] as const;
+
+export const AI_ANALYSIS_STATUSES = [
+  { value: "pending", label: "En attente", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+  { value: "processing", label: "En cours", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "completed", label: "Terminé", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "failed", label: "Échoué", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+] as const;
+
+export const AI_CONFIDENCE_LEVELS = [
+  { value: "high", label: "Haute", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "medium", label: "Moyenne", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  { value: "low", label: "Basse", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
 ] as const;
 
 // VAE statuses

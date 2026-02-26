@@ -19,7 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -28,6 +31,9 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  FileText,
+  RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -43,8 +49,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Trainee, InsertTrainee, Enterprise } from "@shared/schema";
-import { TRAINEE_CIVILITIES, TRAINEE_PROFILE_TYPES, PRO_STATUT_TYPES, DIETARY_REGIMES, TRAINEE_PROFESSIONS } from "@shared/schema";
+import type { Trainee, InsertTrainee, Enterprise, UserDocument } from "@shared/schema";
+import { TRAINEE_CIVILITIES, TRAINEE_PROFILE_TYPES, PRO_STATUT_TYPES, DIETARY_REGIMES, TRAINEE_PROFESSIONS, USER_DOCUMENT_STATUSES, AI_ANALYSIS_STATUSES, AI_CONFIDENCE_LEVELS } from "@shared/schema";
 
 function ProfileTypeBadge({ profileType }: { profileType: string | null }) {
   const pt = TRAINEE_PROFILE_TYPES.find((p) => p.value === profileType);
@@ -444,6 +450,147 @@ function TraineeForm({
   );
 }
 
+function TraineeDocuments({ traineeId }: { traineeId: string }) {
+  const { toast } = useToast();
+
+  const { data: documents, isLoading } = useQuery<UserDocument[]>({
+    queryKey: [`/api/trainees/${traineeId}/documents`],
+  });
+
+  const validateMutation = useMutation({
+    mutationFn: ({ docId, data }: { docId: string; data: Record<string, unknown> }) =>
+      apiRequest("PATCH", `/api/user-documents/${docId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainees/${traineeId}/documents`] });
+      toast({ title: "Document mis à jour" });
+    },
+    onError: () => toast({ title: "Erreur lors de la mise à jour", variant: "destructive" }),
+  });
+
+  const reanalyzeMutation = useMutation({
+    mutationFn: (docId: string) => apiRequest("POST", `/api/user-documents/${docId}/reanalyze`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainees/${traineeId}/documents`] });
+      toast({ title: "Analyse IA relancée" });
+    },
+    onError: () => toast({ title: "Erreur lors de la relance", variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 p-4">
+        {[1, 2].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
+      </div>
+    );
+  }
+
+  if (!documents || documents.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <FileText className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+        <p className="text-sm text-muted-foreground">Aucun document justificatif</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {documents.map((doc) => {
+        const statusInfo = USER_DOCUMENT_STATUSES.find(s => s.value === doc.status);
+        const aiStatusInfo = AI_ANALYSIS_STATUSES.find(s => s.value === doc.aiStatus);
+        const confidenceInfo = AI_CONFIDENCE_LEVELS.find(c => c.value === doc.aiConfidence);
+
+        return (
+          <Card key={doc.id}>
+            <CardContent className="p-4 space-y-3">
+              {/* Line 1: File link + status badge */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  {doc.fileUrl ? (
+                    <a
+                      href={doc.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
+                    >
+                      {doc.title || doc.fileName || "Document"}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="text-sm font-medium">{doc.title || "Document"}</span>
+                  )}
+                </div>
+                {statusInfo && (
+                  <Badge variant="outline" className={statusInfo.color}>
+                    {statusInfo.label}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Line 2: AI results */}
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">Date extraite:</span>
+                  <span className="font-medium">
+                    {doc.aiExtractedDate
+                      ? new Date(doc.aiExtractedDate).toLocaleDateString("fr-FR")
+                      : "—"}
+                  </span>
+                </div>
+                {confidenceInfo && (
+                  <Badge variant="outline" className={`text-xs ${confidenceInfo.color}`}>
+                    Confiance: {confidenceInfo.label}
+                  </Badge>
+                )}
+                {aiStatusInfo && (
+                  <Badge variant="outline" className={`text-xs ${aiStatusInfo.color}`}>
+                    IA: {aiStatusInfo.label}
+                  </Badge>
+                )}
+              </div>
+
+              {/* AI Error message */}
+              {doc.aiError && (
+                <p className="text-xs text-destructive">{doc.aiError}</p>
+              )}
+
+              {/* Line 3: Manual validation + reanalyze button */}
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={doc.isManuallyValidated || false}
+                      onCheckedChange={(checked) => {
+                        validateMutation.mutate({
+                          docId: doc.id,
+                          data: { isManuallyValidated: checked },
+                        });
+                      }}
+                    />
+                    <Label className="text-sm">Validation manuelle</Label>
+                  </div>
+                </div>
+                {(doc.aiStatus === "failed" || doc.aiStatus === "pending") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => reanalyzeMutation.mutate(doc.id)}
+                    disabled={reanalyzeMutation.isPending}
+                  >
+                    <RefreshCw className={`w-3 h-3 mr-1 ${reanalyzeMutation.isPending ? "animate-spin" : ""}`} />
+                    Relancer l'analyse
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Trainees() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -653,20 +800,47 @@ export default function Trainees() {
           <DialogHeader>
             <DialogTitle>{editTrainee ? "Modifier le stagiaire" : "Nouveau stagiaire"}</DialogTitle>
           </DialogHeader>
-          <TraineeForm
-            trainee={editTrainee}
-            enterprises={enterprises || []}
-            onSubmit={(data) => {
-              const cleanData = {
-                ...data,
-                enterpriseId: data.enterpriseId === "none" ? null : data.enterpriseId,
-              };
-              editTrainee
-                ? updateMutation.mutate({ id: editTrainee.id, data: cleanData })
-                : createMutation.mutate(cleanData);
-            }}
-            isPending={createMutation.isPending || updateMutation.isPending}
-          />
+          {editTrainee ? (
+            <Tabs defaultValue="info" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="info">Informations</TabsTrigger>
+                <TabsTrigger value="documents">
+                  <FileText className="w-4 h-4 mr-1" />
+                  Documents justificatifs
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="info">
+                <TraineeForm
+                  trainee={editTrainee}
+                  enterprises={enterprises || []}
+                  onSubmit={(data) => {
+                    const cleanData = {
+                      ...data,
+                      enterpriseId: data.enterpriseId === "none" ? null : data.enterpriseId,
+                    };
+                    updateMutation.mutate({ id: editTrainee.id, data: cleanData });
+                  }}
+                  isPending={updateMutation.isPending}
+                />
+              </TabsContent>
+              <TabsContent value="documents">
+                <TraineeDocuments traineeId={editTrainee.id} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <TraineeForm
+              trainee={undefined}
+              enterprises={enterprises || []}
+              onSubmit={(data) => {
+                const cleanData = {
+                  ...data,
+                  enterpriseId: data.enterpriseId === "none" ? null : data.enterpriseId,
+                };
+                createMutation.mutate(cleanData);
+              }}
+              isPending={createMutation.isPending}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

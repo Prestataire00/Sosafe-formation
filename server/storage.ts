@@ -252,7 +252,9 @@ export interface IStorage {
 
   // User Documents
   getUserDocuments(ownerId: string, ownerType?: string): Promise<UserDocument[]>;
+  getUserDocument(id: string): Promise<UserDocument | undefined>;
   createUserDocument(doc: InsertUserDocument): Promise<UserDocument>;
+  updateUserDocument(id: string, data: Partial<UserDocument>): Promise<UserDocument | undefined>;
   deleteUserDocument(id: string): Promise<void>;
 
   // Signatures
@@ -1012,8 +1014,18 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(userDocuments).where(eq(userDocuments.ownerId, ownerId)).orderBy(desc(userDocuments.uploadedAt));
   }
 
+  async getUserDocument(id: string): Promise<UserDocument | undefined> {
+    const [result] = await db.select().from(userDocuments).where(eq(userDocuments.id, id));
+    return result;
+  }
+
   async createUserDocument(doc: InsertUserDocument): Promise<UserDocument> {
     const [result] = await db.insert(userDocuments).values(doc).returning();
+    return result;
+  }
+
+  async updateUserDocument(id: string, data: Partial<UserDocument>): Promise<UserDocument | undefined> {
+    const [result] = await db.update(userDocuments).set(data as any).where(eq(userDocuments.id, id)).returning();
     return result;
   }
 

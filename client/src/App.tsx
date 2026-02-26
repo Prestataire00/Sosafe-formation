@@ -39,6 +39,7 @@ import SettingsPage from "@/pages/settings";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 import PublicEnrollment from "@/pages/public-enrollment";
+import AfgsuSimulator from "@/pages/afgsu-simulator";
 
 function Router() {
   return (
@@ -140,6 +141,7 @@ function App() {
         <TooltipProvider>
           <Switch>
             <Route path="/inscription" component={PublicEnrollment} />
+            <Route path="/simulateur-afgsu" component={AfgsuSimulator} />
             <Route>
               <AuthProvider>
                 <AppShell />

@@ -59,7 +59,18 @@
       "Bash(export:*)",
       "Bash(timeout 15 npx tsx:*)",
       "Bash(npx tsx:*)",
-      "Bash(netstat -tlnp)"
+      "Bash(netstat -tlnp)",
+      "Bash(tail:*)",
+      "WebFetch(domain:ancesu.fr)",
+      "WebFetch(domain:sauveperformance.fr)",
+      "WebFetch(domain:www.guide-afgsu.fr)",
+      "WebFetch(domain:qualisante.fr)",
+      "WebFetch(domain:www.legifrance.gouv.fr)",
+      "WebFetch(domain:www.futura-sciences.com)",
+      "WebFetch(domain:www.lonasante.com)",
+      "WebFetch(domain:www.anfh.fr)",
+      "WebFetch(domain:www.cesu04.fr)",
+      "WebFetch(domain:centre-formation-garibaldi.fr)"
     ]
   }
 }

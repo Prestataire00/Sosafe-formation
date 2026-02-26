@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { storage } from "./storage";
+import { processDocumentValidation } from "./ai-document";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole, requirePermission } from "./auth";
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
@@ -34,6 +35,16 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   setupAuth(app);
+
+  const ALLOWED_MIMETYPES = [
+    "application/pdf",
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ];
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   // ============================================================
   // PUBLIC ROUTES (no auth required)
@@ -103,7 +114,7 @@ export async function registerRoutes(
   // POST /api/public/enrollments — public enrollment
   app.post("/api/public/enrollments", async (req, res) => {
     try {
-      const { sessionId, firstName, lastName, email, phone, company } = req.body;
+      const { sessionId, firstName, lastName, email, phone, company, documents } = req.body;
 
       // Validate required fields
       if (!sessionId || !firstName || !lastName || !email) {
@@ -165,6 +176,31 @@ export async function registerRoutes(
         status: "pending",
       });
 
+      // Create user documents if provided
+      if (documents && Array.isArray(documents)) {
+        for (const doc of documents) {
+          if (doc.title && doc.fileUrl) {
+            const userDoc = await storage.createUserDocument({
+              ownerId: trainee.id,
+              ownerType: "trainee",
+              title: doc.title,
+              fileName: doc.fileName || null,
+              fileUrl: doc.fileUrl,
+              fileSize: doc.fileSize || null,
+              mimeType: doc.mimeType || null,
+              category: "justificatif",
+              uploadedBy: null,
+            });
+
+            // Set linkedSessionId and trigger AI analysis (fire-and-forget)
+            await storage.updateUserDocument(userDoc.id, { linkedSessionId: sessionId });
+            processDocumentValidation(userDoc.id, trainee.id, sessionId).catch((err) => {
+              console.error(`AI analysis failed for document ${userDoc.id}:`, err);
+            });
+          }
+        }
+      }
+
       // Get program for response
       const program = await storage.getProgram(session.programId);
 
@@ -187,6 +223,80 @@ export async function registerRoutes(
       console.error("Public enrollment error:", error);
       res.status(500).json({ message: "Erreur lors de l'inscription" });
     }
+  });
+
+  // POST /api/public/upload — public file upload (no auth)
+  app.post("/api/public/upload", (req, res) => {
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return res.status(400).json({ message: "Content-Type doit être multipart/form-data" });
+    }
+
+    let fileHandled = false;
+    let fileMeta: { originalName: string; mimeType: string; savedName: string } | null = null;
+    let chunks: Buffer[] = [];
+    let size = 0;
+    let limitExceeded = false;
+
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: MAX_FILE_SIZE, files: 1 } });
+
+    busboy.on("file", (fieldname, stream, info) => {
+      const { filename: originalName, mimeType } = info;
+      fileHandled = true;
+
+      if (!ALLOWED_MIMETYPES.includes(mimeType)) {
+        stream.resume();
+        return;
+      }
+
+      const uniqueSuffix = Date.now() + "-" + crypto.randomBytes(6).toString("hex");
+      const ext = path.extname(originalName);
+      const savedName = uniqueSuffix + ext;
+
+      fileMeta = { originalName, mimeType, savedName };
+
+      stream.on("data", (chunk: Buffer) => {
+        size += chunk.length;
+        chunks.push(chunk);
+      });
+
+      stream.on("limit", () => {
+        limitExceeded = true;
+        chunks = [];
+        fileMeta = null;
+      });
+    });
+
+    busboy.on("finish", async () => {
+      if (!fileHandled) {
+        return res.status(400).json({ message: "Aucun fichier envoyé" });
+      }
+      if (!fileMeta || limitExceeded) {
+        return res.status(400).json({ message: "Type de fichier non autorisé ou fichier trop volumineux" });
+      }
+
+      const buffer = Buffer.concat(chunks);
+      chunks = [];
+
+      const uploadsDir = path.resolve(process.cwd(), "uploads");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(uploadsDir, fileMeta.savedName), buffer);
+
+      res.json({
+        fileUrl: `/uploads/${fileMeta.savedName}`,
+        fileName: fileMeta.originalName,
+        fileSize: size,
+        mimeType: fileMeta.mimeType,
+      });
+    });
+
+    busboy.on("error", (err: Error) => {
+      res.status(500).json({ message: err.message || "Erreur lors de l'upload" });
+    });
+
+    req.pipe(busboy);
   });
 
   // ============================================================
@@ -257,16 +367,6 @@ export async function registerRoutes(
   // ============================================================
   // FILE UPLOAD (busboy → Supabase Storage)
   // ============================================================
-
-  const ALLOWED_MIMETYPES = [
-    "application/pdf",
-    "image/jpeg", "image/png", "image/gif", "image/webp",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ];
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   app.post("/api/upload", (req, res) => {
     const contentType = req.headers["content-type"] || "";
@@ -1692,6 +1792,62 @@ export async function registerRoutes(
   app.delete("/api/user-documents/:id", async (req, res) => {
     await storage.deleteUserDocument(req.params.id);
     res.status(204).send();
+  });
+
+  // GET /api/user-documents/:id — get single document with AI results
+  app.get("/api/user-documents/:id", async (req, res) => {
+    const doc = await storage.getUserDocument(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Document non trouvé" });
+    res.json(doc);
+  });
+
+  // PATCH /api/user-documents/:id — manual validation
+  app.patch("/api/user-documents/:id", async (req, res) => {
+    const { isManuallyValidated, validationNotes, status } = req.body;
+    const updateData: Record<string, unknown> = {};
+
+    if (typeof isManuallyValidated === "boolean") {
+      updateData.isManuallyValidated = isManuallyValidated;
+      if (isManuallyValidated) {
+        updateData.status = "manually_validated";
+        updateData.validatedBy = (req.session as any)?.userId || null;
+        updateData.validatedAt = new Date();
+      }
+    }
+    if (validationNotes !== undefined) updateData.validationNotes = validationNotes;
+    if (status) updateData.status = status;
+
+    const doc = await storage.updateUserDocument(req.params.id, updateData);
+    if (!doc) return res.status(404).json({ message: "Document non trouvé" });
+    res.json(doc);
+  });
+
+  // POST /api/user-documents/:id/reanalyze — re-run AI analysis
+  app.post("/api/user-documents/:id/reanalyze", async (req, res) => {
+    const doc = await storage.getUserDocument(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Document non trouvé" });
+
+    // Reset AI fields and re-trigger analysis
+    await storage.updateUserDocument(doc.id, {
+      aiStatus: "pending",
+      status: "pending",
+      aiError: null,
+      aiExtractedDate: null,
+      aiConfidence: null,
+      aiRawResponse: null,
+    });
+
+    processDocumentValidation(doc.id, doc.ownerId, doc.linkedSessionId || undefined).catch((err) => {
+      console.error(`AI re-analysis failed for document ${doc.id}:`, err);
+    });
+
+    res.json({ message: "Analyse relancée" });
+  });
+
+  // GET /api/trainees/:id/documents — get trainee's justificatif documents
+  app.get("/api/trainees/:id/documents", async (req, res) => {
+    const docs = await storage.getUserDocuments(req.params.id, "trainee");
+    res.json(docs);
   });
 
   // ============================================================

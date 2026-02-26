@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
   ArrowLeft, CheckCircle2, Clock, Euro, Monitor, Building2,
+  Upload, FileText, X, Loader2,
 } from "lucide-react";
 
 type PublicSession = {
@@ -72,6 +73,8 @@ export default function PublicEnrollment() {
   });
   const [knownTrainee, setKnownTrainee] = useState<string | null>(null);
   const [confirmationData, setConfirmationData] = useState<any>(null);
+  const [uploadedDocs, setUploadedDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
+  const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
 
   const { data: sessions, isLoading } = useQuery<PublicSession[]>({
@@ -127,6 +130,42 @@ export default function PublicEnrollment() {
     }
   };
 
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: `${file.name} dépasse la taille maximale de 10 Mo`, variant: "destructive" });
+        continue;
+      }
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch("/api/public/upload", { method: "POST", body: formData });
+        if (!res.ok) {
+          const err = await res.json();
+          toast({ title: err.message || `Erreur lors de l'upload de ${file.name}`, variant: "destructive" });
+          continue;
+        }
+        const data = await res.json();
+        setUploadedDocs((prev) => [...prev, {
+          title: file.name,
+          fileUrl: data.fileUrl,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          mimeType: data.mimeType,
+        }]);
+      } catch {
+        toast({ title: `Erreur lors de l'upload de ${file.name}`, variant: "destructive" });
+      }
+    }
+    setUploading(false);
+  };
+
+  const handleRemoveDoc = (index: number) => {
+    setUploadedDocs((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSession) return;
@@ -137,6 +176,7 @@ export default function PublicEnrollment() {
       email: formData.email.trim(),
       phone: formData.phone.trim() || undefined,
       company: formData.company.trim() || undefined,
+      documents: uploadedDocs.length > 0 ? uploadedDocs : undefined,
     });
   };
 
@@ -145,6 +185,7 @@ export default function PublicEnrollment() {
     setSelectedSession(null);
     setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "" });
     setKnownTrainee(null);
+    setUploadedDocs([]);
   };
 
   const handleNewEnrollment = () => {
@@ -153,6 +194,7 @@ export default function PublicEnrollment() {
     setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "" });
     setKnownTrainee(null);
     setConfirmationData(null);
+    setUploadedDocs([]);
   };
 
   const filteredSessions = sessions?.filter((s) => {
@@ -416,11 +458,71 @@ export default function PublicEnrollment() {
                       </div>
                     </div>
 
+                    {/* Documents justificatifs */}
+                    <div className="space-y-3 pt-2">
+                      <Label>Documents justificatifs (optionnel)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        PDF, images (JPG, PNG), Word — 10 Mo max par fichier
+                      </p>
+                      <div
+                        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                        onClick={() => document.getElementById("public-file-input")?.click()}
+                      >
+                        <input
+                          id="public-file-input"
+                          type="file"
+                          multiple
+                          className="hidden"
+                          accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx"
+                          onChange={(e) => {
+                            handleFileUpload(e.target.files);
+                            e.target.value = "";
+                          }}
+                        />
+                        {uploading ? (
+                          <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Upload en cours...</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                            <Upload className="w-6 h-6" />
+                            <span className="text-sm">Cliquez pour ajouter des fichiers</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {uploadedDocs.length > 0 && (
+                        <div className="space-y-2">
+                          {uploadedDocs.map((doc, index) => (
+                            <div key={index} className="flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-md text-sm">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{doc.fileName}</span>
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  ({(doc.fileSize / 1024).toFixed(0)} Ko)
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 shrink-0"
+                                onClick={() => handleRemoveDoc(index)}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <Button
                       type="submit"
                       className="w-full"
                       size="lg"
-                      disabled={enrollMutation.isPending}
+                      disabled={enrollMutation.isPending || uploading}
                     >
                       {enrollMutation.isPending ? "Inscription en cours..." : "S'inscrire"}
                     </Button>
