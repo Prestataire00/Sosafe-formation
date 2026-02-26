@@ -309,6 +309,7 @@ export interface IStorage {
   updateTraineeCertification(id: string, data: Partial<InsertTraineeCertification>): Promise<TraineeCertification | undefined>;
   deleteTraineeCertification(id: string): Promise<void>;
   getExpiringCertifications(withinDays: number): Promise<TraineeCertification[]>;
+  getCertificationsExpiringInRange(fromDays: number, toDays: number): Promise<TraineeCertification[]>;
 }
 
 const pool = new pg.Pool({
@@ -1249,6 +1250,18 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(traineeCertifications.status, "valid"),
         sql`${traineeCertifications.expiresAt} IS NOT NULL AND ${traineeCertifications.expiresAt} <= ${futureDate.toISOString().split('T')[0]}`
+      ));
+  }
+
+  async getCertificationsExpiringInRange(fromDays: number, toDays: number): Promise<TraineeCertification[]> {
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() + fromDays);
+    const toDate = new Date();
+    toDate.setDate(toDate.getDate() + toDays);
+    return db.select().from(traineeCertifications)
+      .where(and(
+        eq(traineeCertifications.status, "valid"),
+        sql`${traineeCertifications.expiresAt} IS NOT NULL AND ${traineeCertifications.expiresAt} >= ${fromDate.toISOString().split('T')[0]} AND ${traineeCertifications.expiresAt} <= ${toDate.toISOString().split('T')[0]}`
       ));
   }
 }

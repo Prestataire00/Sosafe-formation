@@ -115,6 +115,44 @@ async function scanExpiringCertifications(): Promise<void> {
 }
 
 /**
+ * Scan for recycling reminders (AFGSU / Certibiocide / other certifications).
+ * Sends notifications at M-10, M-6, and M-2 before certification expiry.
+ * Uses a 7-day window around the target date and a persistent dedup set
+ * (not reset daily) to ensure each certification gets each reminder only once.
+ */
+const processedRecyclingKeys = new Set<string>();
+
+async function scanRecyclingReminders(): Promise<void> {
+  const windows: Array<{ fromDays: number; toDays: number; event: string; label: string }> = [
+    { fromDays: 297, toDays: 304, event: "recycling_reminder_10m", label: "M-10" },
+    { fromDays: 176, toDays: 183, event: "recycling_reminder_6m",  label: "M-6" },
+    { fromDays: 57,  toDays: 64,  event: "recycling_reminder_2m",  label: "M-2" },
+  ];
+
+  for (const { fromDays, toDays, event, label } of windows) {
+    try {
+      const certs = await storage.getCertificationsExpiringInRange(fromDays, toDays);
+      for (const cert of certs) {
+        const key = `${event}:${cert.id}`;
+        if (processedRecyclingKeys.has(key)) continue;
+        processedRecyclingKeys.add(key);
+
+        log(
+          `Relance recyclage ${label} pour certification ${cert.id} (${cert.label}) — trainee ${cert.traineeId}`,
+          "scheduled",
+        );
+        await triggerAutomation(event, {
+          traineeId: cert.traineeId,
+          programId: cert.programId || undefined,
+        });
+      }
+    } catch (err: any) {
+      log(`Erreur scan ${event}: ${err.message}`, "scheduled");
+    }
+  }
+}
+
+/**
  * Run all scheduled scans.
  */
 async function runScheduledScans(): Promise<void> {
@@ -122,6 +160,7 @@ async function runScheduledScans(): Promise<void> {
   try {
     await scanSessionReminders();
     await scanExpiringCertifications();
+    await scanRecyclingReminders();
   } catch (err: any) {
     log(`Erreur globale scheduled scans: ${err.message}`, "scheduled");
   }

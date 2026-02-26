@@ -927,6 +927,9 @@ export const AUTOMATION_EVENTS = [
   { value: "post_session_followup", label: "Suivi post-formation J+1" },
   { value: "certification_expiring_90d", label: "Certification expire dans 90j" },
   { value: "certification_expiring_30d", label: "Certification expire dans 30j" },
+  { value: "recycling_reminder_10m", label: "Relance recyclage M-10" },
+  { value: "recycling_reminder_6m", label: "Relance recyclage M-6" },
+  { value: "recycling_reminder_2m", label: "Relance recyclage M-2" },
 ] as const;
 
 export const AUTOMATION_ACTIONS = [
