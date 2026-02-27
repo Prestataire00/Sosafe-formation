@@ -92,6 +92,10 @@ export const trainees = pgTable("trainees", {
   proTva: text("pro_tva"),
   rppsNumber: text("rpps_number"),
   profession: text("profession"),
+  address: text("address"),
+  city: text("city"),
+  postalCode: text("postal_code"),
+  country: text("country").default("France"),
 });
 
 export const programs = pgTable("programs", {
@@ -210,6 +214,47 @@ export const emailLogs = pgTable("email_logs", {
   scheduledAt: timestamp("scheduled_at"),
   error: text("error"),
   retryCount: integer("retry_count").notNull().default(0),
+  trackingId: varchar("tracking_id").default(sql`gen_random_uuid()`).notNull(),
+  openedAt: timestamp("opened_at"),
+  openCount: integer("open_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const emailTrackingEvents = pgTable("email_tracking_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  emailLogId: varchar("email_log_id").notNull(),
+  trackingId: varchar("tracking_id").notNull(),
+  openedAt: timestamp("opened_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+});
+
+// ============================================================
+// NEW TABLES - SMS TEMPLATES & LOGS
+// ============================================================
+
+export const smsTemplates = pgTable("sms_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  body: text("body").notNull(),
+  category: text("category").notNull().default("general"),
+  type: text("type").notNull().default("manual"),
+  variables: jsonb("variables").$type<string[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const smsLogs = pgTable("sms_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id"),
+  recipient: text("recipient").notNull(),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("pending"),
+  sentAt: timestamp("sent_at"),
+  scheduledAt: timestamp("scheduled_at"),
+  error: text("error"),
+  retryCount: integer("retry_count").notNull().default(0),
+  messageId: text("message_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -232,10 +277,14 @@ export const generatedDocuments = pgTable("generated_documents", {
   templateId: varchar("template_id").notNull(),
   sessionId: varchar("session_id"),
   traineeId: varchar("trainee_id"),
+  enterpriseId: varchar("enterprise_id"),
+  quoteId: varchar("quote_id"),
   title: text("title").notNull(),
   type: text("type").notNull(),
   content: text("content").notNull(),
   status: text("status").notNull().default("generated"),
+  visibility: text("visibility").notNull().default("admin_only"),
+  sharedAt: timestamp("shared_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -606,7 +655,10 @@ export const insertProgramPrerequisiteSchema = createInsertSchema(programPrerequ
 export const insertTraineeCertificationSchema = createInsertSchema(traineeCertifications).omit({ id: true });
 
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({ id: true, createdAt: true });
+export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({ id: true, createdAt: true, trackingId: true, openedAt: true, openCount: true });
+export const insertEmailTrackingEventSchema = createInsertSchema(emailTrackingEvents).omit({ id: true, openedAt: true });
+export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSmsLogSchema = createInsertSchema(smsLogs).omit({ id: true, createdAt: true });
 export const insertDocumentTemplateSchema = createInsertSchema(documentTemplates).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertGeneratedDocumentSchema = createInsertSchema(generatedDocuments).omit({ id: true, createdAt: true });
 export const insertProspectSchema = createInsertSchema(prospects).omit({ id: true, createdAt: true, updatedAt: true });
@@ -679,6 +731,12 @@ export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
 export type EmailLog = typeof emailLogs.$inferSelect;
+export type InsertEmailTrackingEvent = z.infer<typeof insertEmailTrackingEventSchema>;
+export type EmailTrackingEvent = typeof emailTrackingEvents.$inferSelect;
+export type InsertSmsTemplate = z.infer<typeof insertSmsTemplateSchema>;
+export type SmsTemplate = typeof smsTemplates.$inferSelect;
+export type InsertSmsLog = z.infer<typeof insertSmsLogSchema>;
+export type SmsLog = typeof smsLogs.$inferSelect;
 export type InsertDocumentTemplate = z.infer<typeof insertDocumentTemplateSchema>;
 export type DocumentTemplate = typeof documentTemplates.$inferSelect;
 export type InsertGeneratedDocument = z.infer<typeof insertGeneratedDocumentSchema>;
@@ -821,14 +879,46 @@ export const EMAIL_TEMPLATE_TYPES = [
   { value: "automatic", label: "Automatique" },
 ] as const;
 
+export const SMS_TEMPLATE_CATEGORIES = [
+  { value: "convocation", label: "Convocation" },
+  { value: "confirmation", label: "Confirmation" },
+  { value: "rappel", label: "Rappel" },
+  { value: "urgent", label: "Urgent" },
+  { value: "general", label: "Général" },
+] as const;
+
+export const DOCUMENT_VISIBILITY = [
+  { value: "admin_only", label: "Admin uniquement" },
+  { value: "enterprise", label: "Visible par l'entreprise" },
+  { value: "trainee", label: "Visible par le stagiaire" },
+  { value: "all", label: "Visible par tous" },
+] as const;
+
+export const DOCUMENT_STATUSES = [
+  { value: "generated", label: "Généré" },
+  { value: "shared", label: "Partagé" },
+  { value: "sent", label: "Envoyé" },
+  { value: "signed", label: "Signé" },
+  { value: "archived", label: "Archivé" },
+] as const;
+
 export const DOCUMENT_TYPES = [
   { value: "convention", label: "Convention de formation" },
+  { value: "contrat_particulier", label: "Contrat particulier" },
+  { value: "contrat_vae", label: "Contrat VAE" },
+  { value: "politique_confidentialite", label: "Politique de confidentialité" },
+  { value: "devis", label: "Devis" },
+  { value: "devis_sous_traitance", label: "Devis sous-traitance" },
+  { value: "facture", label: "Facture" },
+  { value: "facture_blended", label: "Facture formation blended" },
+  { value: "facture_specifique", label: "Facture formation spécifique" },
   { value: "convocation", label: "Convocation" },
   { value: "attestation", label: "Attestation de formation" },
   { value: "certificat", label: "Certificat" },
   { value: "bpf", label: "Bilan Pédagogique et Financier" },
   { value: "programme", label: "Programme de formation" },
   { value: "reglement", label: "Règlement intérieur" },
+  { value: "etiquette_envoi", label: "Étiquette d'envoi postal" },
   { value: "autre", label: "Autre" },
   { value: "fiche_fipl", label: "Fiche FIPL" },
   { value: "rapport_emargement", label: "Rapport d'émargement" },
@@ -941,6 +1031,9 @@ export const AUTOMATION_ACTIONS = [
   { value: "generate_document_and_send", label: "Générer et envoyer un document" },
   { value: "create_invoice", label: "Créer une facture" },
   { value: "block_certificate", label: "Bloquer le certificat" },
+  { value: "generate_convention", label: "Générer une convention de formation" },
+  { value: "send_sms", label: "Envoyer un SMS" },
+  { value: "send_sms_enterprise", label: "Envoyer un SMS à l'entreprise" },
 ] as const;
 
 // Enterprise constants
@@ -1088,6 +1181,11 @@ export const TEMPLATE_VARIABLES = {
     { key: "{entreprise_apprenant}", label: "Entreprise de l'apprenant" },
     { key: "{profile_type_apprenant}", label: "Type de profil" },
     { key: "{profession_apprenant}", label: "Profession" },
+    { key: "{adresse_apprenant}", label: "Adresse postale" },
+    { key: "{ville_apprenant}", label: "Ville" },
+    { key: "{code_postal_apprenant}", label: "Code postal" },
+    { key: "{pays_apprenant}", label: "Pays" },
+    { key: "{adresse_complete_apprenant}", label: "Adresse complète (bloc postal)" },
   ],
   entreprise: [
     { key: "{nom_entreprise}", label: "Nom de l'entreprise" },
@@ -1124,11 +1222,65 @@ export const TEMPLATE_VARIABLES = {
     { key: "{date_inscription}", label: "Date d'inscription" },
     { key: "{statut_inscription}", label: "Statut de l'inscription" },
   ],
+  contrat: [
+    { key: "{numero_devis}", label: "Numéro du devis" },
+    { key: "{montant_devis}", label: "Montant du devis" },
+    { key: "{montant_ht}", label: "Montant HT" },
+    { key: "{montant_tva}", label: "Montant TVA" },
+    { key: "{montant_ttc}", label: "Montant TTC" },
+    { key: "{date_signature}", label: "Date de signature" },
+    { key: "{date_du_jour}", label: "Date du jour" },
+    { key: "{date_validite_devis}", label: "Date de validité du devis" },
+    { key: "{civilite_apprenant}", label: "Civilité de l'apprenant" },
+    { key: "{date_naissance_apprenant}", label: "Date de naissance" },
+    { key: "{adresse_apprenant}", label: "Adresse de l'apprenant" },
+    { key: "{telephone_apprenant}", label: "Téléphone de l'apprenant" },
+    { key: "{lignes_devis}", label: "Détail des lignes du devis (HTML)" },
+    { key: "{notes_devis}", label: "Notes / conditions du devis" },
+    { key: "{taux_tva}", label: "Taux de TVA" },
+  ],
+  facture: [
+    { key: "{numero_facture}", label: "Numéro de facture" },
+    { key: "{titre_facture}", label: "Titre de la facture" },
+    { key: "{facture_montant_ht}", label: "Montant HT facture" },
+    { key: "{facture_montant_tva}", label: "Montant TVA facture" },
+    { key: "{facture_montant_ttc}", label: "Montant TTC facture" },
+    { key: "{facture_taux_tva}", label: "Taux TVA facture" },
+    { key: "{facture_montant_paye}", label: "Montant déjà payé" },
+    { key: "{facture_reste_du}", label: "Reste dû" },
+    { key: "{facture_date_echeance}", label: "Date d'échéance" },
+    { key: "{facture_statut}", label: "Statut de la facture" },
+    { key: "{facture_lignes}", label: "Détail des lignes facture (HTML)" },
+    { key: "{facture_notes}", label: "Notes / conditions facture" },
+    { key: "{facture_numero_devis}", label: "Numéro du devis associé" },
+  ],
+  sous_traitance: [
+    { key: "{nom_sous_traitant}", label: "Nom du sous-traitant / formateur" },
+    { key: "{email_sous_traitant}", label: "Email du sous-traitant" },
+    { key: "{telephone_sous_traitant}", label: "Téléphone du sous-traitant" },
+    { key: "{specialite_sous_traitant}", label: "Spécialité du sous-traitant" },
+    { key: "{montant_prestation}", label: "Montant de la prestation" },
+    { key: "{objet_prestation}", label: "Objet de la prestation" },
+  ],
+  vae: [
+    { key: "{certification_visee}", label: "Certification visée" },
+    { key: "{diplome_vise}", label: "Diplôme / titre visé" },
+    { key: "{duree_accompagnement}", label: "Durée de l'accompagnement VAE" },
+    { key: "{tarif_accompagnement}", label: "Tarif de l'accompagnement" },
+    { key: "{modalites_paiement}", label: "Modalités de paiement" },
+    { key: "{delai_retractation}", label: "Délai de rétractation (10 jours)" },
+    { key: "{organisme_certificateur}", label: "Organisme certificateur" },
+  ],
   conditionnel: [
     { key: "{modalite_presentiel}", label: "Vrai si présentiel" },
     { key: "{modalite_distanciel}", label: "Vrai si distanciel" },
     { key: "{modalite_mixte}", label: "Vrai si blended/mixte" },
     { key: "{est_certifiante}", label: "Vrai si formation certifiante" },
+    { key: "{est_particulier}", label: "Vrai si particulier (non salarié)" },
+    { key: "{est_vae}", label: "Vrai si parcours VAE" },
+    { key: "{est_blended}", label: "Vrai si formation blended/mixte" },
+    { key: "{est_standard}", label: "Vrai si formation standard (présentiel)" },
+    { key: "{est_specifique}", label: "Vrai si formation spécifique" },
   ],
   organisme: [
     { key: "{nom_organisme}", label: "Nom de l'organisme" },

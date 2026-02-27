@@ -8,6 +8,7 @@ import {
   type Enrollment, type InsertEnrollment,
   type EmailTemplate, type InsertEmailTemplate,
   type EmailLog, type InsertEmailLog,
+  type EmailTrackingEvent, type InsertEmailTrackingEvent,
   type DocumentTemplate, type InsertDocumentTemplate,
   type GeneratedDocument, type InsertGeneratedDocument,
   type Prospect, type InsertProspect,
@@ -36,8 +37,10 @@ import {
   type TrainerCompetency, type InsertTrainerCompetency,
   type ProgramPrerequisite, type InsertProgramPrerequisite,
   type TraineeCertification, type InsertTraineeCertification,
+  type SmsTemplate, type InsertSmsTemplate,
+  type SmsLog, type InsertSmsLog,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
-  emailTemplates, emailLogs, documentTemplates, generatedDocuments,
+  emailTemplates, emailLogs, emailTrackingEvents, documentTemplates, generatedDocuments,
   prospects, quotes, invoices, payments,
   elearningModules, elearningBlocks, quizQuestions, learnerProgress,
   surveyTemplates, surveyResponses, qualityActions,
@@ -46,8 +49,9 @@ import {
   enterpriseContacts, trainerDocuments, trainerEvaluations,
   userDocuments, signatures, expenseNotes, trainerInvoices,
   trainerCompetencies, programPrerequisites, traineeCertifications,
+  smsTemplates, smsLogs,
 } from "@shared/schema";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, or, sql, desc, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 
@@ -121,6 +125,25 @@ export interface IStorage {
   updateEmailLog(id: string, data: Partial<InsertEmailLog>): Promise<EmailLog | undefined>;
   createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
 
+  // Email Tracking
+  getEmailLogByTrackingId(trackingId: string): Promise<EmailLog | undefined>;
+  recordEmailOpen(trackingId: string, ip: string | null, userAgent: string | null): Promise<void>;
+  getEmailTrackingEvents(emailLogId: string): Promise<EmailTrackingEvent[]>;
+
+  // SMS Templates
+  getSmsTemplates(): Promise<SmsTemplate[]>;
+  getSmsTemplate(id: string): Promise<SmsTemplate | undefined>;
+  createSmsTemplate(template: InsertSmsTemplate): Promise<SmsTemplate>;
+  updateSmsTemplate(id: string, template: Partial<InsertSmsTemplate>): Promise<SmsTemplate | undefined>;
+  deleteSmsTemplate(id: string): Promise<void>;
+
+  // SMS Logs
+  getSmsLogs(): Promise<SmsLog[]>;
+  getSmsLog(id: string): Promise<SmsLog | undefined>;
+  getPendingSmsLogs(): Promise<SmsLog[]>;
+  createSmsLog(log: InsertSmsLog): Promise<SmsLog>;
+  updateSmsLog(id: string, data: Partial<InsertSmsLog>): Promise<SmsLog | undefined>;
+
   // Document Templates
   getDocumentTemplates(): Promise<DocumentTemplate[]>;
   getDocumentTemplate(id: string): Promise<DocumentTemplate | undefined>;
@@ -132,7 +155,9 @@ export interface IStorage {
   getGeneratedDocuments(): Promise<GeneratedDocument[]>;
   getGeneratedDocument(id: string): Promise<GeneratedDocument | undefined>;
   createGeneratedDocument(doc: InsertGeneratedDocument): Promise<GeneratedDocument>;
+  updateGeneratedDocument(id: string, data: Partial<InsertGeneratedDocument>): Promise<GeneratedDocument | undefined>;
   deleteGeneratedDocument(id: string): Promise<void>;
+  getGeneratedDocumentsByQuote(quoteId: string): Promise<GeneratedDocument[]>;
 
   // Prospects
   getProspects(): Promise<Prospect[]>;
@@ -587,6 +612,89 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // ---- Email Tracking ----
+  async getEmailLogByTrackingId(trackingId: string): Promise<EmailLog | undefined> {
+    const [result] = await db.select().from(emailLogs).where(eq(emailLogs.trackingId, trackingId));
+    return result;
+  }
+
+  async recordEmailOpen(trackingId: string, ip: string | null, userAgent: string | null): Promise<void> {
+    const emailLog = await this.getEmailLogByTrackingId(trackingId);
+    if (!emailLog) return;
+
+    await db.insert(emailTrackingEvents).values({
+      emailLogId: emailLog.id,
+      trackingId,
+      ipAddress: ip,
+      userAgent,
+    });
+
+    const updates: any = { openCount: (emailLog.openCount || 0) + 1 };
+    if (!emailLog.openedAt) {
+      updates.openedAt = new Date();
+    }
+    await db.update(emailLogs).set(updates).where(eq(emailLogs.id, emailLog.id));
+  }
+
+  async getEmailTrackingEvents(emailLogId: string): Promise<EmailTrackingEvent[]> {
+    return db.select().from(emailTrackingEvents)
+      .where(eq(emailTrackingEvents.emailLogId, emailLogId))
+      .orderBy(desc(emailTrackingEvents.openedAt));
+  }
+
+  // ---- SMS Templates ----
+  async getSmsTemplates(): Promise<SmsTemplate[]> {
+    return db.select().from(smsTemplates).orderBy(desc(smsTemplates.createdAt));
+  }
+
+  async getSmsTemplate(id: string): Promise<SmsTemplate | undefined> {
+    const [result] = await db.select().from(smsTemplates).where(eq(smsTemplates.id, id));
+    return result;
+  }
+
+  async createSmsTemplate(template: InsertSmsTemplate): Promise<SmsTemplate> {
+    const [result] = await db.insert(smsTemplates).values(template as any).returning();
+    return result;
+  }
+
+  async updateSmsTemplate(id: string, data: Partial<InsertSmsTemplate>): Promise<SmsTemplate | undefined> {
+    const [result] = await db.update(smsTemplates).set({ ...data, updatedAt: new Date() } as any).where(eq(smsTemplates.id, id)).returning();
+    return result;
+  }
+
+  async deleteSmsTemplate(id: string): Promise<void> {
+    await db.delete(smsTemplates).where(eq(smsTemplates.id, id));
+  }
+
+  // ---- SMS Logs ----
+  async getSmsLogs(): Promise<SmsLog[]> {
+    return db.select().from(smsLogs).orderBy(desc(smsLogs.createdAt));
+  }
+
+  async getSmsLog(id: string): Promise<SmsLog | undefined> {
+    const [result] = await db.select().from(smsLogs).where(eq(smsLogs.id, id));
+    return result;
+  }
+
+  async getPendingSmsLogs(): Promise<SmsLog[]> {
+    return db.select().from(smsLogs).where(
+      and(
+        eq(smsLogs.status, "pending"),
+        sql`(${smsLogs.scheduledAt} IS NULL OR ${smsLogs.scheduledAt} <= NOW())`
+      )
+    ).orderBy(smsLogs.createdAt);
+  }
+
+  async createSmsLog(log: InsertSmsLog): Promise<SmsLog> {
+    const [result] = await db.insert(smsLogs).values(log).returning();
+    return result;
+  }
+
+  async updateSmsLog(id: string, data: Partial<InsertSmsLog>): Promise<SmsLog | undefined> {
+    const [result] = await db.update(smsLogs).set(data as any).where(eq(smsLogs.id, id)).returning();
+    return result;
+  }
+
   // ---- Document Templates ----
   async getDocumentTemplates(): Promise<DocumentTemplate[]> {
     return db.select().from(documentTemplates).orderBy(desc(documentTemplates.createdAt));
@@ -626,8 +734,17 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async updateGeneratedDocument(id: string, data: Partial<InsertGeneratedDocument>): Promise<GeneratedDocument | undefined> {
+    const [result] = await db.update(generatedDocuments).set(data).where(eq(generatedDocuments.id, id)).returning();
+    return result;
+  }
+
   async deleteGeneratedDocument(id: string): Promise<void> {
     await db.delete(generatedDocuments).where(eq(generatedDocuments.id, id));
+  }
+
+  async getGeneratedDocumentsByQuote(quoteId: string): Promise<GeneratedDocument[]> {
+    return db.select().from(generatedDocuments).where(eq(generatedDocuments.quoteId, quoteId)).orderBy(desc(generatedDocuments.createdAt));
   }
 
   // ---- Prospects ----
@@ -1196,13 +1313,23 @@ export class DatabaseStorage implements IStorage {
 
   async getGeneratedDocumentsByEnterprise(enterpriseId: string): Promise<GeneratedDocument[]> {
     const enterpriseSessions = await this.getEnterpriseSessions(enterpriseId);
-    if (enterpriseSessions.length === 0) return [];
     const sessionIds = enterpriseSessions.map(s => s.id);
+
+    // Include docs directly linked to enterprise OR linked via sessions with appropriate visibility
+    const conditions = [
+      eq(generatedDocuments.enterpriseId, enterpriseId),
+    ];
+    if (sessionIds.length > 0) {
+      conditions.push(
+        and(
+          inArray(generatedDocuments.sessionId, sessionIds),
+          inArray(generatedDocuments.visibility, ["enterprise", "all"]),
+        )!,
+      );
+    }
+
     return db.select().from(generatedDocuments)
-      .where(and(
-        inArray(generatedDocuments.sessionId, sessionIds),
-        inArray(generatedDocuments.type, ["convention", "attestation", "certificat", "bpf"])
-      ))
+      .where(or(...conditions))
       .orderBy(desc(generatedDocuments.createdAt));
   }
 

@@ -23,9 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, FileText, ClipboardList, AlertCircle, Loader2, Upload, Eye, Download, UserPlus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from "lucide-react";
-import type { Enterprise, Enrollment, Session, Trainee, Quote, Invoice, EnterpriseContact, Program, GeneratedDocument } from "@shared/schema";
-import { ENTERPRISE_CONTACT_ROLES, ENTERPRISE_DOCUMENT_CATEGORIES } from "@shared/schema";
+import { Building2, Users, FileText, ClipboardList, AlertCircle, AlertTriangle, Loader2, Upload, Eye, Download, UserPlus, Pencil, Trash2, Search, ChevronDown, ChevronRight, ShieldAlert, RefreshCw, Clock, CheckCircle2 } from "lucide-react";
+import type { Enterprise, Enrollment, Session, Trainee, Quote, Invoice, EnterpriseContact, Program, GeneratedDocument, TraineeCertification } from "@shared/schema";
+import { ENTERPRISE_CONTACT_ROLES, ENTERPRISE_DOCUMENT_CATEGORIES, DOCUMENT_STATUSES } from "@shared/schema";
 
 // ============================================================
 // HELPERS
@@ -83,19 +83,95 @@ function EnrollmentStatusBadge({ status }: { status: string }) {
 function DocumentTypeBadge({ type }: { type: string }) {
   const variants: Record<string, string> = {
     convention: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    contrat_particulier: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400",
+    contrat_vae: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+    politique_confidentialite: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400",
+    devis: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+    devis_sous_traitance: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
+    facture: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+    facture_blended: "bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400",
+    facture_specifique: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
     attestation: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     certificat: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    etiquette_envoi: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
     bpf: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   };
   const labels: Record<string, string> = {
     convention: "Convention",
+    contrat_particulier: "Contrat particulier",
+    contrat_vae: "Contrat VAE",
+    politique_confidentialite: "Confidentialité",
+    devis: "Devis",
+    devis_sous_traitance: "Devis sous-traitance",
+    facture: "Facture",
+    facture_blended: "Facture blended",
+    facture_specifique: "Facture spécifique",
     attestation: "Attestation",
     certificat: "Certificat",
+    etiquette_envoi: "Envoi postal",
     bpf: "BPF",
   };
   return (
     <Badge variant="outline" className={variants[type] || "bg-gray-100 text-gray-700"}>
       {labels[type] || type}
+    </Badge>
+  );
+}
+
+// ============================================================
+// CERTIFICATION TYPES & HELPERS
+// ============================================================
+
+interface EnterpriseCertification extends TraineeCertification {
+  traineeFirstName: string;
+  traineeLastName: string;
+  traineeEmail: string;
+  programTitle: string | null;
+  recyclingMonths: number | null;
+  certifying: boolean;
+  computedExpiresAt: string | null;
+}
+
+type RecyclingStatus = "expired" | "critical" | "warning" | "ok";
+
+function getRecyclingStatus(expiresAt: string | null): { status: RecyclingStatus; remainingDays: number | null; label: string } {
+  if (!expiresAt) return { status: "ok", remainingDays: null, label: "Pas d'echeance" };
+  const now = new Date();
+  const expiry = new Date(expiresAt);
+  const diffMs = expiry.getTime() - now.getTime();
+  const remainingDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (remainingDays < 0) return { status: "expired", remainingDays, label: "Expire" };
+  if (remainingDays <= 90) return { status: "critical", remainingDays, label: `${remainingDays}j restants` };
+  if (remainingDays <= 180) return { status: "warning", remainingDays, label: `${Math.floor(remainingDays / 30)} mois restants` };
+  return { status: "ok", remainingDays, label: `${Math.floor(remainingDays / 30)} mois restants` };
+}
+
+function RecyclingStatusBadge({ expiresAt }: { expiresAt: string | null }) {
+  const { status, label } = getRecyclingStatus(expiresAt);
+  const config: Record<RecyclingStatus, { className: string; icon: React.ReactNode }> = {
+    expired: {
+      className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+      icon: <AlertTriangle className="w-3 h-3" />,
+    },
+    critical: {
+      className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+      icon: <Clock className="w-3 h-3" />,
+    },
+    warning: {
+      className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+      icon: <Clock className="w-3 h-3" />,
+    },
+    ok: {
+      className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+      icon: null,
+    },
+  };
+  const c = config[status];
+  return (
+    <Badge variant="outline" className={`text-xs gap-1 ${c.className}`}>
+      {c.icon}
+      {label}
     </Badge>
   );
 }
@@ -418,6 +494,12 @@ export default function EnterprisePortal() {
     enabled: !!enterpriseId,
   });
 
+  // Fetch certifications for all enterprise trainees
+  const { data: certifications } = useQuery<EnterpriseCertification[]>({
+    queryKey: [`/api/enterprises/${enterpriseId}/certifications`],
+    enabled: !!enterpriseId,
+  });
+
   // Fetch enterprise quotes
   const { data: enterpriseQuotes } = useQuery<Quote[]>({
     queryKey: [`/api/enterprises/${enterpriseId}/quotes`],
@@ -565,6 +647,22 @@ export default function EnterprisePortal() {
     return enrollments.filter((e) => e.status === "completed").length;
   }, [enrollments]);
 
+  // Recycling alerts: certifications that are expired or expiring within 6 months
+  const recyclingAlerts = useMemo(() => {
+    if (!certifications) return { expired: 0, critical: 0, warning: 0, total: 0 };
+    let expired = 0;
+    let critical = 0;
+    let warning = 0;
+    for (const cert of certifications) {
+      if (!cert.computedExpiresAt) continue;
+      const { status } = getRecyclingStatus(cert.computedExpiresAt);
+      if (status === "expired") expired++;
+      else if (status === "critical") critical++;
+      else if (status === "warning") warning++;
+    }
+    return { expired, critical, warning, total: expired + critical + warning };
+  }, [certifications]);
+
   const isLoading = enrollmentsLoading || enterpriseLoading;
 
   // Not authenticated
@@ -621,7 +719,7 @@ export default function EnterprisePortal() {
       )}
 
       {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20">
@@ -655,7 +753,41 @@ export default function EnterprisePortal() {
             </div>
           </CardContent>
         </Card>
+        <Card className={recyclingAlerts.total > 0 ? "border-orange-300 dark:border-orange-700" : ""}>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${recyclingAlerts.total > 0 ? "bg-orange-50 dark:bg-orange-900/20" : "bg-gray-50 dark:bg-gray-900/20"}`}>
+              <RefreshCw className={`w-5 h-5 ${recyclingAlerts.total > 0 ? "text-orange-600 dark:text-orange-400" : "text-gray-400"}`} />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{recyclingAlerts.total}</p>
+              <p className="text-xs text-muted-foreground">Recyclages a planifier</p>
+            </div>
+            {recyclingAlerts.expired > 0 && (
+              <Badge variant="outline" className="ml-auto bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs">
+                {recyclingAlerts.expired} expire{recyclingAlerts.expired > 1 ? "s" : ""}
+              </Badge>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Recycling alert banner */}
+      {recyclingAlerts.expired > 0 && (
+        <Card className="border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20">
+          <CardContent className="p-4 flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                {recyclingAlerts.expired} certification{recyclingAlerts.expired > 1 ? "s expiree" : " expiree"}{recyclingAlerts.expired > 1 ? "s" : ""} — recyclage requis
+              </p>
+              <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-1">
+                Des employes ont des certifications expirees (AFGSU, Certibiocide, etc.) necessitant un recyclage.
+                Consultez l'onglet Recyclage pour plus de details.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Loading state */}
       {isLoading ? (
@@ -681,6 +813,15 @@ export default function EnterprisePortal() {
             <TabsTrigger value="employes">
               <Users className="w-4 h-4 mr-2" />
               Employes
+            </TabsTrigger>
+            <TabsTrigger value="recyclage" className="relative">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Recyclage
+              {recyclingAlerts.total > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-orange-500 text-white">
+                  {recyclingAlerts.total}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -855,18 +996,31 @@ export default function EnterprisePortal() {
               </Card>
             )}
 
-            {/* Conventions & Attestations (generated documents) */}
-            {generatedDocs && generatedDocs.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Conventions & Attestations</CardTitle>
-                </CardHeader>
-                <CardContent>
+            {/* GED - Documents générés (Conventions, Attestations, etc.) */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Gestion documentaire
+                    {generatedDocs && generatedDocs.length > 0 && (
+                      <Badge variant="secondary" className="ml-2">{generatedDocs.length}</Badge>
+                    )}
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!generatedDocs || generatedDocs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Aucun document disponible. Les conventions seront générées automatiquement après la signature des devis.
+                  </p>
+                ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Titre</TableHead>
                         <TableHead>Type</TableHead>
+                        <TableHead>Statut</TableHead>
                         <TableHead>Session</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Actions</TableHead>
@@ -875,11 +1029,29 @@ export default function EnterprisePortal() {
                     <TableBody>
                       {generatedDocs.map((doc) => {
                         const session = doc.sessionId ? sessionMap.get(doc.sessionId) : undefined;
+                        const statusInfo = DOCUMENT_STATUSES.find(s => s.value === doc.status);
+                        const statusColor = doc.status === "signed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : doc.status === "shared" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                          : doc.status === "sent" ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
                         return (
                           <TableRow key={doc.id}>
-                            <TableCell className="font-medium">{doc.title}</TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {doc.title}
+                                {doc.quoteId && (
+                                  <Badge variant="outline" className="text-xs">Devis</Badge>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>
                               <DocumentTypeBadge type={doc.type} />
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={statusColor}>
+                                {doc.status === "signed" && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                {statusInfo?.label || doc.status}
+                              </Badge>
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {session?.title || "-"}
@@ -906,9 +1078,9 @@ export default function EnterprisePortal() {
                       })}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </CardContent>
+            </Card>
 
             {/* Documents deposes (with delete) */}
             <Card>
@@ -1191,6 +1363,139 @@ export default function EnterprisePortal() {
                   </Table>
                 </CardContent>
               </Card>
+            )}
+          </TabsContent>
+
+          {/* ============================================ */}
+          {/* Tab: Recyclage */}
+          {/* ============================================ */}
+          <TabsContent value="recyclage" className="mt-4">
+            {!certifications || certifications.length === 0 ? (
+              <div className="text-center py-16">
+                <RefreshCw className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+                <h3 className="text-lg font-medium mb-1">Aucune certification</h3>
+                <p className="text-sm text-muted-foreground">
+                  Aucune certification n'est enregistree pour vos employes.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Summary cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Card className={recyclingAlerts.expired > 0 ? "border-red-300 dark:border-red-700" : ""}>
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <AlertTriangle className={`w-4 h-4 ${recyclingAlerts.expired > 0 ? "text-red-500" : "text-muted-foreground/40"}`} />
+                      <div>
+                        <p className="text-lg font-bold">{recyclingAlerts.expired}</p>
+                        <p className="text-xs text-muted-foreground">Certifications expirees</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className={recyclingAlerts.critical > 0 ? "border-orange-300 dark:border-orange-700" : ""}>
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <Clock className={`w-4 h-4 ${recyclingAlerts.critical > 0 ? "text-orange-500" : "text-muted-foreground/40"}`} />
+                      <div>
+                        <p className="text-lg font-bold">{recyclingAlerts.critical}</p>
+                        <p className="text-xs text-muted-foreground">Expirent sous 3 mois</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <Clock className={`w-4 h-4 ${recyclingAlerts.warning > 0 ? "text-amber-500" : "text-muted-foreground/40"}`} />
+                      <div>
+                        <p className="text-lg font-bold">{recyclingAlerts.warning}</p>
+                        <p className="text-xs text-muted-foreground">Expirent sous 6 mois</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Certifications table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <RefreshCw className="w-5 h-5" />
+                      Suivi des certifications et recyclages
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Employe</TableHead>
+                          <TableHead>Certification</TableHead>
+                          <TableHead>Formation</TableHead>
+                          <TableHead>Obtenue le</TableHead>
+                          <TableHead>Echeance</TableHead>
+                          <TableHead>Statut recyclage</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {certifications
+                          .filter((c) => c.computedExpiresAt)
+                          .sort((a, b) => {
+                            // Sort: expired first, then by expiry date ascending
+                            const da = a.computedExpiresAt ? new Date(a.computedExpiresAt).getTime() : Infinity;
+                            const db = b.computedExpiresAt ? new Date(b.computedExpiresAt).getTime() : Infinity;
+                            return da - db;
+                          })
+                          .map((cert) => (
+                            <TableRow key={cert.id}>
+                              <TableCell className="font-medium">
+                                {cert.traineeFirstName} {cert.traineeLastName}
+                              </TableCell>
+                              <TableCell>{cert.label}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {cert.programTitle || "-"}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {formatDate(cert.obtainedAt)}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {cert.computedExpiresAt ? formatDate(cert.computedExpiresAt) : "-"}
+                              </TableCell>
+                              <TableCell>
+                                <RecyclingStatusBadge expiresAt={cert.computedExpiresAt} />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        {certifications.filter((c) => !c.computedExpiresAt).length > 0 && (
+                          <>
+                            <TableRow>
+                              <TableCell colSpan={6} className="bg-muted/30 text-xs font-medium text-muted-foreground py-2">
+                                Certifications sans echeance de recyclage
+                              </TableCell>
+                            </TableRow>
+                            {certifications
+                              .filter((c) => !c.computedExpiresAt)
+                              .map((cert) => (
+                                <TableRow key={cert.id} className="opacity-60">
+                                  <TableCell className="font-medium">
+                                    {cert.traineeFirstName} {cert.traineeLastName}
+                                  </TableCell>
+                                  <TableCell>{cert.label}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {cert.programTitle || "-"}
+                                  </TableCell>
+                                  <TableCell className="text-sm">
+                                    {formatDate(cert.obtainedAt)}
+                                  </TableCell>
+                                  <TableCell className="text-sm">-</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                      Non soumis
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
             )}
           </TabsContent>
         </Tabs>

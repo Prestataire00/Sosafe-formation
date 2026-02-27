@@ -8,6 +8,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { startEmailWorker } from "./email-service";
+import { startSmsWorker } from "./sms-service";
 import { startScheduledTasks } from "./scheduled-tasks";
 
 // Kill any existing process on the target port before starting
@@ -109,6 +110,7 @@ app.use((req, res, next) => {
 
   // Start background workers
   startEmailWorker();
+  startSmsWorker();
   startScheduledTasks();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

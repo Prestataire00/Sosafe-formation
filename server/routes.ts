@@ -11,6 +11,7 @@ import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
   insertSessionSchema, insertEnrollmentSchema, insertEnterpriseSchema,
   insertEmailTemplateSchema, insertEmailLogSchema,
+  insertSmsTemplateSchema, insertSmsLogSchema,
   insertDocumentTemplateSchema, insertGeneratedDocumentSchema,
   insertProspectSchema, insertQuoteSchema, insertInvoiceSchema, insertPaymentSchema,
   insertElearningModuleSchema, insertElearningBlockSchema, insertQuizQuestionSchema, insertLearnerProgressSchema,
@@ -49,6 +50,30 @@ export async function registerRoutes(
   // ============================================================
   // PUBLIC ROUTES (no auth required)
   // ============================================================
+
+  // 1x1 transparent GIF pixel (pre-allocated buffer)
+  const TRANSPARENT_GIF = Buffer.from(
+    "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+    "base64"
+  );
+
+  // GET /t/:trackingId — email open tracking pixel
+  app.get("/t/:trackingId", (req, res) => {
+    // Send the pixel immediately before any DB work
+    res.set({
+      "Content-Type": "image/gif",
+      "Content-Length": String(TRANSPARENT_GIF.length),
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+    });
+    res.end(TRANSPARENT_GIF);
+
+    // Fire-and-forget: record the open event
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || null;
+    const userAgent = req.headers["user-agent"] || null;
+    storage.recordEmailOpen(req.params.trackingId, ip, userAgent).catch(() => {});
+  });
 
   // GET /api/public/sessions — available sessions with remaining spots
   app.get("/api/public/sessions", async (_req, res) => {
@@ -1254,7 +1279,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/documents/generate", async (req, res) => {
-    const { templateId, sessionId, traineeId } = req.body;
+    const { templateId, sessionId, traineeId, enterpriseId, quoteId, invoiceId, visibility } = req.body;
     if (!templateId) return res.status(400).json({ message: "templateId requis" });
 
     const template = await storage.getDocumentTemplate(templateId);
@@ -1289,8 +1314,113 @@ export async function registerRoutes(
         replacements["{nom_famille_apprenant}"] = trainee.lastName;
         replacements["{email_apprenant}"] = trainee.email;
         replacements["{entreprise_apprenant}"] = trainee.company || "";
+        replacements["{civilite_apprenant}"] = trainee.civility || "";
+        replacements["{date_naissance_apprenant}"] = trainee.dateOfBirth
+          ? new Date(trainee.dateOfBirth).toLocaleDateString("fr-FR") : "";
+        replacements["{telephone_apprenant}"] = trainee.phone || "";
+        replacements["{est_particulier}"] = trainee.profileType === "particulier" ? "true" : "";
+        replacements["{adresse_apprenant}"] = trainee.address || "";
+        replacements["{ville_apprenant}"] = trainee.city || "";
+        replacements["{code_postal_apprenant}"] = trainee.postalCode || "";
+        replacements["{pays_apprenant}"] = trainee.country || "France";
+        const addrParts = [
+          `${trainee.civility ? trainee.civility + " " : ""}${trainee.firstName} ${trainee.lastName}`,
+          trainee.address,
+          `${trainee.postalCode || ""} ${trainee.city || ""}`.trim(),
+          trainee.country && trainee.country !== "France" ? trainee.country : "",
+        ].filter(Boolean);
+        replacements["{adresse_complete_apprenant}"] = addrParts.join("<br>");
       }
     }
+
+    if (enterpriseId) {
+      const enterprise = await storage.getEnterprise(enterpriseId);
+      if (enterprise) {
+        replacements["{nom_entreprise}"] = enterprise.name;
+        replacements["{contact_entreprise}"] = enterprise.contactName || "";
+        replacements["{email_entreprise}"] = enterprise.contactEmail || "";
+      }
+    }
+
+    // Quote / contract variables
+    if (quoteId) {
+      const quote = await storage.getQuote(quoteId);
+      if (quote) {
+        replacements["{numero_devis}"] = quote.number;
+        replacements["{montant_devis}"] = `${(quote.total / 100).toFixed(2)} EUR`;
+        replacements["{montant_ht}"] = `${(quote.subtotal / 100).toFixed(2)} EUR`;
+        replacements["{montant_tva}"] = `${(quote.taxAmount / 100).toFixed(2)} EUR`;
+        replacements["{montant_ttc}"] = `${(quote.total / 100).toFixed(2)} EUR`;
+        replacements["{taux_tva}"] = `${(quote.taxRate / 100).toFixed(2)}%`;
+        replacements["{date_validite_devis}"] = quote.validUntil
+          ? new Date(quote.validUntil).toLocaleDateString("fr-FR") : "";
+        replacements["{notes_devis}"] = quote.notes || "";
+        const lines = (quote.lineItems || []).map(
+          (li) => `<tr><td>${li.description}</td><td>${li.quantity}</td><td>${(li.unitPrice / 100).toFixed(2)} EUR</td><td>${(li.total / 100).toFixed(2)} EUR</td></tr>`
+        ).join("");
+        replacements["{lignes_devis}"] = lines
+          ? `<table><thead><tr><th>Description</th><th>Qté</th><th>P.U.</th><th>Total</th></tr></thead><tbody>${lines}</tbody></table>`
+          : "";
+      }
+    }
+
+    // Subcontracting variables (from session trainer)
+    if (sessionId) {
+      const sessionForTrainer = await storage.getSession(sessionId);
+      if (sessionForTrainer?.trainerId) {
+        const trainer = await storage.getTrainer(sessionForTrainer.trainerId);
+        if (trainer) {
+          replacements["{nom_sous_traitant}"] = `${trainer.firstName} ${trainer.lastName}`;
+          replacements["{email_sous_traitant}"] = trainer.email;
+          replacements["{telephone_sous_traitant}"] = trainer.phone || "";
+          replacements["{specialite_sous_traitant}"] = trainer.specialty || "";
+        }
+      }
+    }
+
+    // Invoice variables
+    if (invoiceId) {
+      const invoice = await storage.getInvoice(invoiceId);
+      if (invoice) {
+        replacements["{numero_facture}"] = invoice.number;
+        replacements["{titre_facture}"] = invoice.title;
+        replacements["{facture_montant_ht}"] = `${(invoice.subtotal / 100).toFixed(2)} EUR`;
+        replacements["{facture_montant_tva}"] = `${(invoice.taxAmount / 100).toFixed(2)} EUR`;
+        replacements["{facture_montant_ttc}"] = `${(invoice.total / 100).toFixed(2)} EUR`;
+        replacements["{facture_taux_tva}"] = `${(invoice.taxRate / 100).toFixed(2)}%`;
+        replacements["{facture_montant_paye}"] = `${(invoice.paidAmount / 100).toFixed(2)} EUR`;
+        replacements["{facture_reste_du}"] = `${((invoice.total - invoice.paidAmount) / 100).toFixed(2)} EUR`;
+        replacements["{facture_date_echeance}"] = invoice.dueDate
+          ? new Date(invoice.dueDate).toLocaleDateString("fr-FR") : "";
+        replacements["{facture_statut}"] = invoice.status;
+        replacements["{facture_notes}"] = invoice.notes || "";
+        const invLines = (invoice.lineItems || []).map(
+          (li) => `<tr><td>${li.description}</td><td>${li.quantity}</td><td>${(li.unitPrice / 100).toFixed(2)} EUR</td><td>${(li.total / 100).toFixed(2)} EUR</td></tr>`
+        ).join("");
+        replacements["{facture_lignes}"] = invLines
+          ? `<table><thead><tr><th>Description</th><th>Qté</th><th>P.U.</th><th>Total</th></tr></thead><tbody>${invLines}</tbody></table>`
+          : "";
+        if (invoice.quoteId) {
+          const linkedQuote = await storage.getQuote(invoice.quoteId);
+          replacements["{facture_numero_devis}"] = linkedQuote?.number || "";
+        }
+      }
+    }
+
+    // Formation type conditionals
+    if (sessionId) {
+      const sessionForModality = await storage.getSession(sessionId);
+      if (sessionForModality) {
+        const mod = sessionForModality.modality?.toLowerCase() || "";
+        replacements["{est_blended}"] = mod === "blended" || mod === "mixte" ? "true" : "";
+        replacements["{est_standard}"] = mod === "presentiel" ? "true" : "";
+        replacements["{est_specifique}"] = mod !== "presentiel" && mod !== "distanciel" && mod !== "blended" && mod !== "mixte" ? "true" : "";
+      }
+    }
+
+    replacements["{date_du_jour}"] = new Date().toLocaleDateString("fr-FR");
+    replacements["{date_signature}"] = new Date().toLocaleDateString("fr-FR");
+    replacements["{delai_retractation}"] = "10 jours";
 
     const settings = await storage.getOrganizationSettings();
     const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
@@ -1304,22 +1434,95 @@ export async function registerRoutes(
       content = content.replaceAll(key, value);
     }
 
+    const effectiveVisibility = visibility || "admin_only";
     const doc = await storage.createGeneratedDocument({
       templateId,
       sessionId: sessionId || null,
       traineeId: traineeId || null,
+      enterpriseId: enterpriseId || null,
+      quoteId: quoteId || null,
       title: template.name,
       type: template.type,
       content,
       status: "generated",
+      visibility: effectiveVisibility,
+      sharedAt: effectiveVisibility !== "admin_only" ? new Date() : null,
     });
 
     res.status(201).json(doc);
   });
 
+  app.patch("/api/generated-documents/:id", async (req, res) => {
+    const { visibility, status } = req.body;
+    const updates: Record<string, any> = {};
+    if (visibility) {
+      updates.visibility = visibility;
+      if (visibility !== "admin_only" && !req.body.sharedAt) {
+        updates.sharedAt = new Date();
+      }
+    }
+    if (status) updates.status = status;
+    const doc = await storage.updateGeneratedDocument(req.params.id, updates);
+    if (!doc) return res.status(404).json({ message: "Document non trouvé" });
+    res.json(doc);
+  });
+
   app.delete("/api/generated-documents/:id", async (req, res) => {
     await storage.deleteGeneratedDocument(req.params.id);
     res.status(204).send();
+  });
+
+  app.get("/api/quotes/:quoteId/documents", async (req, res) => {
+    const docs = await storage.getGeneratedDocumentsByQuote(req.params.quoteId);
+    res.json(docs);
+  });
+
+  // Generate a postal label (étiquette d'envoi) for a trainee
+  app.post("/api/trainees/:id/etiquette-envoi", async (req, res) => {
+    const trainee = await storage.getTrainee(req.params.id);
+    if (!trainee) return res.status(404).json({ message: "Stagiaire non trouvé" });
+
+    if (!trainee.address) {
+      return res.status(400).json({ message: "Adresse postale manquante pour ce stagiaire" });
+    }
+
+    const addrLines = [
+      `${trainee.civility ? trainee.civility + " " : ""}${trainee.firstName} ${trainee.lastName}`,
+      trainee.address,
+      `${trainee.postalCode || ""} ${trainee.city || ""}`.trim(),
+      trainee.country && trainee.country !== "France" ? trainee.country : "",
+    ].filter(Boolean);
+
+    const settings = await storage.getOrganizationSettings();
+    const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
+    const orgName = settingsMap["org_name"] || "SO'SAFE Formation";
+    const orgAddress = settingsMap["org_address"] || "";
+
+    const content = `
+      <div style="font-family: Arial, sans-serif; padding: 20mm;">
+        <div style="margin-bottom: 40mm; font-size: 10pt; color: #666;">
+          <strong>${orgName}</strong><br>${orgAddress}
+        </div>
+        <div style="font-size: 14pt; line-height: 1.8; padding: 10mm; border: 1px solid #ccc;">
+          ${addrLines.map(l => `<div>${l}</div>`).join("")}
+        </div>
+      </div>`;
+
+    const doc = await storage.createGeneratedDocument({
+      templateId: "etiquette-envoi-auto",
+      sessionId: null,
+      traineeId: trainee.id,
+      enterpriseId: trainee.enterpriseId || null,
+      quoteId: null,
+      title: `Envoi postal - ${trainee.firstName} ${trainee.lastName}`,
+      type: "etiquette_envoi",
+      content,
+      status: "generated",
+      visibility: "admin_only",
+      sharedAt: null,
+    });
+
+    res.status(201).json(doc);
   });
 
   // ============================================================
@@ -1952,14 +2155,21 @@ export async function registerRoutes(
   app.patch("/api/settings", async (req, res) => {
     const settings = req.body as Record<string, string>;
     const smtpKeys = ["smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email"];
+    const brevoSmsKeys = ["brevo_api_key", "brevo_sms_sender"];
     let smtpChanged = false;
+    let brevoSmsChanged = false;
     for (const [key, value] of Object.entries(settings)) {
       await storage.upsertOrganizationSetting({ key, value });
       if (smtpKeys.includes(key)) smtpChanged = true;
+      if (brevoSmsKeys.includes(key)) brevoSmsChanged = true;
     }
     if (smtpChanged) {
       const { resetTransporter } = await import("./email-service");
       resetTransporter();
+    }
+    if (brevoSmsChanged) {
+      const { resetBrevoSmsConfig } = await import("./sms-service");
+      resetBrevoSmsConfig();
     }
     const result = await storage.getOrganizationSettings();
     const settingsMap = Object.fromEntries(result.map(s => [s.key, s.value]));
@@ -1978,6 +2188,14 @@ export async function registerRoutes(
     const emailLog = await storage.getEmailLog(req.params.id);
     if (!emailLog) return res.status(404).json({ message: "Email log introuvable" });
     res.json(emailLog);
+  });
+
+  // Email tracking events for a specific log
+  app.get("/api/email-logs/:id/tracking", async (req, res) => {
+    const emailLog = await storage.getEmailLog(req.params.id);
+    if (!emailLog) return res.status(404).json({ message: "Email log introuvable" });
+    const events = await storage.getEmailTrackingEvents(req.params.id);
+    res.json(events);
   });
 
   // Resend a failed email
@@ -1999,6 +2217,76 @@ export async function registerRoutes(
       const updated = await storage.getEmailLog(req.params.id);
       res.json(updated);
     }
+  });
+
+  // ============================================================
+  // SMS TEMPLATES
+  // ============================================================
+
+  app.get("/api/sms-templates", async (_req, res) => {
+    const result = await storage.getSmsTemplates();
+    res.json(result);
+  });
+
+  app.get("/api/sms-templates/:id", async (req, res) => {
+    const template = await storage.getSmsTemplate(req.params.id);
+    if (!template) return res.status(404).json({ message: "Modèle SMS non trouvé" });
+    res.json(template);
+  });
+
+  app.post("/api/sms-templates", async (req, res) => {
+    const parsed = insertSmsTemplateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.createSmsTemplate(parsed.data);
+    res.status(201).json(template);
+  });
+
+  app.patch("/api/sms-templates/:id", async (req, res) => {
+    const parsed = insertSmsTemplateSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const template = await storage.updateSmsTemplate(req.params.id, parsed.data);
+    if (!template) return res.status(404).json({ message: "Modèle SMS non trouvé" });
+    res.json(template);
+  });
+
+  app.delete("/api/sms-templates/:id", async (req, res) => {
+    await storage.deleteSmsTemplate(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // SMS LOGS
+  // ============================================================
+
+  app.get("/api/sms-logs", async (_req, res) => {
+    const result = await storage.getSmsLogs();
+    res.json(result);
+  });
+
+  app.post("/api/sms-logs/:id/resend", async (req, res) => {
+    const smsLog = await storage.getSmsLog(req.params.id);
+    if (!smsLog) return res.status(404).json({ message: "SMS log introuvable" });
+    await storage.updateSmsLog(req.params.id, {
+      status: "pending",
+      error: null,
+      retryCount: 0,
+    } as any);
+    const { sendSmsNow } = await import("./sms-service");
+    try {
+      await sendSmsNow(req.params.id);
+      const updated = await storage.getSmsLog(req.params.id);
+      res.json(updated);
+    } catch (err: any) {
+      const updated = await storage.getSmsLog(req.params.id);
+      res.json(updated);
+    }
+  });
+
+  // Brevo SMS test connection
+  app.post("/api/settings/brevo-sms-test", async (_req, res) => {
+    const { testBrevoSmsConnection } = await import("./sms-service");
+    const result = await testBrevoSmsConnection();
+    res.json(result);
   });
 
   // ============================================================
@@ -2270,6 +2558,142 @@ export async function registerRoutes(
           programId,
           sessionId,
         }).catch(err => console.error("[automation] quote_signed trigger error:", err));
+
+        // Auto-generate contract/convention after quote signing
+        // Picks: contrat_particulier if trainee is "particulier", contrat_vae if program is VAE-related, else convention
+        try {
+          const templates = await storage.getDocumentTemplates();
+          const traineeData = traineeId ? await storage.getTrainee(traineeId) : undefined;
+
+          // Determine which document type to generate
+          let targetType = "convention";
+          if (traineeData?.profileType === "particulier") {
+            targetType = "contrat_particulier";
+          }
+          // Check for VAE programs (title contains "VAE")
+          if (programId) {
+            const prog = await storage.getProgram(programId);
+            if (prog?.title?.toUpperCase().includes("VAE")) {
+              targetType = "contrat_vae";
+            }
+          }
+
+          // Find matching template, fallback to convention
+          let docTemplate = templates.find(t => t.type === targetType);
+          if (!docTemplate) docTemplate = templates.find(t => t.type === "convention");
+
+          if (docTemplate && (sessionId || enterpriseId)) {
+            let content = docTemplate.content;
+            const replacements: Record<string, string> = {};
+
+            if (sessionId) {
+              const session = await storage.getSession(sessionId);
+              if (session) {
+                const program = await storage.getProgram(session.programId);
+                replacements["{titre_session}"] = session.title;
+                replacements["{date_debut}"] = new Date(session.startDate).toLocaleDateString("fr-FR");
+                replacements["{date_fin}"] = new Date(session.endDate).toLocaleDateString("fr-FR");
+                replacements["{lieu}"] = session.location || "";
+                replacements["{modalite}"] = session.modality;
+                if (program) {
+                  replacements["{titre_formation}"] = program.title;
+                  replacements["{duree_formation}"] = `${program.duration} heures`;
+                  replacements["{prix_formation}"] = `${program.price} EUR`;
+                  replacements["{objectifs_formation}"] = program.objectives || "";
+                  replacements["{certification_visee}"] = program.certifying ? program.title : "";
+                  replacements["{diplome_vise}"] = program.title;
+                  replacements["{duree_accompagnement}"] = `${program.duration} heures`;
+                  replacements["{tarif_accompagnement}"] = `${program.price} EUR`;
+                }
+              }
+            }
+
+            if (traineeData) {
+              replacements["{nom_apprenant}"] = `${traineeData.firstName} ${traineeData.lastName}`;
+              replacements["{prenom_apprenant}"] = traineeData.firstName;
+              replacements["{nom_famille_apprenant}"] = traineeData.lastName;
+              replacements["{email_apprenant}"] = traineeData.email;
+              replacements["{entreprise_apprenant}"] = traineeData.company || "";
+              replacements["{civilite_apprenant}"] = traineeData.civility || "";
+              replacements["{date_naissance_apprenant}"] = traineeData.dateOfBirth
+                ? new Date(traineeData.dateOfBirth).toLocaleDateString("fr-FR") : "";
+              replacements["{telephone_apprenant}"] = traineeData.phone || "";
+              replacements["{est_particulier}"] = traineeData.profileType === "particulier" ? "true" : "";
+              replacements["{adresse_apprenant}"] = traineeData.address || "";
+              replacements["{ville_apprenant}"] = traineeData.city || "";
+              replacements["{code_postal_apprenant}"] = traineeData.postalCode || "";
+              replacements["{pays_apprenant}"] = traineeData.country || "France";
+              const addrParts = [
+                `${traineeData.civility ? traineeData.civility + " " : ""}${traineeData.firstName} ${traineeData.lastName}`,
+                traineeData.address,
+                `${traineeData.postalCode || ""} ${traineeData.city || ""}`.trim(),
+                traineeData.country && traineeData.country !== "France" ? traineeData.country : "",
+              ].filter(Boolean);
+              replacements["{adresse_complete_apprenant}"] = addrParts.join("<br>");
+            }
+
+            if (enterpriseId) {
+              const enterprise = await storage.getEnterprise(enterpriseId);
+              if (enterprise) {
+                replacements["{nom_entreprise}"] = enterprise.name;
+                replacements["{contact_entreprise}"] = enterprise.contactName || "";
+                replacements["{email_entreprise}"] = enterprise.contactEmail || "";
+              }
+            }
+
+            if (quoteId) {
+              const quote = await storage.getQuote(quoteId);
+              if (quote) {
+                replacements["{numero_devis}"] = quote.number;
+                replacements["{montant_devis}"] = `${(quote.total / 100).toFixed(2)} EUR`;
+                replacements["{montant_ht}"] = `${(quote.subtotal / 100).toFixed(2)} EUR`;
+                replacements["{montant_tva}"] = `${(quote.taxAmount / 100).toFixed(2)} EUR`;
+                replacements["{montant_ttc}"] = `${(quote.total / 100).toFixed(2)} EUR`;
+              }
+            }
+
+            replacements["{date_du_jour}"] = new Date().toLocaleDateString("fr-FR");
+            replacements["{date_signature}"] = new Date().toLocaleDateString("fr-FR");
+            replacements["{delai_retractation}"] = "10 jours";
+            replacements["{est_vae}"] = targetType === "contrat_vae" ? "true" : "";
+
+            const settings = await storage.getOrganizationSettings();
+            const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
+            replacements["{nom_organisme}"] = settingsMap["org_name"] || "";
+            replacements["{adresse_organisme}"] = settingsMap["org_address"] || "";
+            replacements["{siret_organisme}"] = settingsMap["org_siret"] || "";
+            replacements["{email_organisme}"] = settingsMap["org_email"] || "";
+            replacements["{telephone_organisme}"] = settingsMap["org_phone"] || "";
+
+            for (const [key, value] of Object.entries(replacements)) {
+              content = content.replaceAll(key, value);
+            }
+
+            const typeLabels: Record<string, string> = {
+              convention: "Convention",
+              contrat_particulier: "Contrat particulier",
+              contrat_vae: "Contrat VAE",
+            };
+            const visibility = traineeData?.profileType === "particulier" ? "trainee" : "enterprise";
+
+            await storage.createGeneratedDocument({
+              templateId: docTemplate.id,
+              sessionId: sessionId || null,
+              traineeId: traineeId || null,
+              enterpriseId: enterpriseId || null,
+              quoteId: quoteId || null,
+              title: `${typeLabels[targetType] || "Convention"} - ${replacements["{titre_formation}"] || docTemplate.name}`,
+              type: targetType,
+              content,
+              status: "generated",
+              visibility,
+              sharedAt: new Date(),
+            });
+            console.log(`[GED] ${typeLabels[targetType]} auto-généré(e) pour devis ${quoteId}`);
+          }
+        } catch (err) {
+          console.error("[GED] Erreur auto-génération convention:", err);
+        }
       } else if (docType === "convention") {
         const traineeId = parsed.data.signerType === "trainee" ? parsed.data.signerId : undefined;
         let sessionId: string | undefined;
@@ -2512,6 +2936,50 @@ export async function registerRoutes(
   app.get("/api/enterprises/:id/programs", async (req, res) => {
     const result = await storage.getEnterprisePrograms(req.params.id);
     res.json(result);
+  });
+
+  // Certifications for all trainees of this enterprise (with program info for recycling)
+  app.get("/api/enterprises/:id/certifications", async (req, res) => {
+    try {
+      const enterpriseTrainees = await storage.getEnterpriseTrainees(req.params.id);
+      const allCerts: Array<Record<string, unknown>> = [];
+      for (const trainee of enterpriseTrainees) {
+        const certs = await storage.getTraineeCertifications(trainee.id);
+        for (const cert of certs) {
+          let recyclingMonths: number | null = null;
+          let programTitle: string | null = null;
+          let certifying = false;
+          if (cert.programId) {
+            const program = await storage.getProgram(cert.programId);
+            if (program) {
+              recyclingMonths = program.recyclingMonths;
+              programTitle = program.title;
+              certifying = !!program.certifying;
+            }
+          }
+          // Compute expiry: use cert.expiresAt if set, otherwise derive from obtainedAt + recyclingMonths
+          let computedExpiresAt = cert.expiresAt || null;
+          if (!computedExpiresAt && recyclingMonths && cert.obtainedAt) {
+            const d = new Date(cert.obtainedAt);
+            d.setMonth(d.getMonth() + recyclingMonths);
+            computedExpiresAt = d.toISOString().split("T")[0];
+          }
+          allCerts.push({
+            ...cert,
+            traineeFirstName: trainee.firstName,
+            traineeLastName: trainee.lastName,
+            traineeEmail: trainee.email,
+            programTitle,
+            recyclingMonths,
+            certifying,
+            computedExpiresAt,
+          });
+        }
+      }
+      res.json(allCerts);
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors de la récupération des certifications" });
+    }
   });
 
   app.get("/api/enterprises/:id/generated-documents", async (req, res) => {

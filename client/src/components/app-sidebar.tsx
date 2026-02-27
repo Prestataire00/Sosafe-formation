@@ -73,7 +73,7 @@ const allNav: NavItem[] = [
   { title: "Factures formateur", url: "/trainer-invoices", icon: CreditCard, roles: ["admin", "trainer"], group: "intervenant" },
 
   // Administration
-  { title: "Modèles d'emails", url: "/email-templates", icon: Mail, roles: ["admin"], permission: "manage_templates", group: "administration" },
+  { title: "Communications", url: "/email-templates", icon: Mail, roles: ["admin"], permission: "manage_templates", group: "administration" },
   { title: "Documents", url: "/documents", icon: FileText, roles: ["admin"], permission: "manage_documents", group: "administration" },
   { title: "Émargement", url: "/attendance", icon: CheckSquare, roles: ["admin", "trainer"], permission: "manage_attendance", group: "administration" },
 

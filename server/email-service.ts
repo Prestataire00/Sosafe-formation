@@ -130,11 +130,23 @@ export async function sendEmail(logId: string): Promise<void> {
   if (!config) return;
 
   try {
+    // Inject tracking pixel into email body
+    const appUrl = process.env.APP_URL
+      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+      || "http://localhost:5000";
+    const trackingPixel = `<img src="${appUrl}/t/${emailLog.trackingId}" width="1" height="1" style="display:none" alt="" />`;
+    let htmlBody = emailLog.body;
+    if (htmlBody.includes("</body>")) {
+      htmlBody = htmlBody.replace("</body>", `${trackingPixel}</body>`);
+    } else {
+      htmlBody = htmlBody + trackingPixel;
+    }
+
     await transport.sendMail({
       from: `"${config.fromName}" <${config.fromEmail}>`,
       to: emailLog.recipient,
       subject: emailLog.subject,
-      html: emailLog.body,
+      html: htmlBody,
     });
 
     await storage.updateEmailLog(logId, {

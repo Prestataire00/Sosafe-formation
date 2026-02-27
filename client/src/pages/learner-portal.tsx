@@ -1035,11 +1035,20 @@ function DocumentPreviewDialog({
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   convention: "Convention de formation",
+  contrat_particulier: "Contrat particulier",
+  contrat_vae: "Contrat VAE",
+  politique_confidentialite: "Politique de confidentialité",
+  devis: "Devis",
+  devis_sous_traitance: "Devis sous-traitance",
+  facture: "Facture",
+  facture_blended: "Facture formation blended",
+  facture_specifique: "Facture formation spécifique",
   convocation: "Convocation",
   attestation: "Attestation de formation",
   certificat: "Certificat",
   programme: "Programme de formation",
   reglement: "Règlement intérieur",
+  etiquette_envoi: "Étiquette d'envoi postal",
   bpf: "Bilan Pédagogique et Financier",
   autre: "Document",
 };

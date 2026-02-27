@@ -46,6 +46,7 @@ import {
   ShieldAlert,
   Settings as SettingsIcon,
   Mail,
+  MessageSquare,
   Loader2,
   CheckCircle,
   XCircle,
@@ -58,6 +59,7 @@ import type {
   AutomationRule,
   InsertAutomationRule,
   EmailTemplate,
+  SmsTemplate,
   DocumentTemplate,
   User,
   Trainer,
@@ -258,11 +260,13 @@ function ActionBadge({ action }: { action: string }) {
 function AutomationRuleForm({
   rule,
   templates,
+  smsTemplates,
   onSubmit,
   isPending,
 }: {
   rule?: AutomationRule;
   templates: EmailTemplate[];
+  smsTemplates: SmsTemplate[];
   onSubmit: (data: InsertAutomationRule) => void;
   isPending: boolean;
 }) {
@@ -294,6 +298,7 @@ function AutomationRuleForm({
 
   const isDocumentAction = action === "generate_document" || action === "generate_document_and_send";
   const isEmailAction = action === "send_email" || action === "send_email_enterprise" || action === "send_survey";
+  const isSmsAction = action === "send_sms" || action === "send_sms_enterprise";
   const showEmailTemplateCondition = action === "generate_document_and_send";
   const showTemplateOverrides = isEmailAction || action === "generate_document_and_send";
 
@@ -393,14 +398,20 @@ function AutomationRuleForm({
         </div>
       </div>
       <div className="space-y-2">
-        <Label>{isDocumentAction ? "Template document" : "Template email"}</Label>
+        <Label>{isDocumentAction ? "Template document" : isSmsAction ? "Template SMS" : "Template email"}</Label>
         <Select value={templateId} onValueChange={setTemplateId}>
           <SelectTrigger>
-            <SelectValue placeholder={isDocumentAction ? "Sélectionner un template document" : "Sélectionner un template"} />
+            <SelectValue placeholder={isDocumentAction ? "Sélectionner un template document" : isSmsAction ? "Sélectionner un template SMS" : "Sélectionner un template"} />
           </SelectTrigger>
           <SelectContent>
             {isDocumentAction
               ? (documentTemplates || []).map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))
+              : isSmsAction
+              ? smsTemplates.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.name}
                   </SelectItem>
@@ -803,6 +814,10 @@ function AutomatisationTab() {
     queryKey: ["/api/email-templates"],
   });
 
+  const { data: smsTemplatesData } = useQuery<SmsTemplate[]>({
+    queryKey: ["/api/sms-templates"],
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: InsertAutomationRule) =>
       apiRequest("POST", "/api/automation-rules", data),
@@ -998,6 +1013,7 @@ function AutomatisationTab() {
             <AutomationRuleForm
               rule={editRule}
               templates={templates || []}
+              smsTemplates={smsTemplatesData || []}
               onSubmit={(data) =>
                 editRule
                   ? updateMutation.mutate({ id: editRule.id, data })
@@ -1559,6 +1575,129 @@ function SmtpTab() {
   );
 }
 
+function BrevoSmsTab() {
+  const { toast } = useToast();
+  const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [testError, setTestError] = useState("");
+
+  const { data: settings, isLoading } = useQuery<Record<string, string>>({
+    queryKey: ["/api/settings"],
+  });
+
+  const [form, setForm] = useState({
+    brevo_api_key: "",
+    brevo_sms_sender: "",
+  });
+
+  useEffect(() => {
+    if (settings) {
+      setForm({
+        brevo_api_key: settings.brevo_api_key || "",
+        brevo_sms_sender: settings.brevo_sms_sender || "",
+      });
+    }
+  }, [settings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: Record<string, string>) => {
+      const res = await apiRequest("PATCH", "/api/settings", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Configuration Brevo SMS sauvegardée" });
+    },
+    onError: () => {
+      toast({ title: "Erreur lors de la sauvegarde", variant: "destructive" });
+    },
+  });
+
+  const handleTest = async () => {
+    setTestStatus("loading");
+    setTestError("");
+    try {
+      await saveMutation.mutateAsync(form);
+      const res = await apiRequest("POST", "/api/settings/brevo-sms-test");
+      const result = await res.json();
+      if (result.success) {
+        setTestStatus("success");
+      } else {
+        setTestStatus("error");
+        setTestError(result.error || "Erreur inconnue");
+      }
+    } catch {
+      setTestStatus("error");
+      setTestError("Erreur de connexion au serveur");
+    }
+  };
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="w-5 h-5" />
+          Configuration SMS Brevo
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="brevo_api_key">Clé API Brevo</Label>
+          <Input
+            id="brevo_api_key"
+            type="password"
+            placeholder="xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            value={form.brevo_api_key}
+            onChange={(e) => setForm({ ...form, brevo_api_key: e.target.value })}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="brevo_sms_sender">Nom expéditeur SMS</Label>
+          <Input
+            id="brevo_sms_sender"
+            placeholder="SOSAFE"
+            value={form.brevo_sms_sender}
+            onChange={(e) => setForm({ ...form, brevo_sms_sender: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Nom alphanumérique (max 11 car.) ou numéro de téléphone affiché comme expéditeur
+          </p>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
+            <Save className="w-4 h-4 mr-2" />
+            {saveMutation.isPending ? "Enregistrement..." : "Enregistrer"}
+          </Button>
+          <Button variant="outline" onClick={handleTest} disabled={testStatus === "loading"}>
+            {testStatus === "loading" ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <MessageSquare className="w-4 h-4 mr-2" />
+            )}
+            Tester la connexion
+          </Button>
+        </div>
+
+        {testStatus === "success" && (
+          <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-md">
+            <CheckCircle className="w-4 h-4" />
+            Connexion Brevo réussie
+          </div>
+        )}
+        {testStatus === "error" && (
+          <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-md">
+            <XCircle className="w-4 h-4" />
+            Échec de la connexion : {testError}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { user } = useAuth();
 
@@ -1604,6 +1743,10 @@ export default function Settings() {
             <Mail className="w-4 h-4" />
             Email SMTP
           </TabsTrigger>
+          <TabsTrigger value="brevo-sms" className="gap-2">
+            <MessageSquare className="w-4 h-4" />
+            SMS Brevo
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="organisme">
@@ -1620,6 +1763,10 @@ export default function Settings() {
 
         <TabsContent value="smtp">
           <SmtpTab />
+        </TabsContent>
+
+        <TabsContent value="brevo-sms">
+          <BrevoSmsTab />
         </TabsContent>
       </Tabs>
     </div>

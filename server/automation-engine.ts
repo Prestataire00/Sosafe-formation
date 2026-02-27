@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { sendEmailNow } from "./email-service";
+import { sendSmsNow } from "./sms-service";
 import type { AutomationRule } from "@shared/schema";
 
 /**
@@ -88,6 +89,18 @@ async function resolveVariables(
       r["{entreprise_apprenant}"] = trainee.company || "";
       r["{profile_type_apprenant}"] = trainee.profileType || "";
       r["{profession_apprenant}"] = trainee.profession || "";
+      r["{adresse_apprenant}"] = trainee.address || "";
+      r["{ville_apprenant}"] = trainee.city || "";
+      r["{code_postal_apprenant}"] = trainee.postalCode || "";
+      r["{pays_apprenant}"] = trainee.country || "France";
+      // Build formatted postal address block
+      const addrParts = [
+        `${trainee.civility ? trainee.civility + " " : ""}${trainee.firstName} ${trainee.lastName}`,
+        trainee.address,
+        `${trainee.postalCode || ""} ${trainee.city || ""}`.trim(),
+        trainee.country && trainee.country !== "France" ? trainee.country : "",
+      ].filter(Boolean);
+      r["{adresse_complete_apprenant}"] = addrParts.join("\n");
     }
   }
 
@@ -110,6 +123,114 @@ async function resolveVariables(
       r["{nom_entreprise}"] = enterprise.name;
       r["{contact_entreprise}"] = enterprise.contactName || "";
       r["{email_entreprise}"] = enterprise.contactEmail || "";
+    }
+  }
+
+  // Contract / particulier / VAE variables
+  r["{date_du_jour}"] = new Date().toLocaleDateString("fr-FR");
+  r["{date_signature}"] = new Date().toLocaleDateString("fr-FR");
+  if (trainee) {
+    r["{civilite_apprenant}"] = trainee.civility || "";
+    r["{date_naissance_apprenant}"] = trainee.dateOfBirth
+      ? new Date(trainee.dateOfBirth).toLocaleDateString("fr-FR")
+      : "";
+    r["{adresse_apprenant}"] = "";
+    r["{telephone_apprenant}"] = trainee.phone || "";
+    r["{est_particulier}"] = trainee.profileType === "particulier" ? "true" : "";
+  }
+  // Quote variables
+  if (ctx.quoteId) {
+    const quote = await storage.getQuote(ctx.quoteId);
+    if (quote) {
+      r["{numero_devis}"] = quote.number;
+      r["{montant_devis}"] = `${(quote.total / 100).toFixed(2)} EUR`;
+      r["{montant_ht}"] = `${(quote.subtotal / 100).toFixed(2)} EUR`;
+      r["{montant_tva}"] = `${(quote.taxAmount / 100).toFixed(2)} EUR`;
+      r["{montant_ttc}"] = `${(quote.total / 100).toFixed(2)} EUR`;
+      r["{taux_tva}"] = `${(quote.taxRate / 100).toFixed(2)}%`;
+      r["{date_validite_devis}"] = quote.validUntil
+        ? new Date(quote.validUntil).toLocaleDateString("fr-FR") : "";
+      r["{notes_devis}"] = quote.notes || "";
+      // Build line items HTML table
+      const lines = (quote.lineItems || []).map(
+        (li) => `<tr><td>${li.description}</td><td>${li.quantity}</td><td>${(li.unitPrice / 100).toFixed(2)} EUR</td><td>${(li.total / 100).toFixed(2)} EUR</td></tr>`
+      ).join("");
+      r["{lignes_devis}"] = lines
+        ? `<table><thead><tr><th>Description</th><th>Qté</th><th>P.U.</th><th>Total</th></tr></thead><tbody>${lines}</tbody></table>`
+        : "";
+    }
+  }
+  // Subcontracting variables (from trainer / session)
+  if (ctx.sessionId) {
+    const sessionForTrainer = await storage.getSession(ctx.sessionId);
+    if (sessionForTrainer?.trainerId) {
+      const trainer = await storage.getTrainer(sessionForTrainer.trainerId);
+      if (trainer) {
+        r["{nom_sous_traitant}"] = `${trainer.firstName} ${trainer.lastName}`;
+        r["{email_sous_traitant}"] = trainer.email;
+        r["{telephone_sous_traitant}"] = trainer.phone || "";
+        r["{specialite_sous_traitant}"] = trainer.specialty || "";
+      }
+    }
+  }
+  // VAE variables (resolved from program metadata or conditions)
+  const programForVae = ctx.sessionId
+    ? await (async () => {
+        const s = await storage.getSession(ctx.sessionId!);
+        return s ? storage.getProgram(s.programId) : undefined;
+      })()
+    : ctx.programId
+    ? await storage.getProgram(ctx.programId)
+    : undefined;
+  if (programForVae) {
+    r["{certification_visee}"] = programForVae.certifying ? programForVae.title : "";
+    r["{diplome_vise}"] = programForVae.title;
+    r["{duree_accompagnement}"] = `${programForVae.duration} heures`;
+    r["{tarif_accompagnement}"] = `${programForVae.price} EUR`;
+    r["{est_vae}"] = "";
+  }
+  r["{modalites_paiement}"] = "";
+  r["{delai_retractation}"] = "10 jours";
+  r["{organisme_certificateur}"] = "";
+
+  // Invoice variables
+  if (ctx.invoiceId) {
+    const invoice = await storage.getInvoice(ctx.invoiceId);
+    if (invoice) {
+      r["{numero_facture}"] = invoice.number;
+      r["{titre_facture}"] = invoice.title;
+      r["{facture_montant_ht}"] = `${(invoice.subtotal / 100).toFixed(2)} EUR`;
+      r["{facture_montant_tva}"] = `${(invoice.taxAmount / 100).toFixed(2)} EUR`;
+      r["{facture_montant_ttc}"] = `${(invoice.total / 100).toFixed(2)} EUR`;
+      r["{facture_taux_tva}"] = `${(invoice.taxRate / 100).toFixed(2)}%`;
+      r["{facture_montant_paye}"] = `${(invoice.paidAmount / 100).toFixed(2)} EUR`;
+      r["{facture_reste_du}"] = `${((invoice.total - invoice.paidAmount) / 100).toFixed(2)} EUR`;
+      r["{facture_date_echeance}"] = invoice.dueDate
+        ? new Date(invoice.dueDate).toLocaleDateString("fr-FR") : "";
+      r["{facture_statut}"] = invoice.status;
+      r["{facture_notes}"] = invoice.notes || "";
+      const invLines = (invoice.lineItems || []).map(
+        (li) => `<tr><td>${li.description}</td><td>${li.quantity}</td><td>${(li.unitPrice / 100).toFixed(2)} EUR</td><td>${(li.total / 100).toFixed(2)} EUR</td></tr>`
+      ).join("");
+      r["{facture_lignes}"] = invLines
+        ? `<table><thead><tr><th>Description</th><th>Qté</th><th>P.U.</th><th>Total</th></tr></thead><tbody>${invLines}</tbody></table>`
+        : "";
+      // Resolve linked quote number
+      if (invoice.quoteId) {
+        const linkedQuote = await storage.getQuote(invoice.quoteId);
+        r["{facture_numero_devis}"] = linkedQuote?.number || "";
+      }
+    }
+  }
+
+  // Formation type conditionals (from session modality)
+  if (ctx.sessionId) {
+    const sessionForModality = await storage.getSession(ctx.sessionId);
+    if (sessionForModality) {
+      const mod = sessionForModality.modality?.toLowerCase() || "";
+      r["{est_blended}"] = mod === "blended" || mod === "mixte" ? "true" : "";
+      r["{est_standard}"] = mod === "presentiel" ? "true" : "";
+      r["{est_specifique}"] = mod !== "presentiel" && mod !== "distanciel" && mod !== "blended" && mod !== "mixte" ? "true" : "";
     }
   }
 
@@ -412,6 +533,97 @@ async function handleBlockCertificate(
   return `Certificat bloqué pour l'inscription ${ctx.enrollmentId}`;
 }
 
+async function handleSendSms(
+  rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  const effectiveTemplateId = resolveTemplateId(rule, ctx);
+
+  const template = await storage.getSmsTemplate(effectiveTemplateId);
+  if (!template) throw new Error(`Template SMS ${effectiveTemplateId} introuvable`);
+
+  // Resolve recipient phone
+  let recipient = "";
+  if (ctx.traineeId) {
+    const trainee = await storage.getTrainee(ctx.traineeId);
+    if (trainee) recipient = trainee.phone || "";
+  }
+  if (!recipient) throw new Error("Aucun numéro de téléphone trouvable");
+
+  const body = await resolveVariables(template.body, ctx);
+
+  const smsLog = await storage.createSmsLog({
+    templateId: effectiveTemplateId,
+    recipient,
+    body,
+    status: "pending",
+  });
+
+  try { await sendSmsNow(smsLog.id); } catch {}
+
+  return `SMS créé (log ${smsLog.id}) pour ${recipient}`;
+}
+
+async function handleSendSmsEnterprise(
+  rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  const effectiveTemplateId = resolveTemplateId(rule, ctx);
+
+  const template = await storage.getSmsTemplate(effectiveTemplateId);
+  if (!template) throw new Error(`Template SMS ${effectiveTemplateId} introuvable`);
+
+  // Resolve enterprise recipient phone
+  let recipient = "";
+  const enterpriseId = ctx.enterpriseId || (ctx.traineeId ? (await storage.getTrainee(ctx.traineeId))?.enterpriseId : undefined);
+  if (enterpriseId) {
+    const enterprise = await storage.getEnterprise(enterpriseId);
+    if (enterprise) recipient = enterprise.contactPhone || enterprise.phone || "";
+  }
+  if (!recipient) throw new Error("Aucun téléphone entreprise trouvable");
+
+  const body = await resolveVariables(template.body, ctx);
+
+  const smsLog = await storage.createSmsLog({
+    templateId: effectiveTemplateId,
+    recipient,
+    body,
+    status: "pending",
+  });
+
+  try { await sendSmsNow(smsLog.id); } catch {}
+
+  return `SMS entreprise créé (log ${smsLog.id}) pour ${recipient}`;
+}
+
+async function handleGenerateConvention(
+  _rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  const templates = await storage.getDocumentTemplates();
+  const conventionTemplate = templates.find(t => t.type === "convention");
+  if (!conventionTemplate) throw new Error("Aucun modèle de convention trouvé");
+
+  const content = await resolveVariables(conventionTemplate.content, ctx);
+  const enterpriseId = ctx.enterpriseId || (ctx.traineeId ? (await storage.getTrainee(ctx.traineeId))?.enterpriseId : undefined);
+
+  const doc = await storage.createGeneratedDocument({
+    templateId: conventionTemplate.id,
+    sessionId: ctx.sessionId || null,
+    traineeId: ctx.traineeId || null,
+    enterpriseId: enterpriseId || null,
+    quoteId: ctx.quoteId || null,
+    title: `Convention de formation`,
+    type: "convention",
+    content,
+    status: "generated",
+    visibility: "enterprise",
+    sharedAt: new Date(),
+  });
+
+  return `Convention "${doc.title}" générée (${doc.id})`;
+}
+
 // ---------------------------------------------------------------------------
 // Core engine: execute a single rule
 // ---------------------------------------------------------------------------
@@ -447,6 +659,15 @@ async function executeRule(
           break;
         case "block_certificate":
           message = await handleBlockCertificate(rule, ctx);
+          break;
+        case "generate_convention":
+          message = await handleGenerateConvention(rule, ctx);
+          break;
+        case "send_sms":
+          message = await handleSendSms(rule, ctx);
+          break;
+        case "send_sms_enterprise":
+          message = await handleSendSmsEnterprise(rule, ctx);
           break;
         default:
           throw new Error(`Action inconnue: ${rule.action}`);
@@ -584,6 +805,15 @@ export async function executeRuleManually(
         break;
       case "block_certificate":
         message = await handleBlockCertificate(rule, ctx);
+        break;
+      case "generate_convention":
+        message = await handleGenerateConvention(rule, ctx);
+        break;
+      case "send_sms":
+        message = await handleSendSms(rule, ctx);
+        break;
+      case "send_sms_enterprise":
+        message = await handleSendSmsEnterprise(rule, ctx);
         break;
       default:
         throw new Error(`Action inconnue: ${rule.action}`);

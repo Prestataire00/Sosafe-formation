@@ -48,6 +48,10 @@ import {
   Eye,
   FileCheck,
   Variable,
+  Share2,
+  Lock,
+  Globe,
+  Users,
 } from "lucide-react";
 import type {
   DocumentTemplate,
@@ -66,11 +70,20 @@ function DocTypeBadge({ type }: { type: string }) {
   const found = DOCUMENT_TYPES.find((d) => d.value === type);
   const variants: Record<string, string> = {
     convention: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    contrat_particulier: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400",
+    contrat_vae: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+    politique_confidentialite: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400",
+    devis: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+    devis_sous_traitance: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
+    facture: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+    facture_blended: "bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400",
+    facture_specifique: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
     convocation: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
     attestation: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     certificat: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
     bpf: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
     programme: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+    etiquette_envoi: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
     reglement: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
     autre: "bg-muted text-muted-foreground",
   };
@@ -87,6 +100,10 @@ function DocStatusBadge({ status }: { status: string }) {
       label: "Genere",
       className: "bg-accent text-accent-foreground",
     },
+    shared: {
+      label: "Partage",
+      className: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    },
     sent: {
       label: "Envoye",
       className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -95,12 +112,33 @@ function DocStatusBadge({ status }: { status: string }) {
       label: "Signe",
       className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     },
+    archived: {
+      label: "Archive",
+      className: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    },
   };
   const entry = map[status] || { label: status, className: "" };
   return (
     <Badge variant="outline" className={entry.className}>
       {entry.label}
     </Badge>
+  );
+}
+
+function VisibilityBadge({ visibility }: { visibility: string }) {
+  const map: Record<string, { label: string; icon: typeof Lock; className: string }> = {
+    admin_only: { label: "Admin", icon: Lock, className: "text-gray-500" },
+    enterprise: { label: "Entreprise", icon: Users, className: "text-blue-500" },
+    trainee: { label: "Stagiaire", icon: Users, className: "text-indigo-500" },
+    all: { label: "Tous", icon: Globe, className: "text-green-500" },
+  };
+  const entry = map[visibility] || { label: visibility, icon: Lock, className: "" };
+  const Icon = entry.icon;
+  return (
+    <span className={`flex items-center gap-1 text-xs ${entry.className}`}>
+      <Icon className="w-3 h-3" />
+      {entry.label}
+    </span>
   );
 }
 
@@ -474,6 +512,16 @@ export default function Documents() {
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
 
+  const updateDocMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { visibility?: string; status?: string } }) =>
+      apiRequest("PATCH", `/api/generated-documents/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/generated-documents"] });
+      toast({ title: "Document mis a jour" });
+    },
+    onError: () => toast({ title: "Erreur lors de la mise a jour", variant: "destructive" }),
+  });
+
   // --- Filtering ---
 
   const filteredTemplates =
@@ -713,6 +761,7 @@ export default function Documents() {
                       <TableHead className="hidden md:table-cell">Stagiaire</TableHead>
                       <TableHead className="hidden sm:table-cell">Date</TableHead>
                       <TableHead>Statut</TableHead>
+                      <TableHead>Partage</TableHead>
                       <TableHead className="w-12"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -723,7 +772,12 @@ export default function Documents() {
                       return (
                         <TableRow key={doc.id} data-testid={`row-document-${doc.id}`}>
                           <TableCell>
-                            <p className="text-sm font-medium">{doc.title}</p>
+                            <div>
+                              <p className="text-sm font-medium">{doc.title}</p>
+                              {(doc as any).quoteId && (
+                                <span className="text-xs text-muted-foreground">Auto-genere (devis)</span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <DocTypeBadge type={doc.type} />
@@ -749,6 +803,9 @@ export default function Documents() {
                           </TableCell>
                           <TableCell>
                             <DocStatusBadge status={doc.status} />
+                          </TableCell>
+                          <TableCell>
+                            <VisibilityBadge visibility={(doc as any).visibility || "admin_only"} />
                           </TableCell>
                           <TableCell>
                             <DropdownMenu>
@@ -781,6 +838,30 @@ export default function Documents() {
                                 >
                                   <Printer className="w-4 h-4 mr-2" />
                                   Imprimer
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => updateDocMutation.mutate({ id: doc.id, data: { visibility: "enterprise", status: "shared" } })}
+                                >
+                                  <Share2 className="w-4 h-4 mr-2" />
+                                  Partager avec l'entreprise
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => updateDocMutation.mutate({ id: doc.id, data: { visibility: "all", status: "shared" } })}
+                                >
+                                  <Globe className="w-4 h-4 mr-2" />
+                                  Partager avec tous
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => updateDocMutation.mutate({ id: doc.id, data: { visibility: "admin_only" } })}
+                                >
+                                  <Lock className="w-4 h-4 mr-2" />
+                                  Restreindre (admin)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => updateDocMutation.mutate({ id: doc.id, data: { status: "archived" } })}
+                                >
+                                  <FileCheck className="w-4 h-4 mr-2" />
+                                  Archiver
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-destructive"
