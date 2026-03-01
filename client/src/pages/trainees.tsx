@@ -26,7 +26,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Search,
   GraduationCap,
   MoreHorizontal,
   Pencil,
@@ -50,18 +49,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Trainee, InsertTrainee, Enterprise, UserDocument } from "@shared/schema";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { TRAINEE_CIVILITIES, TRAINEE_PROFILE_TYPES, PRO_STATUT_TYPES, DIETARY_REGIMES, TRAINEE_PROFESSIONS, USER_DOCUMENT_STATUSES, AI_ANALYSIS_STATUSES, AI_CONFIDENCE_LEVELS } from "@shared/schema";
 
 function ProfileTypeBadge({ profileType }: { profileType: string | null }) {
   const pt = TRAINEE_PROFILE_TYPES.find((p) => p.value === profileType);
-  const variants: Record<string, string> = {
-    salarie: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    profession_liberale: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    particulier: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  const variantMap: Record<string, "info" | "purple" | "secondary"> = {
+    salarie: "info",
+    profession_liberale: "purple",
+    particulier: "secondary",
   };
   if (!pt) return <span className="text-muted-foreground">—</span>;
   return (
-    <Badge variant="outline" className={variants[pt.value] || ""}>
+    <Badge variant={variantMap[pt.value] || "secondary"}>
       {pt.label}
     </Badge>
   );
@@ -650,31 +654,27 @@ export default function Trainees() {
   ) || [];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-trainees-title">Stagiaires</h1>
-          <p className="text-muted-foreground mt-1">Gérez vos stagiaires et participants</p>
-        </div>
-        <Button
-          onClick={() => { setEditTrainee(undefined); setDialogOpen(true); }}
-          data-testid="button-create-trainee"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Ajouter un stagiaire
-        </Button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Stagiaires"
+        subtitle="Gérez vos stagiaires et participants"
+        actions={
+          <Button
+            onClick={() => { setEditTrainee(undefined); setDialogOpen(true); }}
+            data-testid="button-create-trainee"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Ajouter un stagiaire
+          </Button>
+        }
+      />
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher un stagiaire..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-trainees"
-        />
-      </div>
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Rechercher un stagiaire..."
+        className="max-w-sm"
+      />
 
       {isLoading ? (
         <Card>
@@ -687,19 +687,21 @@ export default function Trainees() {
           </CardContent>
         </Card>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <GraduationCap className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucun stagiaire</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun résultat pour votre recherche" : "Ajoutez votre premier stagiaire"}
-          </p>
-          {!search && (
-            <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-trainee">
-              <Plus className="w-4 h-4 mr-2" />
-              Ajouter un stagiaire
-            </Button>
-          )}
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={GraduationCap}
+              title="Aucun stagiaire"
+              description={search ? "Aucun résultat pour votre recherche" : "Ajoutez votre premier stagiaire"}
+              action={!search ? (
+                <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-trainee">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Ajouter un stagiaire
+                </Button>
+              ) : undefined}
+            />
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -749,16 +751,10 @@ export default function Trainees() {
                         <ProfileTypeBadge profileType={trainee.profileType} />
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            trainee.status === "active"
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                              : "bg-muted text-muted-foreground"
-                          }
-                        >
-                          {trainee.status === "active" ? "Actif" : "Inactif"}
-                        </Badge>
+                        <StatusBadge
+                          status={trainee.status === "active" ? "actif" : "inactif"}
+                          label={trainee.status === "active" ? "Actif" : "Inactif"}
+                        />
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -843,6 +839,6 @@ export default function Trainees() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

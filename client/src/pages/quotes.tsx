@@ -3,7 +3,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -39,7 +38,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Search,
   FileText,
   Euro,
   TrendingUp,
@@ -52,7 +50,13 @@ import {
   Clock,
   ArrowRightLeft,
   X,
+  Percent,
 } from "lucide-react";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 import type { Quote, InsertQuote, Prospect, Enterprise } from "@shared/schema";
 import { QUOTE_STATUSES } from "@shared/schema";
 
@@ -67,33 +71,14 @@ function formatCents(cents: number): string {
   });
 }
 
-function statusBadgeClass(status: string): string {
-  const map: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-    sent: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    accepted: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    expired: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  };
-  return map[status] || "";
-}
+// statusBadgeClass replaced by StatusBadge component
 
 function statusLabel(status: string): string {
   const found = QUOTE_STATUSES.find((s) => s.value === status);
   return found ? found.label : status;
 }
 
-function statusIcon(status: string) {
-  const map: Record<string, typeof FileText> = {
-    draft: Clock,
-    sent: Send,
-    accepted: CheckCircle,
-    rejected: XCircle,
-    expired: Clock,
-  };
-  const Icon = map[status] || FileText;
-  return <Icon className="w-3.5 h-3.5" />;
-}
+// statusIcon replaced by StatusBadge component
 
 // ============================================================
 // Line item types and editor
@@ -103,22 +88,36 @@ interface LineItem {
   description: string;
   quantity: number;
   unitPrice: number; // in centimes
+  discountPercent?: number;
+  discountAmount?: number;
   total: number; // in centimes
 }
 
 function LineItemsEditor({
   items,
   onChange,
+  globalDiscountPercent,
+  globalDiscountAmount,
+  onGlobalDiscountChange,
 }: {
   items: LineItem[];
   onChange: (items: LineItem[]) => void;
+  globalDiscountPercent: number;
+  globalDiscountAmount: number;
+  onGlobalDiscountChange: (percent: number, amount: number) => void;
 }) {
   const addRow = () => {
-    onChange([...items, { description: "", quantity: 1, unitPrice: 0, total: 0 }]);
+    onChange([...items, { description: "", quantity: 1, unitPrice: 0, discountPercent: 0, discountAmount: 0, total: 0 }]);
   };
 
   const removeRow = (index: number) => {
     onChange(items.filter((_, i) => i !== index));
+  };
+
+  const calcItemTotal = (qty: number, price: number, discPct: number, discAmt: number): number => {
+    const lineTotal = qty * price;
+    const percentDiscount = Math.round(lineTotal * (discPct / 100));
+    return Math.max(0, lineTotal - percentDiscount - discAmt);
   };
 
   const updateRow = (index: number, field: keyof LineItem, value: string | number) => {
@@ -130,16 +129,21 @@ function LineItemsEditor({
       } else if (field === "quantity") {
         newItem.quantity = Math.max(0, Number(value) || 0);
       } else if (field === "unitPrice") {
-        // Input is in euros, store in centimes
         newItem.unitPrice = Math.round((Number(value) || 0) * 100);
+      } else if (field === "discountPercent") {
+        newItem.discountPercent = Number(value) || 0;
+      } else if (field === "discountAmount") {
+        newItem.discountAmount = Math.round((Number(value) || 0) * 100);
       }
-      newItem.total = newItem.quantity * newItem.unitPrice;
+      newItem.total = calcItemTotal(newItem.quantity, newItem.unitPrice, newItem.discountPercent || 0, newItem.discountAmount || 0);
       return newItem;
     });
     onChange(updated);
   };
 
-  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const subtotalBeforeGlobal = items.reduce((sum, item) => sum + item.total, 0);
+  const globalPercentDisc = Math.round(subtotalBeforeGlobal * (globalDiscountPercent / 100));
+  const subtotal = Math.max(0, subtotalBeforeGlobal - globalPercentDisc - globalDiscountAmount);
   const tvaAmount = Math.round(subtotal * 0.2);
   const total = subtotal + tvaAmount;
 
@@ -159,8 +163,10 @@ function LineItemsEditor({
             <TableHeader>
               <TableRow>
                 <TableHead className="min-w-[200px]">Description</TableHead>
-                <TableHead className="w-[100px]">Quantite</TableHead>
-                <TableHead className="w-[130px]">Prix unit. (EUR)</TableHead>
+                <TableHead className="w-[80px]">Qte</TableHead>
+                <TableHead className="w-[110px]">Prix unit.</TableHead>
+                <TableHead className="w-[80px]">Remise %</TableHead>
+                <TableHead className="w-[100px]">Remise EUR</TableHead>
                 <TableHead className="w-[120px] text-right">Total</TableHead>
                 <TableHead className="w-[50px]" />
               </TableRow>
@@ -195,6 +201,27 @@ function LineItemsEditor({
                       className="h-8 text-sm"
                     />
                   </TableCell>
+                  <TableCell className="p-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={item.discountPercent || 0}
+                      onChange={(e) => updateRow(index, "discountPercent", e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </TableCell>
+                  <TableCell className="p-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={((item.discountAmount || 0) / 100).toFixed(2)}
+                      onChange={(e) => updateRow(index, "discountAmount", e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </TableCell>
                   <TableCell className="p-2 text-right text-sm font-medium">
                     {formatCents(item.total)} EUR
                   </TableCell>
@@ -214,7 +241,50 @@ function LineItemsEditor({
             </TableBody>
           </Table>
 
-          <div className="border-t bg-muted/30 px-4 py-3 space-y-1">
+          <div className="border-t bg-muted/30 px-4 py-3 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Sous-total lignes</span>
+              <span className="font-medium">{formatCents(subtotalBeforeGlobal)} EUR</span>
+            </div>
+
+            <div className="bg-background rounded-md p-3 space-y-2 border">
+              <Label className="text-xs font-medium flex items-center gap-1">
+                <Percent className="w-3 h-3" />
+                Remise commerciale globale
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Remise %</Label>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="100"
+                    value={globalDiscountPercent}
+                    onChange={(e) => onGlobalDiscountChange(parseFloat(e.target.value) || 0, globalDiscountAmount)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Remise fixe (EUR)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={(globalDiscountAmount / 100).toFixed(2)}
+                    onChange={(e) => onGlobalDiscountChange(globalDiscountPercent, Math.round((parseFloat(e.target.value) || 0) * 100))}
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+              {(globalPercentDisc > 0 || globalDiscountAmount > 0) && (
+                <div className="flex justify-between text-sm text-red-600 dark:text-red-400">
+                  <span>Remise totale</span>
+                  <span>-{formatCents(globalPercentDisc + globalDiscountAmount)} EUR</span>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Sous-total HT</span>
               <span className="font-medium">{formatCents(subtotal)} EUR</span>
@@ -265,10 +335,18 @@ function QuoteForm({
   const [validUntil, setValidUntil] = useState(quote?.validUntil || "");
   const [notes, setNotes] = useState(quote?.notes || "");
   const [lineItems, setLineItems] = useState<LineItem[]>(
-    (quote?.lineItems as LineItem[] | null) || [{ description: "", quantity: 1, unitPrice: 0, total: 0 }]
+    (quote?.lineItems as LineItem[] | null) || [{ description: "", quantity: 1, unitPrice: 0, discountPercent: 0, discountAmount: 0, total: 0 }]
+  );
+  const [globalDiscountPercent, setGlobalDiscountPercent] = useState(
+    (quote?.globalDiscountPercent || 0) / 100
+  );
+  const [globalDiscountAmount, setGlobalDiscountAmount] = useState(
+    quote?.globalDiscountAmount || 0
   );
 
-  const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
+  const subtotalBeforeGlobal = lineItems.reduce((sum, item) => sum + item.total, 0);
+  const globalPercentDisc = Math.round(subtotalBeforeGlobal * (globalDiscountPercent / 100));
+  const subtotal = Math.max(0, subtotalBeforeGlobal - globalPercentDisc - globalDiscountAmount);
   const taxRate = 2000;
   const taxAmount = Math.round(subtotal * (taxRate / 10000));
   const total = subtotal + taxAmount;
@@ -282,6 +360,8 @@ function QuoteForm({
       enterpriseId: enterpriseId || null,
       lineItems,
       subtotal,
+      globalDiscountPercent: Math.round(globalDiscountPercent * 100),
+      globalDiscountAmount,
       taxRate,
       taxAmount,
       total,
@@ -360,7 +440,16 @@ function QuoteForm({
         />
       </div>
 
-      <LineItemsEditor items={lineItems} onChange={setLineItems} />
+      <LineItemsEditor
+        items={lineItems}
+        onChange={setLineItems}
+        globalDiscountPercent={globalDiscountPercent}
+        globalDiscountAmount={globalDiscountAmount}
+        onGlobalDiscountChange={(pct, amt) => {
+          setGlobalDiscountPercent(pct);
+          setGlobalDiscountAmount(amt);
+        }}
+      />
 
       <div className="space-y-2">
         <Label htmlFor="quote-notes">Notes</Label>
@@ -493,25 +582,23 @@ export default function Quotes() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <PageLayout>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Devis</h1>
-          <p className="text-muted-foreground mt-1">
-            Gerez vos devis et propositions commerciales
-          </p>
-        </div>
-        <Button
-          onClick={() => {
-            setEditQuote(undefined);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nouveau devis
-        </Button>
-      </div>
+      <PageHeader
+        title="Devis"
+        subtitle="Gérez vos devis et propositions commerciales"
+        actions={
+          <Button
+            onClick={() => {
+              setEditQuote(undefined);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nouveau devis
+          </Button>
+        }
+      />
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -577,15 +664,12 @@ export default function Quotes() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher par numero ou titre..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Rechercher par numero ou titre..."
+          className="max-w-sm"
+        />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Tous les statuts" />
@@ -609,21 +693,23 @@ export default function Quotes() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <FileText className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucun devis</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search || statusFilter !== "all"
+        <EmptyState
+          icon={FileText}
+          title="Aucun devis"
+          description={
+            search || statusFilter !== "all"
               ? "Aucun resultat pour votre recherche"
-              : "Creez votre premier devis"}
-          </p>
-          {!search && statusFilter === "all" && (
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nouveau devis
-            </Button>
-          )}
-        </div>
+              : "Creez votre premier devis"
+          }
+          action={
+            !search && statusFilter === "all" ? (
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Nouveau devis
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -657,13 +743,7 @@ export default function Quotes() {
                       {formatCents(quote.total)} EUR
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`gap-1 ${statusBadgeClass(quote.status)}`}
-                      >
-                        {statusIcon(quote.status)}
-                        {statusLabel(quote.status)}
-                      </Badge>
+                      <StatusBadge status={quote.status} label={statusLabel(quote.status)} />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {quote.createdAt
@@ -800,6 +880,6 @@ export default function Quotes() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

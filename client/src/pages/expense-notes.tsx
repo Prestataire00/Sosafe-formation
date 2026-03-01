@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { EmptyState } from "@/components/shared/EmptyState";
 import {
   Table,
   TableBody,
@@ -33,7 +37,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Receipt,
-  Search,
   Eye,
   CheckCircle,
   XCircle,
@@ -186,21 +189,19 @@ export default function ExpenseNotes() {
   const pendingCount = (allNotes || []).filter((n) => n.status === "submitted").length;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Notes de frais</h1>
-          <p className="text-muted-foreground mt-1">
-            {isAdmin ? "Gérez les notes de frais des formateurs" : "Gérez vos notes de frais"}
-          </p>
-        </div>
-        {!isAdmin && trainerId && (
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nouvelle note de frais
-          </Button>
-        )}
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Notes de frais"
+        subtitle="Gestion des notes de frais et remboursements"
+        actions={
+          !isAdmin && trainerId ? (
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvelle note de frais
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
@@ -226,15 +227,7 @@ export default function ExpenseNotes() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput value={search} onChange={setSearch} placeholder="Rechercher..." className="max-w-sm" />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Tous les statuts" />
@@ -251,17 +244,11 @@ export default function ExpenseNotes() {
       {isLoading ? (
         <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card>
       ) : filtered.length === 0 ? (
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center py-8">
-              <Receipt className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-              <h3 className="text-lg font-medium mb-1">Aucune note de frais</h3>
-              <p className="text-sm text-muted-foreground">
-                {search || statusFilter !== "all" ? "Aucun résultat pour vos filtres" : "Aucune note de frais pour le moment"}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Receipt}
+          title="Aucune note de frais"
+          description={search || statusFilter !== "all" ? "Aucun résultat pour vos filtres" : "Aucune note de frais pour le moment"}
+        />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -405,6 +392,6 @@ export default function ExpenseNotes() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

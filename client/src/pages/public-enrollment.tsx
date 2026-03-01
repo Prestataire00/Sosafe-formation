@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
   ArrowLeft, CheckCircle2, Clock, Euro, Monitor, Building2,
@@ -371,20 +373,8 @@ export default function PublicEnrollment() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950">
-      {/* Header */}
-      <header className="border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-          <GraduationCap className="w-8 h-8 text-primary" />
-          <div>
-            <h1 className="text-xl font-bold">Inscription aux formations</h1>
-            <p className="text-sm text-muted-foreground">
-              Choisissez une session et inscrivez-vous en quelques clics
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <PageLayout className="max-w-6xl">
+        <PageHeader title="Inscription en ligne" subtitle="Inscrivez-vous à nos formations" />
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-8">
           {(() => {
@@ -1205,14 +1195,7 @@ export default function PublicEnrollment() {
             </CardContent>
           </Card>
         )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t py-6 mt-12">
-        <div className="max-w-6xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          Plateforme de gestion des formations
-        </div>
-      </footer>
+      </PageLayout>
     </div>
   );
 }

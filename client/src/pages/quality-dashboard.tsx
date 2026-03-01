@@ -24,7 +24,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Search,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -34,6 +33,11 @@ import {
   CheckCircle,
   ClipboardList,
 } from "lucide-react";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,35 +56,18 @@ import type { QualityAction, InsertQualityAction, SurveyResponse } from "@shared
 import { QUALITY_ACTION_TYPES, QUALITY_ACTION_STATUSES, QUALITY_PRIORITIES } from "@shared/schema";
 
 function ActionTypeBadge({ type }: { type: string }) {
-  const variants: Record<string, string> = {
-    improvement: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    corrective: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    preventive: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
-  };
   const label = QUALITY_ACTION_TYPES.find((t) => t.value === type)?.label || type;
-  return <Badge variant="outline" className={variants[type] || ""}>{label}</Badge>;
+  return <StatusBadge status={type} label={label} />;
 }
 
 function ActionStatusBadge({ status }: { status: string }) {
-  const variants: Record<string, string> = {
-    open: "bg-accent text-accent-foreground",
-    in_progress: "bg-primary/10 text-primary dark:bg-primary/20",
-    completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    cancelled: "bg-destructive/10 text-destructive",
-  };
   const label = QUALITY_ACTION_STATUSES.find((s) => s.value === status)?.label || status;
-  return <Badge variant="outline" className={variants[status] || ""}>{label}</Badge>;
+  return <StatusBadge status={status} label={label} />;
 }
 
 function PriorityBadge({ priority }: { priority: string }) {
-  const variants: Record<string, string> = {
-    low: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-    medium: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    high: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    urgent: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  };
   const label = QUALITY_PRIORITIES.find((p) => p.value === priority)?.label || priority;
-  return <Badge variant="outline" className={variants[priority] || ""}>{label}</Badge>;
+  return <StatusBadge status={priority} label={label} />;
 }
 
 function StatCard({
@@ -307,23 +294,23 @@ export default function QualityDashboard() {
   ) || [];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-quality-title">Qualite / Qualiopi</h1>
-          <p className="text-muted-foreground mt-1">Suivi qualite et amelioration continue</p>
-        </div>
-        <Button
-          onClick={() => {
-            setEditAction(undefined);
-            setDialogOpen(true);
-          }}
-          data-testid="button-create-action"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nouvelle action
-        </Button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Qualité Qualiopi"
+        subtitle="Suivi qualité et conformité Qualiopi"
+        actions={
+          <Button
+            onClick={() => {
+              setEditAction(undefined);
+              setDialogOpen(true);
+            }}
+            data-testid="button-create-action"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nouvelle action
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
@@ -352,38 +339,29 @@ export default function QualityDashboard() {
         />
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher une action..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-actions"
-        />
-      </div>
+      <SearchInput value={search} onChange={setSearch} placeholder="Rechercher une action..." className="max-w-sm" />
 
       {loadingActions ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <ClipboardList className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucune action qualite</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun resultat pour votre recherche" : "Creez votre premiere action qualite"}
-          </p>
-          {!search && (
-            <Button
-              onClick={() => setDialogOpen(true)}
-              data-testid="button-create-first-action"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Creer une action
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          icon={ClipboardList}
+          title="Aucune action qualite"
+          description={search ? "Aucun resultat pour votre recherche" : "Creez votre premiere action qualite"}
+          action={
+            !search ? (
+              <Button
+                onClick={() => setDialogOpen(true)}
+                data-testid="button-create-first-action"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Creer une action
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -492,6 +470,6 @@ export default function QualityDashboard() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

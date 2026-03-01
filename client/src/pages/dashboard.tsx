@@ -1,11 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BookOpen,
   Calendar,
-  GraduationCap,
   Users,
   TrendingUp,
   Clock,
@@ -16,59 +14,22 @@ import {
   UserCheck,
   CreditCard,
   Star,
-  CheckSquare,
   Euro,
 } from "lucide-react";
-import type { Program, Session, Trainer, Trainee, Enterprise, Enrollment, Invoice } from "@shared/schema";
+import type { Program, Session, Trainer, Trainee, Enterprise, Enrollment } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { StatCard } from "@/components/shared/StatCard";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  subtitle,
-  loading,
-  testId,
-}: {
-  title: string;
-  value: string | number;
-  icon: typeof BookOpen;
-  subtitle?: string;
-  loading?: boolean;
-  testId: string;
-}) {
-  return (
-    <Card data-testid={testId}>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-accent">
-          <Icon className="w-4 h-4 text-foreground" />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-8 w-20" />
-        ) : (
-          <>
-            <div className="text-2xl font-bold" data-testid={`${testId}-value`}>{value}</div>
-            {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function SessionStatusBadge({ status }: { status: string }) {
-  const variants: Record<string, { label: string; className: string }> = {
-    planned: { label: "Planifiée", className: "bg-accent text-accent-foreground" },
-    ongoing: { label: "En cours", className: "bg-primary/10 text-primary dark:bg-primary/20" },
-    completed: { label: "Terminée", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-    cancelled: { label: "Annulée", className: "bg-destructive/10 text-destructive" },
-  };
-  const v = variants[status] || variants.planned;
-  return <Badge variant="outline" className={v.className}>{v.label}</Badge>;
-}
+const sessionStatusMap: Record<string, string> = {
+  planned: "Planifiée",
+  ongoing: "En cours",
+  completed: "Terminée",
+  cancelled: "Annulée",
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -111,23 +72,24 @@ export default function Dashboard() {
   const greeting = user ? `Bonjour, ${user.firstName}` : "Tableau de bord";
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">{greeting}</h1>
-        <p className="text-muted-foreground mt-1">
-          {user?.role === "admin"
+    <PageLayout>
+      <PageHeader
+        title={greeting}
+        subtitle={
+          user?.role === "admin"
             ? "Vue d'ensemble de l'activité SO'SAFE"
             : user?.role === "trainer"
               ? "Vos sessions et formations"
-              : "Votre espace de formation"}
-        </p>
-      </div>
+              : "Votre espace de formation"
+        }
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Formations"
           value={programs?.length ?? 0}
           icon={BookOpen}
+          color="primary"
           subtitle={`${certifyingPrograms.length} certifiante${certifyingPrograms.length > 1 ? "s" : ""}`}
           loading={loading}
           testId="card-stat-programs"
@@ -136,6 +98,7 @@ export default function Dashboard() {
           title="Sessions actives"
           value={activeSessions.length}
           icon={Calendar}
+          color="info"
           subtitle="En cours / Planifiées"
           loading={loading}
           testId="card-stat-sessions"
@@ -144,6 +107,7 @@ export default function Dashboard() {
           title="Inscriptions"
           value={activeEnrollments.length}
           icon={UserCheck}
+          color="success"
           subtitle="Stagiaires inscrits"
           loading={loading}
           testId="card-stat-enrollments"
@@ -153,6 +117,7 @@ export default function Dashboard() {
             title="Chiffre d'affaires"
             value={invoiceStats ? `${(invoiceStats.paid / 100).toLocaleString("fr-FR")} €` : "0 €"}
             icon={Euro}
+            color="orange"
             subtitle={invoiceStats ? `${invoiceStats.count} facture${invoiceStats.count > 1 ? "s" : ""}` : ""}
             loading={loading}
             testId="card-stat-revenue"
@@ -162,6 +127,7 @@ export default function Dashboard() {
             title="Formateurs"
             value={trainers?.length ?? 0}
             icon={Users}
+            color="purple"
             subtitle="Disponibles"
             loading={loading}
             testId="card-stat-trainers"
@@ -175,6 +141,7 @@ export default function Dashboard() {
             title="Entreprises"
             value={enterprises?.length ?? 0}
             icon={Building2}
+            color="purple"
             subtitle="Clients actifs"
             loading={loading}
             testId="card-stat-enterprises"
@@ -183,6 +150,7 @@ export default function Dashboard() {
             title="Satisfaction moyenne"
             value={surveyStats?.averageRating ? `${surveyStats.averageRating}/5` : "N/A"}
             icon={Star}
+            color="warning"
             subtitle={surveyStats ? `${surveyStats.totalResponses} réponse${surveyStats.totalResponses > 1 ? "s" : ""}` : ""}
             loading={loading}
             testId="card-stat-satisfaction"
@@ -191,6 +159,7 @@ export default function Dashboard() {
             title="Impayés"
             value={invoiceStats ? `${((invoiceStats.pending + invoiceStats.overdue) / 100).toLocaleString("fr-FR")} €` : "0 €"}
             icon={CreditCard}
+            color="destructive"
             subtitle={invoiceStats?.overdue ? `dont ${(invoiceStats.overdue / 100).toLocaleString("fr-FR")} € en retard` : ""}
             loading={loading}
             testId="card-stat-unpaid"
@@ -202,32 +171,35 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base font-semibold">Sessions récentes</CardTitle>
-            <Clock className="w-4 h-4 text-muted-foreground" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-info/10">
+              <Clock className="w-4 h-4 text-info" />
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
               </div>
             ) : recentSessions.length === 0 ? (
-              <div className="text-center py-8">
-                <Calendar className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-sm text-muted-foreground">Aucune session pour le moment</p>
-              </div>
+              <EmptyState
+                icon={Calendar}
+                title="Aucune session"
+                description="Aucune session pour le moment"
+              />
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {recentSessions.map((session) => {
                   const program = programs?.find((p) => p.id === session.programId);
                   const enrolledCount = enrollments?.filter((e) => e.sessionId === session.id && e.status !== "cancelled").length || 0;
                   return (
-                    <div key={session.id} className="flex items-center justify-between gap-3 p-3 rounded-md bg-accent/30" data-testid={`dashboard-session-${session.id}`}>
+                    <div key={session.id} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted/80 transition-colors" data-testid={`dashboard-session-${session.id}`}>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{session.title}</p>
                         <p className="text-xs text-muted-foreground truncate">
                           {program?.title} &middot; {new Date(session.startDate).toLocaleDateString("fr-FR")} &middot; {enrolledCount}/{session.maxParticipants} inscrits
                         </p>
                       </div>
-                      <SessionStatusBadge status={session.status} />
+                      <StatusBadge status={session.status} label={sessionStatusMap[session.status] || session.status} />
                     </div>
                   );
                 })}
@@ -239,13 +211,15 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base font-semibold">Activité</CardTitle>
-            <TrendingUp className="w-4 h-4 text-muted-foreground" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
+              <TrendingUp className="w-4 h-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
-                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-green-100 dark:bg-green-900/30">
-                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-success/10">
+                  <CheckCircle className="w-4 h-4 text-success" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Sessions terminées</p>
@@ -254,9 +228,9 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
-                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/20">
-                  <Clock className="w-4 h-4 text-primary" />
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-info/10">
+                  <Clock className="w-4 h-4 text-info" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Sessions en cours</p>
@@ -265,9 +239,9 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
-                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-amber-100 dark:bg-amber-900/30">
-                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-warning/10">
+                  <AlertCircle className="w-4 h-4 text-warning" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Sessions planifiées</p>
@@ -276,9 +250,9 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
-                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-amber-100 dark:bg-amber-900/30">
-                  <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-purple/10">
+                  <Award className="w-4 h-4 text-purple" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Formations certifiantes</p>
@@ -291,6 +265,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageLayout>
   );
 }

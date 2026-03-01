@@ -40,6 +40,17 @@ import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 import PublicEnrollment from "@/pages/public-enrollment";
 import AfgsuSimulator from "@/pages/afgsu-simulator";
+import PublicEmargement from "@/pages/public-emargement";
+import PublicEvaluation from "@/pages/public-evaluation";
+import Messaging from "@/pages/messaging";
+import CrmPage from "@/pages/crm";
+import Reporting from "@/pages/reporting";
+import QualityImprovement from "@/pages/quality-improvement";
+import CertificationsBadges from "@/pages/certifications-badges";
+import AdvancedFeatures from "@/pages/advanced-features";
+import TaskListsPage from "@/pages/task-lists";
+import IntegrationWebsite from "@/pages/integration-website";
+import DataMigration from "@/pages/data-migration";
 
 function Router() {
   return (
@@ -67,6 +78,15 @@ function Router() {
       <Route path="/trainer-competencies" component={TrainerCompetencies} />
       <Route path="/trainer-portal" component={TrainerPortal} />
       <Route path="/enterprise-portal" component={EnterprisePortal} />
+      <Route path="/messaging" component={Messaging} />
+      <Route path="/crm" component={CrmPage} />
+      <Route path="/reporting" component={Reporting} />
+      <Route path="/quality-improvement" component={QualityImprovement} />
+      <Route path="/certifications-badges" component={CertificationsBadges} />
+      <Route path="/advanced-features" component={AdvancedFeatures} />
+      <Route path="/task-lists" component={TaskListsPage} />
+      <Route path="/integration" component={IntegrationWebsite} />
+      <Route path="/data-migration" component={DataMigration} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
@@ -91,44 +111,37 @@ function AppShell() {
     return <AuthPage />;
   }
 
-  const style = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
-  };
-
   return (
-    <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Avatar className="w-7 h-7">
-                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                    {user.firstName[0]}{user.lastName[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="hidden sm:inline" data-testid="text-user-name">
-                  {user.firstName} {user.lastName}
-                </span>
-              </div>
-              <ThemeToggle />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={logout}
-                data-testid="button-logout"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
+    <SidebarProvider defaultOpen={false}>
+      <AppSidebar />
+      <div className="flex flex-col flex-1 min-w-0 h-screen">
+        <header className="flex items-center justify-between gap-2 px-4 py-2 border-b bg-background">
+          <SidebarTrigger className="md:hidden" data-testid="button-sidebar-toggle" />
+          <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Avatar className="w-7 h-7">
+                <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                  {user.firstName[0]}{user.lastName[0]}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden sm:inline" data-testid="text-user-name">
+                {user.firstName} {user.lastName}
+              </span>
             </div>
-          </header>
-          <main className="flex-1 overflow-auto">
-            <Router />
-          </main>
-        </div>
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={logout}
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto">
+          <Router />
+        </main>
       </div>
     </SidebarProvider>
   );
@@ -142,6 +155,8 @@ function App() {
           <Switch>
             <Route path="/inscription" component={PublicEnrollment} />
             <Route path="/simulateur-afgsu" component={AfgsuSimulator} />
+            <Route path="/emargement/:token" component={PublicEmargement} />
+            <Route path="/evaluation/:token" component={PublicEvaluation} />
             <Route>
               <AuthProvider>
                 <AppShell />

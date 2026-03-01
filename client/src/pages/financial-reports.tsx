@@ -1,6 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -10,11 +15,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
 import {
   Euro,
   TrendingUp,
   AlertTriangle,
   BarChart3,
+  Download,
 } from "lucide-react";
 import {
   BarChart,
@@ -121,6 +128,18 @@ export default function FinancialReports() {
   });
 
   const loading = loadingInvoices || loadingStats || loadingSessions || loadingPrograms;
+
+  const { toast } = useToast();
+  const currentYear = new Date().getFullYear();
+  const [bpfYear, setBpfYear] = useState(currentYear);
+
+  const generateBpfMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/documents/generate-bpf", { year: bpfYear }),
+    onSuccess: () =>
+      toast({ title: `BPF ${bpfYear} exporté dans la GED` }),
+    onError: () =>
+      toast({ title: "Erreur lors de la génération du BPF", variant: "destructive" }),
+  });
 
   // --- Computed data ---
 
@@ -234,14 +253,11 @@ export default function FinancialReports() {
   );
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Rapports financiers</h1>
-        <p className="text-muted-foreground mt-1">
-          Suivi du chiffre d'affaires et des indicateurs financiers SO'SAFE
-        </p>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Rapports financiers"
+        subtitle="Analyses et bilans financiers"
+      />
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -412,11 +428,31 @@ export default function FinancialReports() {
 
       {/* BPF Summary Table */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
             Bilan Pédagogique et Financier (BPF)
           </CardTitle>
+          <div className="flex items-center gap-2">
+            <select
+              value={bpfYear}
+              onChange={(e) => setBpfYear(Number(e.target.value))}
+              className="text-sm border rounded px-2 py-1 bg-background"
+            >
+              {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => generateBpfMutation.mutate()}
+              disabled={generateBpfMutation.isPending}
+            >
+              <Download className="w-4 h-4 mr-1.5" />
+              {generateBpfMutation.isPending ? "Generation..." : "Exporter vers GED"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -483,6 +519,6 @@ export default function FinancialReports() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageLayout>
   );
 }

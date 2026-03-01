@@ -3,6 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import {
   Search, ShieldCheck, CheckCircle2, ArrowRight, Info, ArrowLeft,
 } from "lucide-react";
@@ -123,20 +125,8 @@ export default function AfgsuSimulator() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950">
-      {/* Header */}
-      <header className="border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
-          <ShieldCheck className="w-8 h-8 text-primary" />
-          <div>
-            <h1 className="text-xl font-bold">Simulateur d'éligibilité AFGSU 2</h1>
-            <p className="text-sm text-muted-foreground">
-              Vérifiez si votre profession est éligible à la formation AFGSU 2
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <PageLayout className="max-w-4xl">
+        <PageHeader title="Simulateur AFGSU" subtitle="Testez vos connaissances en urgences" />
         {/* Step 1: Selection */}
         {step === "selection" && (
           <>
@@ -345,14 +335,7 @@ export default function AfgsuSimulator() {
             )}
           </div>
         )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t py-6 mt-12">
-        <div className="max-w-4xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          Plateforme de gestion des formations
-        </div>
-      </footer>
+      </PageLayout>
     </div>
   );
 }

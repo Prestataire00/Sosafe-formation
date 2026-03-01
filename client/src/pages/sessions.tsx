@@ -76,20 +76,24 @@ import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { Session, InsertSession, Program, Trainer, Trainee, Enrollment, Enterprise } from "@shared/schema";
 import { SESSION_STATUSES, MODALITIES, TRAINEE_PROFILE_TYPES } from "@shared/schema";
-
-const statusVariants: Record<string, string> = {
-  planned: "bg-accent text-accent-foreground",
-  ongoing: "bg-primary/10 text-primary dark:bg-primary/20",
-  completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  cancelled: "bg-destructive/10 text-destructive",
-};
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 
 const statusLabels: Record<string, string> = {};
 SESSION_STATUSES.forEach((s) => { statusLabels[s.value] = s.label; });
 
 function SessionStatusBadge({ status }: { status: string }) {
-  return <Badge variant="outline" className={statusVariants[status] || ""}>{statusLabels[status] || status}</Badge>;
+  return <StatusBadge status={status} label={statusLabels[status] || status} colorMap={{ planned: "purple", ongoing: "info", completed: "success", cancelled: "destructive" }} />;
 }
+
+const inlineStatusVariantMap: Record<string, "purple" | "info" | "success" | "destructive"> = {
+  planned: "purple",
+  ongoing: "info",
+  completed: "success",
+  cancelled: "destructive",
+};
 
 function InlineStatusBadge({
   session,
@@ -106,12 +110,12 @@ function InlineStatusBadge({
           className="focus:outline-none cursor-pointer"
           onClick={(e) => e.stopPropagation()}
         >
-          <Badge
-            variant="outline"
-            className={`${statusVariants[session.status] || ""} hover:opacity-80 transition-opacity cursor-pointer`}
-          >
-            {statusLabels[session.status] || session.status}
-          </Badge>
+          <StatusBadge
+            status={session.status}
+            label={statusLabels[session.status] || session.status}
+            colorMap={inlineStatusVariantMap}
+            className="hover:opacity-80 transition-opacity cursor-pointer"
+          />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
@@ -121,9 +125,12 @@ function InlineStatusBadge({
             disabled={s.value === session.status}
             onClick={() => onStatusChange(session.id, s.value)}
           >
-            <Badge variant="outline" className={`${statusVariants[s.value] || ""} mr-2 pointer-events-none`}>
-              {s.label}
-            </Badge>
+            <StatusBadge
+              status={s.value}
+              label={s.label}
+              colorMap={inlineStatusVariantMap}
+              className="mr-2 pointer-events-none"
+            />
             {s.value === session.status && <span className="text-xs text-muted-foreground ml-auto">(actuel)</span>}
           </DropdownMenuItem>
         ))}
@@ -875,48 +882,50 @@ export default function Sessions() {
   const deleteSession = sessions?.find((s) => s.id === deleteSessionId);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-sessions-title">Sessions</h1>
-          <p className="text-muted-foreground mt-1">Planifiez et gérez vos sessions de formation</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "cards" | "calendar")}>
-            <TabsList>
-              <TabsTrigger value="cards" className="gap-1.5">
-                <LayoutGrid className="w-4 h-4" />
-                Cartes
-              </TabsTrigger>
-              <TabsTrigger value="calendar" className="gap-1.5">
-                <Calendar className="w-4 h-4" />
-                Calendrier
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" onClick={handleCopyLink} className="gap-2">
-                <Link2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Lien d'inscription</span>
-                {linkCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <p className="text-xs">{publicEnrollmentUrl}</p>
-            </TooltipContent>
-          </Tooltip>
-          <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
-            <Plus className="w-4 h-4 mr-2" />
-            Nouvelle session
-          </Button>
-        </div>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Sessions"
+        subtitle="Planifiez et gérez vos sessions de formation"
+        actions={
+          <div className="flex items-center gap-3">
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "cards" | "calendar")}>
+              <TabsList>
+                <TabsTrigger value="cards" className="gap-1.5">
+                  <LayoutGrid className="w-4 h-4" />
+                  Cartes
+                </TabsTrigger>
+                <TabsTrigger value="calendar" className="gap-1.5">
+                  <Calendar className="w-4 h-4" />
+                  Calendrier
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={handleCopyLink} className="gap-2">
+                  <Link2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Lien d'inscription</span>
+                  {linkCopied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">{publicEnrollmentUrl}</p>
+              </TooltipContent>
+            </Tooltip>
+            <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvelle session
+            </Button>
+          </div>
+        }
+      />
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Rechercher une session..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-sessions" />
-      </div>
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Rechercher une session..."
+        className="max-w-sm"
+      />
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1099,6 +1108,6 @@ export default function Sessions() {
         </AlertDialogContent>
       </AlertDialog>
 
-    </div>
+    </PageLayout>
   );
 }

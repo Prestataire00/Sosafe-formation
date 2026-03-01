@@ -1,4 +1,6 @@
+import crypto from "crypto";
 import { storage } from "./storage";
+import { applyBranding } from "./document-utils";
 import { sendEmailNow } from "./email-service";
 import { sendSmsNow } from "./sms-service";
 import type { AutomationRule } from "@shared/schema";
@@ -331,7 +333,8 @@ async function handleGenerateDocument(
   const template = await storage.getDocumentTemplate(rule.templateId);
   if (!template) throw new Error(`Template document ${rule.templateId} introuvable`);
 
-  const content = await resolveVariables(template.content, ctx);
+  let content = await resolveVariables(template.content, ctx);
+  content = await applyBranding(content, template);
 
   const doc = await storage.createGeneratedDocument({
     templateId: rule.templateId,
@@ -389,6 +392,100 @@ async function handleSendSurvey(
   if (!rule.templateId) throw new Error("templateId manquant sur la règle");
   // Delegate to the email handler — the template should contain the survey link
   return handleSendEmail(rule, ctx);
+}
+
+async function handleSendEvaluation(
+  rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  const cond = (rule.conditions || {}) as Record<string, unknown>;
+  const evaluationType = cond.evaluationType as string;
+  if (!evaluationType) throw new Error("evaluationType manquant dans les conditions de la regle");
+
+  // Find active template for this evaluation type
+  const allTemplates = await storage.getSurveyTemplates();
+  const template = allTemplates.find(t => t.evaluationType === evaluationType && t.status === "active");
+  if (!template) throw new Error(`Aucun template actif pour le type ${evaluationType}`);
+
+  if (!ctx.sessionId) throw new Error("sessionId manquant dans le contexte");
+
+  // Get enrollments
+  const enrollments = await storage.getEnrollments(ctx.sessionId);
+  const activeEnrollments = enrollments.filter((e: any) => e.status !== "cancelled");
+
+  let sentCount = 0;
+  for (const enrollment of activeEnrollments) {
+    const trainee = await storage.getTrainee(enrollment.traineeId);
+    if (!trainee) continue;
+
+    let respondentType = "trainee";
+    let respondentEmail = trainee.email;
+    let respondentName = `${trainee.firstName} ${trainee.lastName}`;
+
+    if (evaluationType === "manager_eval") {
+      respondentType = "manager";
+      respondentEmail = trainee.managerEmail || "";
+      respondentName = trainee.managerName || "";
+      if (!respondentEmail) continue;
+    } else if (evaluationType === "commissioner_eval") {
+      respondentType = "enterprise";
+      if (trainee.enterpriseId) {
+        const enterprise = await storage.getEnterprise(trainee.enterpriseId);
+        respondentEmail = enterprise?.contactEmail || "";
+        respondentName = enterprise?.contactName || enterprise?.name || "";
+      }
+      if (!respondentEmail) continue;
+    }
+
+    // Check not already assigned
+    const existing = await storage.getEvaluationAssignments(ctx.sessionId, enrollment.traineeId);
+    if (existing.some((a: any) => a.templateId === template.id)) continue;
+
+    const token = crypto.randomUUID();
+    const isDelayed = evaluationType === "evaluation_cold" && template.coldDelayDays;
+    const scheduledFor = isDelayed
+      ? new Date(Date.now() + (template.coldDelayDays! * 86400000))
+      : null;
+
+    await storage.createEvaluationAssignment({
+      templateId: template.id,
+      sessionId: ctx.sessionId,
+      traineeId: enrollment.traineeId,
+      respondentType,
+      respondentEmail,
+      respondentName,
+      token,
+      status: isDelayed ? "pending" : "sent",
+      scheduledFor,
+    });
+
+    // Send email immediately unless delayed
+    if (!isDelayed && respondentEmail) {
+      const settings = await storage.getOrganizationSettings();
+      const orgName = settings.find((s: any) => s.key === "nom_organisme")?.value || "SO'SAFE Formation";
+      const baseUrl = settings.find((s: any) => s.key === "app_url")?.value || "";
+
+      const evalUrl = `${baseUrl}/evaluation/${token}`;
+      const subject = `${orgName} — Evaluation: ${template.title}`;
+      const body = `<p>Bonjour ${respondentName},</p>
+<p>Vous etes invite(e) a completer l'evaluation suivante : <strong>${template.title}</strong></p>
+<p><a href="${evalUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;">Completer l'evaluation</a></p>
+<p>Cordialement,<br/>${orgName}</p>`;
+
+      const emailLog = await storage.createEmailLog({
+        templateId: null,
+        recipient: respondentEmail,
+        subject,
+        body,
+        status: "pending",
+      });
+      try { await sendEmailNow(emailLog.id); } catch {}
+    }
+
+    sentCount++;
+  }
+
+  return `${sentCount} evaluation(s) ${evaluationType} assignee(s)`;
 }
 
 async function handleSendEmailEnterprise(
@@ -596,6 +693,83 @@ async function handleSendSmsEnterprise(
   return `SMS entreprise créé (log ${smsLog.id}) pour ${recipient}`;
 }
 
+async function handleGenerateAttestationPresence(
+  rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  if (!ctx.enrollmentId) throw new Error("enrollmentId manquant");
+
+  const enrollment = await storage.getEnrollment(ctx.enrollmentId);
+  if (!enrollment) throw new Error(`Inscription ${ctx.enrollmentId} introuvable`);
+
+  // Only generate if trainee was actually present
+  if (enrollment.status !== "attended" && enrollment.status !== "completed") {
+    return `Génération ignorée : statut inscription "${enrollment.status}" (présence requise)`;
+  }
+
+  const effectiveTemplateId = resolveTemplateId(rule, ctx);
+  const template = await storage.getDocumentTemplate(effectiveTemplateId);
+  if (!template) throw new Error(`Template document ${effectiveTemplateId} introuvable`);
+
+  // Resolve attendance stats for template variables
+  let heuresRealisees = "";
+  let tauxPresence = "";
+  let nombreSeances = "0";
+  let seancesPresentees = "0";
+
+  if (ctx.sessionId) {
+    const session = await storage.getSession(ctx.sessionId);
+    if (session) {
+      const sheets = await storage.getAttendanceSheets(ctx.sessionId);
+      nombreSeances = String(sheets.length);
+      // Count sheets where this trainee signed
+      let presences = 0;
+      for (const sheet of sheets) {
+        const records = await storage.getAttendanceRecords(sheet.id);
+        const rec = records.find(r => r.traineeId === ctx.traineeId);
+        if (rec?.status === "present") presences++;
+      }
+      seancesPresentees = String(presences);
+      tauxPresence = sheets.length > 0
+        ? `${Math.round((presences / sheets.length) * 100)}%`
+        : "N/A";
+
+      // Calculate hours based on session duration
+      const start = new Date(session.startDate);
+      const end = new Date(session.endDate);
+      const days = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+      heuresRealisees = `${days * 7}h`;
+    }
+  }
+
+  // Inject extra variables into resolved content
+  let content = await resolveVariables(template.content, ctx);
+  content = content
+    .replaceAll("{heures_realisees}", heuresRealisees)
+    .replaceAll("{taux_presence}", tauxPresence)
+    .replaceAll("{nombre_seances}", nombreSeances)
+    .replaceAll("{seances_presentes}", seancesPresentees)
+    .replaceAll("{statut_presence}", "Présent")
+    .replaceAll("{est_present}", "true")
+    .replaceAll("{date_delivrance}", new Date().toLocaleDateString("fr-FR"));
+
+  content = await applyBranding(content, template);
+
+  const doc = await storage.createGeneratedDocument({
+    templateId: effectiveTemplateId,
+    sessionId: ctx.sessionId || null,
+    traineeId: ctx.traineeId || null,
+    title: template.name,
+    type: template.type,
+    content,
+    status: "generated",
+    visibility: "trainee",
+    sharedAt: new Date(),
+  });
+
+  return `"${template.name}" généré pour apprenant présent (${doc.id})`;
+}
+
 async function handleGenerateConvention(
   _rule: AutomationRule,
   ctx: AutomationContext,
@@ -604,7 +778,8 @@ async function handleGenerateConvention(
   const conventionTemplate = templates.find(t => t.type === "convention");
   if (!conventionTemplate) throw new Error("Aucun modèle de convention trouvé");
 
-  const content = await resolveVariables(conventionTemplate.content, ctx);
+  let content = await resolveVariables(conventionTemplate.content, ctx);
+  content = await applyBranding(content, conventionTemplate);
   const enterpriseId = ctx.enterpriseId || (ctx.traineeId ? (await storage.getTrainee(ctx.traineeId))?.enterpriseId : undefined);
 
   const doc = await storage.createGeneratedDocument({
@@ -663,11 +838,17 @@ async function executeRule(
         case "generate_convention":
           message = await handleGenerateConvention(rule, ctx);
           break;
+        case "generate_attestation_presence":
+          message = await handleGenerateAttestationPresence(rule, ctx);
+          break;
         case "send_sms":
           message = await handleSendSms(rule, ctx);
           break;
         case "send_sms_enterprise":
           message = await handleSendSmsEnterprise(rule, ctx);
+          break;
+        case "send_evaluation":
+          message = await handleSendEvaluation(rule, ctx);
           break;
         default:
           throw new Error(`Action inconnue: ${rule.action}`);
@@ -809,11 +990,17 @@ export async function executeRuleManually(
       case "generate_convention":
         message = await handleGenerateConvention(rule, ctx);
         break;
+      case "generate_attestation_presence":
+        message = await handleGenerateAttestationPresence(rule, ctx);
+        break;
       case "send_sms":
         message = await handleSendSms(rule, ctx);
         break;
       case "send_sms_enterprise":
         message = await handleSendSmsEnterprise(rule, ctx);
+        break;
+      case "send_evaluation":
+        message = await handleSendEvaluation(rule, ctx);
         break;
       default:
         throw new Error(`Action inconnue: ${rule.action}`);

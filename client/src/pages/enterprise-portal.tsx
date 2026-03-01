@@ -23,7 +23,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, FileText, ClipboardList, AlertCircle, AlertTriangle, Loader2, Upload, Eye, Download, UserPlus, Pencil, Trash2, Search, ChevronDown, ChevronRight, ShieldAlert, RefreshCw, Clock, CheckCircle2 } from "lucide-react";
+import { Building2, Users, FileText, ClipboardList, AlertCircle, AlertTriangle, Loader2, Upload, Eye, Download, UserPlus, Pencil, Trash2, ChevronDown, ChevronRight, ShieldAlert, RefreshCw, Clock, CheckCircle2 } from "lucide-react";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
 import type { Enterprise, Enrollment, Session, Trainee, Quote, Invoice, EnterpriseContact, Program, GeneratedDocument, TraineeCertification } from "@shared/schema";
 import { ENTERPRISE_CONTACT_ROLES, ENTERPRISE_DOCUMENT_CATEGORIES, DOCUMENT_STATUSES } from "@shared/schema";
 
@@ -688,19 +691,12 @@ export default function EnterprisePortal() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <PageLayout>
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-3 mb-1">
-          <Building2 className="w-7 h-7 text-primary" />
-          <h1 className="text-2xl font-bold">Portail Entreprise</h1>
-        </div>
-        <p className="text-muted-foreground mt-1">
-          {enterprise
-            ? `Bienvenue, ${enterprise.name}. Gerez vos formations et suivez vos employes.`
-            : `Bienvenue, ${user.firstName} ${user.lastName}. Gerez vos formations et suivez vos employes.`}
-        </p>
-      </div>
+      <PageHeader
+        title="Portail Entreprise"
+        subtitle="Suivi des formations de vos collaborateurs"
+      />
 
       {/* Warning if no enterprise linked */}
       {!isLoading && !enterpriseId && (
@@ -843,15 +839,12 @@ export default function EnterprisePortal() {
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <CardTitle className="text-lg">Inscriptions aux formations</CardTitle>
                     <div className="flex items-center gap-2">
-                      <div className="relative">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Rechercher..."
-                          className="pl-9 w-[220px]"
-                        />
-                      </div>
+                      <SearchInput
+                        value={searchQuery}
+                        onChange={setSearchQuery}
+                        placeholder="Rechercher..."
+                        className="w-[220px]"
+                      />
                       {availableYears.length > 0 && (
                         <Select value={yearFilter} onValueChange={setYearFilter}>
                           <SelectTrigger className="w-[160px]">
@@ -1542,6 +1535,6 @@ export default function EnterprisePortal() {
         mimeType={previewDoc?.mimeType || null}
         htmlContent={previewDoc?.htmlContent}
       />
-    </div>
+    </PageLayout>
   );
 }

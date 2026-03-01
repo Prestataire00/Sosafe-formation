@@ -1,6 +1,10 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +42,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Search,
   Mail,
   MessageSquare,
   MoreHorizontal,
@@ -69,12 +72,15 @@ function CategoryBadge({ category }: { category: string }) {
     labels[c.value] = c.label;
   });
   const colors: Record<string, string> = {
-    convocation: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    confirmation: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    rappel: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    suivi: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    facturation: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
-    general: "bg-accent text-accent-foreground",
+    signature_electronique: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    signature_contrat_cadre: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+    clients: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    factures_devis: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
+    intervenants: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    apprenants: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+    financeurs_externes: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    evaluations: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400",
+    catalogue_en_ligne: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   };
   return (
     <Badge variant="outline" className={`text-xs ${colors[category] || ""}`}>
@@ -367,15 +373,12 @@ function TemplatesContent() {
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher un template..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Rechercher un template..."
+          className="max-w-sm"
+        />
         <Button
           onClick={() => {
             setEditItem(undefined);
@@ -401,21 +404,17 @@ function TemplatesContent() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Mail className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucun template</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search
-              ? "Aucun résultat pour votre recherche"
-              : "Créez votre premier modèle d'email"}
-          </p>
-          {!search && (
+        <EmptyState
+          icon={Mail}
+          title="Aucun template"
+          description={search ? "Aucun résultat pour votre recherche" : "Créez votre premier modèle d'email"}
+          action={!search ? (
             <Button onClick={() => setDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Créer un template
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((template) => (
@@ -885,15 +884,12 @@ function SmsTemplatesContent() {
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher un template SMS..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Rechercher un template SMS..."
+          className="max-w-sm"
+        />
         <Button
           onClick={() => {
             setEditItem(undefined);
@@ -918,21 +914,17 @@ function SmsTemplatesContent() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucun template SMS</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search
-              ? "Aucun résultat pour votre recherche"
-              : "Créez votre premier modèle de SMS"}
-          </p>
-          {!search && (
+        <EmptyState
+          icon={MessageSquare}
+          title="Aucun template SMS"
+          description={search ? "Aucun résultat pour votre recherche" : "Créez votre premier modèle de SMS"}
+          action={!search ? (
             <Button onClick={() => setDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Créer un template SMS
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((template) => (
@@ -1099,13 +1091,11 @@ function SmsLogsTab() {
 
 export default function EmailTemplates() {
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">Communications</h1>
-        <p className="text-muted-foreground mt-1">
-          Gérez vos modèles d'emails et SMS, et suivez vos envois
-        </p>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Communications"
+        subtitle="Modèles d'emails et communications automatisées"
+      />
 
       <Tabs defaultValue="templates">
         <TabsList>
@@ -1143,6 +1133,6 @@ export default function EmailTemplates() {
           <SmsLogsTab />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }

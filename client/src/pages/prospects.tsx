@@ -24,7 +24,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Search,
   Users,
   Mail,
   Phone,
@@ -42,6 +41,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 import type { Prospect, InsertProspect } from "@shared/schema";
 import { PROSPECT_STATUSES } from "@shared/schema";
 
@@ -290,20 +294,20 @@ export default function Prospects() {
   }) || [];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-prospects-title">Prospects</h1>
-          <p className="text-muted-foreground mt-1">Gerez votre pipeline de prospection commerciale</p>
-        </div>
-        <Button
-          onClick={() => { setEditItem(undefined); setDialogOpen(true); }}
-          data-testid="button-create-prospect"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Ajouter un prospect
-        </Button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Prospects"
+        subtitle="Suivez vos prospects et opportunités"
+        actions={
+          <Button
+            onClick={() => { setEditItem(undefined); setDialogOpen(true); }}
+            data-testid="button-create-prospect"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Ajouter un prospect
+          </Button>
+        }
+      />
 
       {/* Status filter buttons */}
       <div className="flex flex-wrap gap-2">
@@ -341,16 +345,7 @@ export default function Prospects() {
         })}
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher un prospect..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-prospects"
-        />
-      </div>
+      <SearchInput value={search} onChange={setSearch} placeholder="Rechercher un prospect..." className="max-w-sm" />
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -366,21 +361,19 @@ export default function Prospects() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Users className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucun prospect</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search || statusFilter !== "all"
-              ? "Aucun resultat pour votre recherche"
-              : "Ajoutez votre premier prospect"}
-          </p>
-          {!search && statusFilter === "all" && (
+        <EmptyState
+          icon={Users}
+          title="Aucun prospect"
+          description={search || statusFilter !== "all"
+            ? "Aucun resultat pour votre recherche"
+            : "Ajoutez votre premier prospect"}
+          action={!search && statusFilter === "all" ? (
             <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-prospect">
               <Plus className="w-4 h-4 mr-2" />
               Ajouter un prospect
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((prospect) => {
@@ -488,6 +481,6 @@ export default function Prospects() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

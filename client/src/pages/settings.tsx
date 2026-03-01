@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -53,6 +55,15 @@ import {
   ChevronDown,
   ChevronUp,
   HelpCircle,
+  Globe,
+  Landmark,
+  PenTool,
+  Video,
+  FileSearch,
+  Download,
+  UserX,
+  ClipboardList,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type {
@@ -1698,6 +1709,682 @@ function BrevoSmsTab() {
   );
 }
 
+// ============================================================
+// Integrations Tab (MyPonto, Lexpersona, Visio)
+// ============================================================
+
+function IntegrationsTab() {
+  const { toast } = useToast();
+  const { data: settings } = useQuery<any[]>({ queryKey: ["/api/organization-settings"] });
+
+  const getValue = (key: string) => {
+    const s = settings?.find((s: any) => s.key === key);
+    return s?.value || "";
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { key: string; value: string }) => {
+      await apiRequest("POST", "/api/organization-settings", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organization-settings"] });
+      toast({ title: "Paramètre enregistré" });
+    },
+  });
+
+  const [mypontoKey, setMypontoKey] = useState("");
+  const [mypontoSecret, setMypontoSecret] = useState("");
+  const [lexpersonaKey, setLexpersonaKey] = useState("");
+  const [lexpersonaUrl, setLexpersonaUrl] = useState("");
+  const [visioProvider, setVisioProvider] = useState("none");
+  const [visioApiKey, setVisioApiKey] = useState("");
+  const [visioDefaultUrl, setVisioDefaultUrl] = useState("");
+
+  useEffect(() => {
+    if (settings) {
+      setMypontoKey(getValue("myponto_api_key"));
+      setMypontoSecret(getValue("myponto_api_secret"));
+      setLexpersonaKey(getValue("lexpersona_api_key"));
+      setLexpersonaUrl(getValue("lexpersona_api_url"));
+      setVisioProvider(getValue("visio_provider") || "none");
+      setVisioApiKey(getValue("visio_api_key"));
+      setVisioDefaultUrl(getValue("visio_default_url"));
+    }
+  }, [settings]);
+
+  const saveAll = () => {
+    const pairs = [
+      { key: "myponto_api_key", value: mypontoKey },
+      { key: "myponto_api_secret", value: mypontoSecret },
+      { key: "lexpersona_api_key", value: lexpersonaKey },
+      { key: "lexpersona_api_url", value: lexpersonaUrl },
+      { key: "visio_provider", value: visioProvider },
+      { key: "visio_api_key", value: visioApiKey },
+      { key: "visio_default_url", value: visioDefaultUrl },
+    ];
+    pairs.forEach((p) => {
+      if (p.value) saveMutation.mutate(p);
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* MyPonto */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Landmark className="w-5 h-5" />
+            MyPonto (Banque)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Intégration avec MyPonto pour la synchronisation bancaire et le rapprochement des paiements.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Clé API MyPonto</Label>
+              <Input
+                type="password"
+                placeholder="pk_live_..."
+                value={mypontoKey}
+                onChange={(e) => setMypontoKey(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Secret API MyPonto</Label>
+              <Input
+                type="password"
+                placeholder="sk_live_..."
+                value={mypontoSecret}
+                onChange={(e) => setMypontoSecret(e.target.value)}
+              />
+            </div>
+          </div>
+          <Badge variant={mypontoKey ? "default" : "secondary"}>
+            {mypontoKey ? "Configuré" : "Non configuré"}
+          </Badge>
+        </CardContent>
+      </Card>
+
+      {/* Lexpersona */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <PenTool className="w-5 h-5" />
+            Lexpersona (Signature électronique)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Intégration avec Lexpersona pour la signature électronique des conventions, contrats et attestations.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Clé API Lexpersona</Label>
+              <Input
+                type="password"
+                placeholder="lxp_..."
+                value={lexpersonaKey}
+                onChange={(e) => setLexpersonaKey(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>URL API Lexpersona</Label>
+              <Input
+                placeholder="https://api.lexpersona.com/v1"
+                value={lexpersonaUrl}
+                onChange={(e) => setLexpersonaUrl(e.target.value)}
+              />
+            </div>
+          </div>
+          <Badge variant={lexpersonaKey ? "default" : "secondary"}>
+            {lexpersonaKey ? "Configuré" : "Non configuré"}
+          </Badge>
+        </CardContent>
+      </Card>
+
+      {/* Visio */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Video className="w-5 h-5" />
+            Visioconférence (Meet / Zoom)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Configuration de la visioconférence pour les sessions à distance.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Fournisseur</Label>
+              <Select value={visioProvider} onValueChange={setVisioProvider}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionner" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucun (URL manuelle)</SelectItem>
+                  <SelectItem value="google_meet">Google Meet</SelectItem>
+                  <SelectItem value="zoom">Zoom</SelectItem>
+                  <SelectItem value="teams">Microsoft Teams</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Clé API (optionnel)</Label>
+              <Input
+                type="password"
+                placeholder="Clé API du fournisseur"
+                value={visioApiKey}
+                onChange={(e) => setVisioApiKey(e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <Label>URL de visio par défaut</Label>
+            <Input
+              placeholder="https://meet.google.com/xxx-xxx-xxx"
+              value={visioDefaultUrl}
+              onChange={(e) => setVisioDefaultUrl(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Utilisée si aucune URL n'est définie sur la session.
+            </p>
+          </div>
+          <Badge variant={visioProvider !== "none" || visioDefaultUrl ? "default" : "secondary"}>
+            {visioProvider !== "none" || visioDefaultUrl ? "Configuré" : "Non configuré"}
+          </Badge>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={saveAll} disabled={saveMutation.isPending}>
+          <Save className="w-4 h-4 mr-2" />
+          Enregistrer les intégrations
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// RGPD & Audit Tab
+// ============================================================
+
+function RgpdAuditTab() {
+  const { toast } = useToast();
+  const [activeSubTab, setActiveSubTab] = useState<"audit" | "rgpd">("audit");
+  const [auditFilters, setAuditFilters] = useState({ entityType: "", action: "", limit: 50, offset: 0 });
+  const [showRgpdDialog, setShowRgpdDialog] = useState(false);
+  const [rgpdForm, setRgpdForm] = useState({ requestType: "none", targetType: "none", targetId: "none", targetName: "", notes: "" });
+  const [exportData, setExportData] = useState<any>(null);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+
+  const { data: auditData } = useQuery<any>({
+    queryKey: ["/api/audit-logs", auditFilters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (auditFilters.entityType) params.set("entityType", auditFilters.entityType);
+      if (auditFilters.action) params.set("action", auditFilters.action);
+      params.set("limit", String(auditFilters.limit));
+      params.set("offset", String(auditFilters.offset));
+      const res = await fetch(`/api/audit-logs?${params}`);
+      if (!res.ok) throw new Error("Erreur");
+      return res.json();
+    },
+  });
+
+  const { data: rgpdRequests = [] } = useQuery<any[]>({ queryKey: ["/api/rgpd-requests"] });
+  const { data: trainees = [] } = useQuery<any[]>({ queryKey: ["/api/trainees"] });
+
+  const createRgpdMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch("/api/rgpd-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Erreur");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rgpd-requests"] });
+      setShowRgpdDialog(false);
+      toast({ title: "Demande RGPD créée" });
+    },
+  });
+
+  const updateRgpdMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await fetch(`/api/rgpd-requests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Erreur");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rgpd-requests"] });
+      toast({ title: "Statut mis à jour" });
+    },
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: async (traineeId: string) => {
+      const res = await fetch(`/api/rgpd/export-data/${traineeId}`);
+      if (!res.ok) throw new Error("Erreur");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setExportData(data);
+      setShowExportDialog(true);
+    },
+  });
+
+  const anonymizeMutation = useMutation({
+    mutationFn: async (traineeId: string) => {
+      const res = await fetch(`/api/rgpd/anonymize/${traineeId}`, { method: "POST" });
+      if (!res.ok) throw new Error("Erreur");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trainees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rgpd-requests"] });
+      toast({ title: "Données anonymisées" });
+    },
+  });
+
+  const downloadExport = () => {
+    if (!exportData) return;
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rgpd_export_${exportData.personalData?.lastName || "data"}_${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const auditLogs = auditData?.logs || [];
+  const auditTotal = auditData?.total || 0;
+
+  const actionLabels: Record<string, string> = {
+    create: "Création", update: "Modification", delete: "Suppression",
+    login: "Connexion", logout: "Déconnexion", export: "Export",
+    print: "Impression", view: "Consultation",
+  };
+
+  const rgpdStatusColors: Record<string, string> = {
+    pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    processing: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2">
+        <Button
+          variant={activeSubTab === "audit" ? "default" : "outline"}
+          onClick={() => setActiveSubTab("audit")}
+          className="gap-2"
+        >
+          <Eye className="w-4 h-4" />
+          Journal d'audit
+        </Button>
+        <Button
+          variant={activeSubTab === "rgpd" ? "default" : "outline"}
+          onClick={() => setActiveSubTab("rgpd")}
+          className="gap-2"
+        >
+          <Shield className="w-4 h-4" />
+          Conformité RGPD
+        </Button>
+      </div>
+
+      {activeSubTab === "audit" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5" />
+              Journal d'audit - Traçabilité des actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-3 flex-wrap">
+              <Select
+                value={auditFilters.action || "all"}
+                onValueChange={(v) => setAuditFilters((p) => ({ ...p, action: v === "all" ? "" : v, offset: 0 }))}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les actions</SelectItem>
+                  <SelectItem value="create">Création</SelectItem>
+                  <SelectItem value="update">Modification</SelectItem>
+                  <SelectItem value="delete">Suppression</SelectItem>
+                  <SelectItem value="login">Connexion</SelectItem>
+                  <SelectItem value="export">Export</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={auditFilters.entityType || "all"}
+                onValueChange={(v) => setAuditFilters((p) => ({ ...p, entityType: v === "all" ? "" : v, offset: 0 }))}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les types</SelectItem>
+                  <SelectItem value="trainee">Apprenant</SelectItem>
+                  <SelectItem value="session">Session</SelectItem>
+                  <SelectItem value="enrollment">Inscription</SelectItem>
+                  <SelectItem value="document">Document</SelectItem>
+                  <SelectItem value="invoice">Facture</SelectItem>
+                  <SelectItem value="rgpd_request">Demande RGPD</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-muted-foreground self-center">
+                {auditTotal} entrée{auditTotal > 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Utilisateur</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Détail</TableHead>
+                  <TableHead>IP</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {auditLogs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Aucune entrée dans le journal d'audit
+                    </TableCell>
+                  </TableRow>
+                ) : auditLogs.map((log: any) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-xs whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleString("fr-FR")}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      <div>{log.userName || "Système"}</div>
+                      <div className="text-xs text-muted-foreground">{log.userRole}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {actionLabels[log.action] || log.action}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">{log.entityType}</TableCell>
+                    <TableCell className="text-sm max-w-48 truncate">{log.entityLabel || "-"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{log.ipAddress || "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            {auditTotal > auditFilters.limit && (
+              <div className="flex justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={auditFilters.offset === 0}
+                  onClick={() => setAuditFilters((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
+                >
+                  Précédent
+                </Button>
+                <span className="text-sm self-center text-muted-foreground">
+                  Page {Math.floor(auditFilters.offset / auditFilters.limit) + 1} / {Math.ceil(auditTotal / auditFilters.limit)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={auditFilters.offset + auditFilters.limit >= auditTotal}
+                  onClick={() => setAuditFilters((p) => ({ ...p, offset: p.offset + p.limit }))}
+                >
+                  Suivant
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {activeSubTab === "rgpd" && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  Demandes RGPD
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowRgpdDialog(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nouvelle demande
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-muted/50 rounded-lg p-4 mb-4">
+                <h4 className="font-medium text-sm mb-2">Actions rapides</h4>
+                <div className="flex gap-3 flex-wrap">
+                  <Select
+                    value="none"
+                    onValueChange={(traineeId) => {
+                      if (traineeId !== "none") exportMutation.mutate(traineeId);
+                    }}
+                  >
+                    <SelectTrigger className="w-64">
+                      <SelectValue placeholder="Exporter les données d'un apprenant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" disabled>Sélectionner un apprenant...</SelectItem>
+                      {trainees.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <Download className="w-3 h-3 inline mr-1" />
+                          {t.firstName} {t.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value="none"
+                    onValueChange={(traineeId) => {
+                      if (traineeId !== "none" && confirm("Confirmer l'anonymisation ? Cette action est irréversible.")) {
+                        anonymizeMutation.mutate(traineeId);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-64">
+                      <SelectValue placeholder="Anonymiser un apprenant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" disabled>Sélectionner un apprenant...</SelectItem>
+                      {trainees.filter((t: any) => t.status !== "inactive").map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <UserX className="w-3 h-3 inline mr-1" />
+                          {t.firstName} {t.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Personne</TableHead>
+                    <TableHead>Demandé par</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rgpdRequests.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        Aucune demande RGPD
+                      </TableCell>
+                    </TableRow>
+                  ) : rgpdRequests.map((r: any) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {new Date(r.createdAt).toLocaleDateString("fr-FR")}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {r.requestType === "export" ? "Export" : r.requestType === "anonymize" ? "Anonymisation" : "Suppression"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{r.targetName}</TableCell>
+                      <TableCell className="text-sm">{r.requestedByName}</TableCell>
+                      <TableCell>
+                        <Badge className={rgpdStatusColors[r.status] || ""}>
+                          {r.status === "pending" ? "En attente" : r.status === "processing" ? "En cours" : r.status === "completed" ? "Terminé" : "Rejeté"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {r.status === "pending" && (
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateRgpdMutation.mutate({ id: r.id, status: "completed" })}
+                            >
+                              Valider
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateRgpdMutation.mutate({ id: r.id, status: "rejected" })}
+                            >
+                              Rejeter
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Dialog: New RGPD request */}
+      <Dialog open={showRgpdDialog} onOpenChange={setShowRgpdDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nouvelle demande RGPD</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Type de demande</Label>
+              <Select value={rgpdForm.requestType} onValueChange={(v) => setRgpdForm((p) => ({ ...p, requestType: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" disabled>Sélectionner...</SelectItem>
+                  <SelectItem value="export">Export de données</SelectItem>
+                  <SelectItem value="anonymize">Anonymisation</SelectItem>
+                  <SelectItem value="delete">Suppression complète</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Apprenant concerné</Label>
+              <Select value={rgpdForm.targetId} onValueChange={(v) => {
+                const t = trainees.find((t: any) => t.id === v);
+                setRgpdForm((p) => ({ ...p, targetId: v, targetName: t ? `${t.firstName} ${t.lastName}` : "", targetType: "trainee" }));
+              }}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" disabled>Sélectionner...</SelectItem>
+                  {trainees.map((t: any) => (
+                    <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input
+                placeholder="Motif de la demande..."
+                value={rgpdForm.notes}
+                onChange={(e) => setRgpdForm((p) => ({ ...p, notes: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowRgpdDialog(false)}>Annuler</Button>
+            <Button
+              onClick={() => createRgpdMutation.mutate({
+                requestType: rgpdForm.requestType,
+                targetType: rgpdForm.targetType || "trainee",
+                targetId: rgpdForm.targetId,
+                targetName: rgpdForm.targetName,
+                notes: rgpdForm.notes,
+              })}
+              disabled={rgpdForm.requestType === "none" || rgpdForm.targetId === "none"}
+            >
+              Créer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Data export viewer */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Export des données personnelles</DialogTitle>
+          </DialogHeader>
+          {exportData && (
+            <div className="space-y-4">
+              <div className="bg-muted rounded-lg p-4">
+                <h4 className="font-medium mb-2">Données personnelles</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {Object.entries(exportData.personalData || {}).map(([key, val]) => (
+                    <div key={key}>
+                      <span className="text-muted-foreground">{key} : </span>
+                      <span>{String(val ?? "Non renseigné")}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {exportData.enrollments?.length || 0} inscription(s), {exportData.documents?.length || 0} document(s), {exportData.certifications?.length || 0} certification(s)
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={downloadExport}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Télécharger JSON
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user } = useAuth();
 
@@ -1714,16 +2401,11 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <SettingsIcon className="w-6 h-6" />
-          Paramètres
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Configurez les paramètres de votre plateforme SO'SAFE
-        </p>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Paramètres"
+        subtitle="Configurez les paramètres de votre plateforme SO'SAFE"
+      />
 
       <Tabs defaultValue="organisme" className="space-y-4">
         <TabsList>
@@ -1747,6 +2429,14 @@ export default function Settings() {
             <MessageSquare className="w-4 h-4" />
             SMS Brevo
           </TabsTrigger>
+          <TabsTrigger value="integrations" className="gap-2">
+            <Globe className="w-4 h-4" />
+            Intégrations
+          </TabsTrigger>
+          <TabsTrigger value="rgpd" className="gap-2">
+            <Shield className="w-4 h-4" />
+            RGPD & Audit
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="organisme">
@@ -1768,7 +2458,15 @@ export default function Settings() {
         <TabsContent value="brevo-sms">
           <BrevoSmsTab />
         </TabsContent>
+
+        <TabsContent value="integrations">
+          <IntegrationsTab />
+        </TabsContent>
+
+        <TabsContent value="rgpd">
+          <RgpdAuditTab />
+        </TabsContent>
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }

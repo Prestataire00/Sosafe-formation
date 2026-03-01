@@ -43,6 +43,7 @@ declare module "http" {
 
 app.use(
   express.json({
+    limit: "10mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -60,6 +61,12 @@ app.get("/uploads/:filename", (req, res) => {
 
   return res.status(404).json({ message: "File not found" });
 });
+
+// SCORM extracted packages served statically
+app.use("/uploads/scorm", express.static(path.resolve(process.cwd(), "uploads/scorm")));
+
+// Widget JS served statically
+app.use("/widget", express.static(path.resolve(process.cwd(), "public/widget")));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -141,14 +148,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+  httpServer.listen(port, "127.0.0.1", () => {
+    log(`serving on port ${port}`);
+  });
 })();

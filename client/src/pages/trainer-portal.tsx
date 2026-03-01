@@ -47,6 +47,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import type { Session, TrainerDocument, ExpenseNote, TrainerInvoice, Program, Trainee, TrainerCompetency } from "@shared/schema";
 import {
   TRAINER_DOCUMENT_TYPES,
@@ -303,8 +305,249 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
     });
   };
 
+  // --- Pending document signatures ---
+  const { data: pendingDocs } = useQuery<Array<{ id: string; title: string; type: string; content: string }>>({
+    queryKey: [`/api/pending-signatures?signerId=${trainerId}&signerType=trainer`],
+    enabled: !!trainerId,
+  });
+
+  const [signingDocId, setSigningDocId] = useState<string | null>(null);
+  const [previewDocContent, setPreviewDocContent] = useState<{ title: string; content: string } | null>(null);
+
+  const signDocumentMutation = useMutation({
+    mutationFn: (data: { documentId: string; signatureData: string }) =>
+      apiRequest("POST", `/api/pending-signatures/${data.documentId}/sign`, {
+        signerId: trainerId,
+        signerType: "trainer",
+        signatureData: data.signatureData,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/pending-signatures?signerId=${trainerId}&signerType=trainer`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/signatures?signerId=${trainerId}`] });
+      toast({ title: "Document signe avec succes" });
+      setSigningDocId(null);
+    },
+    onError: () => toast({ title: "Erreur lors de la signature", variant: "destructive" }),
+  });
+
+  const batchSignDocsMutation = useMutation({
+    mutationFn: (data: { documentIds: string[]; signatureData: string }) =>
+      apiRequest("POST", "/api/pending-signatures/batch-sign", {
+        documentIds: data.documentIds,
+        signerId: trainerId,
+        signerType: "trainer",
+        signatureData: data.signatureData,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/pending-signatures?signerId=${trainerId}&signerType=trainer`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/signatures?signerId=${trainerId}`] });
+      toast({ title: "Tous les documents ont ete signes" });
+    },
+    onError: () => toast({ title: "Erreur lors de la signature en lot", variant: "destructive" }),
+  });
+
+  const [showBatchSign, setShowBatchSign] = useState(false);
+
+  // --- Reusable simple signature canvas for document signing ---
+  const docCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [docHasSignature, setDocHasSignature] = useState(false);
+  const [docIsDrawing, setDocIsDrawing] = useState(false);
+
+  const docStartDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = docCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    setDocIsDrawing(true);
+    setDocHasSignature(true);
+    const rect = canvas.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    ctx.beginPath();
+    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+  }, []);
+
+  const docDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!docIsDrawing) return;
+    const canvas = docCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    ctx.stroke();
+  }, [docIsDrawing]);
+
+  const docEndDraw = useCallback(() => setDocIsDrawing(false), []);
+
+  const clearDocCanvas = useCallback(() => {
+    const canvas = docCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setDocHasSignature(false);
+  }, []);
+
   return (
     <div className="space-y-4">
+      {/* Pending document signatures */}
+      {pendingDocs && pendingDocs.length > 0 && (
+        <Card className="border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <PenTool className="w-5 h-5 text-blue-600" />
+                Documents a signer ({pendingDocs.length})
+              </CardTitle>
+              {pendingDocs.length > 1 && !showBatchSign && (
+                <Button size="sm" onClick={() => setShowBatchSign(true)}>
+                  Tout signer
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {showBatchSign && (
+              <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 p-3 space-y-2">
+                <p className="text-sm font-medium">Signer les {pendingDocs.length} documents en une fois</p>
+                <div className="border rounded-lg p-1 bg-white dark:bg-gray-950">
+                  <canvas
+                    ref={docCanvasRef}
+                    width={500}
+                    height={200}
+                    className="w-full cursor-crosshair touch-none"
+                    onMouseDown={docStartDraw}
+                    onMouseMove={docDraw}
+                    onMouseUp={docEndDraw}
+                    onMouseLeave={docEndDraw}
+                    onTouchStart={docStartDraw}
+                    onTouchMove={docDraw}
+                    onTouchEnd={docEndDraw}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={clearDocCanvas}>
+                    Effacer
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!docHasSignature || batchSignDocsMutation.isPending}
+                    onClick={() => {
+                      const canvas = docCanvasRef.current;
+                      if (!canvas || !docHasSignature) return;
+                      batchSignDocsMutation.mutate({
+                        documentIds: pendingDocs.map((d) => d.id),
+                        signatureData: canvas.toDataURL("image/png"),
+                      });
+                    }}
+                  >
+                    {batchSignDocsMutation.isPending ? "Envoi..." : "Signer tous les documents"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowBatchSign(false)}>
+                    Annuler
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!showBatchSign &&
+              pendingDocs.map((doc) => {
+                const isSigning = signingDocId === doc.id;
+                return (
+                  <div
+                    key={doc.id}
+                    className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10"
+                  >
+                    <div className="flex items-center justify-between p-3">
+                      <div>
+                        <p className="text-sm font-medium">{doc.title}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{doc.type.replace(/_/g, " ")}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setPreviewDocContent({ title: doc.title, content: doc.content })}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Apercu
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={isSigning ? "secondary" : "default"}
+                          onClick={() => setSigningDocId(isSigning ? null : doc.id)}
+                        >
+                          <PenTool className="w-4 h-4 mr-2" />
+                          {isSigning ? "Annuler" : "Signer"}
+                        </Button>
+                      </div>
+                    </div>
+                    {isSigning && (
+                      <div className="px-3 pb-3 border-t border-blue-200 dark:border-blue-800 pt-3 space-y-2">
+                        <p className="text-sm text-muted-foreground">Signez ci-dessous pour valider ce document.</p>
+                        <div className="border rounded-lg p-1 bg-white dark:bg-gray-950">
+                          <canvas
+                            ref={docCanvasRef}
+                            width={500}
+                            height={200}
+                            className="w-full cursor-crosshair touch-none"
+                            onMouseDown={docStartDraw}
+                            onMouseMove={docDraw}
+                            onMouseUp={docEndDraw}
+                            onMouseLeave={docEndDraw}
+                            onTouchStart={docStartDraw}
+                            onTouchMove={docDraw}
+                            onTouchEnd={docEndDraw}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={clearDocCanvas}>
+                            Effacer
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={!docHasSignature || signDocumentMutation.isPending}
+                            onClick={() => {
+                              const canvas = docCanvasRef.current;
+                              if (!canvas || !docHasSignature) return;
+                              signDocumentMutation.mutate({
+                                documentId: doc.id,
+                                signatureData: canvas.toDataURL("image/png"),
+                              });
+                            }}
+                          >
+                            {signDocumentMutation.isPending ? "Envoi..." : "Valider la signature"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Document preview dialog */}
+      {previewDocContent && (
+        <Dialog open={!!previewDocContent} onOpenChange={(open) => { if (!open) setPreviewDocContent(null); }}>
+          <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
+            <DialogHeader className="px-6 pt-5 pb-3 border-b">
+              <DialogTitle>{previewDocContent.title}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto bg-neutral-100 p-6">
+              <div className="shadow-md bg-white rounded min-h-[400px]">
+                <div dangerouslySetInnerHTML={{ __html: previewDocContent.content }} />
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Load Google Fonts for auto-signature */}
       <link href="https://fonts.googleapis.com/css2?family=Dancing+Script&family=Great+Vibes&family=Caveat&family=Satisfy&display=swap" rel="stylesheet" />
 
@@ -1194,15 +1437,12 @@ export default function TrainerPortal() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <PageLayout>
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Mon espace formateur</h1>
-        <p className="text-muted-foreground mt-1">
-          Bienvenue, {user.firstName} {user.lastName}. Retrouvez ici vos
-          sessions, documents et informations pratiques.
-        </p>
-      </div>
+      <PageHeader
+        title="Portail Formateur"
+        subtitle="Gérez vos sessions et ressources"
+      />
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1482,6 +1722,6 @@ export default function TrainerPortal() {
         fileName={previewDoc?.title || null}
         mimeType={previewDoc?.mimeType || null}
       />
-    </div>
+    </PageLayout>
   );
 }

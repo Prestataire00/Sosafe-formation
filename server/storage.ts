@@ -21,6 +21,7 @@ import {
   type LearnerProgress, type InsertLearnerProgress,
   type SurveyTemplate, type InsertSurveyTemplate,
   type SurveyResponse, type InsertSurveyResponse,
+  type EvaluationAssignment, type InsertEvaluationAssignment,
   type QualityAction, type InsertQualityAction,
   type AttendanceSheet, type InsertAttendanceSheet,
   type AttendanceRecord, type InsertAttendanceRecord,
@@ -39,19 +40,64 @@ import {
   type TraineeCertification, type InsertTraineeCertification,
   type SmsTemplate, type InsertSmsTemplate,
   type SmsLog, type InsertSmsLog,
+  type SessionResource, type InsertSessionResource,
+  type ScormPackage, type InsertScormPackage,
+  type FormativeSubmission, type InsertFormativeSubmission,
+  type ForumPost, type InsertForumPost,
+  type ForumReply, type InsertForumReply,
+  type ForumMute, type InsertForumMute,
+  type AnalysisComment, type InsertAnalysisComment,
+  type Conversation, type InsertConversation,
+  type ConversationParticipant, type InsertConversationParticipant,
+  type DirectMessage, type InsertDirectMessage,
+  type ContactTag, type InsertContactTag,
+  type ContactTagAssignment, type InsertContactTagAssignment,
+  type MarketingCampaign, type InsertMarketingCampaign,
+  type CampaignRecipient, type InsertCampaignRecipient,
+  type ProspectActivity, type InsertProspectActivity,
+  type PaymentSchedule, type InsertPaymentSchedule,
+  type BankTransaction, type InsertBankTransaction,
+  type ConnectionLog, type InsertConnectionLog,
+  type AbsenceRecord, type InsertAbsenceRecord,
+  type QualityIncident, type InsertQualityIncident,
+  type VeilleEntry, type InsertVeilleEntry,
+  type DigitalBadge, type InsertDigitalBadge,
+  type BadgeAward, type InsertBadgeAward,
+  type TaskList, type InsertTaskList,
+  type TaskItem, type InsertTaskItem,
+  type AiDocumentAnalysis, type InsertAiDocumentAnalysis,
+  type CesuSubmission, type InsertCesuSubmission,
+  type SsoToken, type InsertSsoToken,
+  type ApiKey, type InsertApiKey,
+  type WidgetConfiguration, type InsertWidgetConfiguration,
+  type AuditLog, type InsertAuditLog,
+  type RgpdRequest, type InsertRgpdRequest,
+  type DataImport, type InsertDataImport,
+  type DataArchive, type InsertDataArchive,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
   emailTemplates, emailLogs, emailTrackingEvents, documentTemplates, generatedDocuments,
-  prospects, quotes, invoices, payments,
+  prospects, quotes, invoices, payments, paymentSchedules, bankTransactions, connectionLogs,
   elearningModules, elearningBlocks, quizQuestions, learnerProgress,
-  surveyTemplates, surveyResponses, qualityActions,
+  sessionResources, scormPackages, formativeSubmissions,
+  surveyTemplates, surveyResponses, evaluationAssignments, qualityActions,
   attendanceSheets, attendanceRecords,
   automationRules, automationLogs, organizationSettings,
   enterpriseContacts, trainerDocuments, trainerEvaluations,
   userDocuments, signatures, expenseNotes, trainerInvoices,
   trainerCompetencies, programPrerequisites, traineeCertifications,
   smsTemplates, smsLogs,
+  forumPosts, forumReplies, forumMutes,
+  analysisComments,
+  conversations, conversationParticipants, directMessages,
+  contactTags, contactTagAssignments, marketingCampaigns, campaignRecipients, prospectActivities,
+  absenceRecords, qualityIncidents, veilleEntries,
+  digitalBadges, badgeAwards, taskLists, taskItems,
+  aiDocumentAnalyses, cesuSubmissions,
+  ssoTokens, apiKeys, widgetConfigurations,
+  auditLogs, rgpdRequests,
+  dataImports, dataArchives,
 } from "@shared/schema";
-import { eq, and, or, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, or, sql, desc, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 
@@ -158,6 +204,7 @@ export interface IStorage {
   updateGeneratedDocument(id: string, data: Partial<InsertGeneratedDocument>): Promise<GeneratedDocument | undefined>;
   deleteGeneratedDocument(id: string): Promise<void>;
   getGeneratedDocumentsByQuote(quoteId: string): Promise<GeneratedDocument[]>;
+  getGeneratedDocumentsPendingSignature(signerId: string, signerType: string): Promise<GeneratedDocument[]>;
 
   // Prospects
   getProspects(): Promise<Prospect[]>;
@@ -186,6 +233,85 @@ export interface IStorage {
   getPayments(invoiceId?: string): Promise<Payment[]>;
   createPayment(payment: InsertPayment): Promise<Payment>;
 
+  // Payment Schedules
+  getPaymentSchedules(invoiceId: string): Promise<PaymentSchedule[]>;
+  createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule>;
+  updatePaymentSchedule(id: string, data: Partial<InsertPaymentSchedule>): Promise<PaymentSchedule | undefined>;
+  deletePaymentSchedulesByInvoice(invoiceId: string): Promise<void>;
+
+  // Bank Transactions
+  getBankTransactions(): Promise<BankTransaction[]>;
+  createBankTransaction(tx: InsertBankTransaction): Promise<BankTransaction>;
+  updateBankTransaction(id: string, data: Partial<InsertBankTransaction>): Promise<BankTransaction | undefined>;
+  matchBankTransaction(id: string, invoiceId: string, paymentId: string): Promise<BankTransaction | undefined>;
+
+  // Connection Logs
+  getConnectionLogs(filters?: { userId?: string; sessionId?: string; from?: string; to?: string }): Promise<ConnectionLog[]>;
+  createConnectionLog(log: InsertConnectionLog): Promise<ConnectionLog>;
+
+  // Absence Records
+  getAbsenceRecords(filters?: { sessionId?: string; traineeId?: string; status?: string }): Promise<AbsenceRecord[]>;
+  getAbsenceRecord(id: string): Promise<AbsenceRecord | undefined>;
+  createAbsenceRecord(record: InsertAbsenceRecord): Promise<AbsenceRecord>;
+  updateAbsenceRecord(id: string, data: Partial<InsertAbsenceRecord>): Promise<AbsenceRecord | undefined>;
+  deleteAbsenceRecord(id: string): Promise<void>;
+
+  // Quality Incidents
+  getQualityIncidents(filters?: { sessionId?: string; status?: string; type?: string }): Promise<QualityIncident[]>;
+  getQualityIncident(id: string): Promise<QualityIncident | undefined>;
+  createQualityIncident(incident: InsertQualityIncident): Promise<QualityIncident>;
+  updateQualityIncident(id: string, data: Partial<InsertQualityIncident>): Promise<QualityIncident | undefined>;
+  deleteQualityIncident(id: string): Promise<void>;
+
+  // Veille Entries
+  getVeilleEntries(filters?: { type?: string; status?: string }): Promise<VeilleEntry[]>;
+  getVeilleEntry(id: string): Promise<VeilleEntry | undefined>;
+  createVeilleEntry(entry: InsertVeilleEntry): Promise<VeilleEntry>;
+  updateVeilleEntry(id: string, data: Partial<InsertVeilleEntry>): Promise<VeilleEntry | undefined>;
+  deleteVeilleEntry(id: string): Promise<void>;
+
+  // Digital Badges
+  getDigitalBadges(): Promise<DigitalBadge[]>;
+  getDigitalBadge(id: string): Promise<DigitalBadge | undefined>;
+  createDigitalBadge(badge: InsertDigitalBadge): Promise<DigitalBadge>;
+  updateDigitalBadge(id: string, data: Partial<InsertDigitalBadge>): Promise<DigitalBadge | undefined>;
+  deleteDigitalBadge(id: string): Promise<void>;
+
+  // Badge Awards
+  getBadgeAwards(filters?: { badgeId?: string; traineeId?: string }): Promise<BadgeAward[]>;
+  getBadgeAward(id: string): Promise<BadgeAward | undefined>;
+  createBadgeAward(award: InsertBadgeAward): Promise<BadgeAward>;
+  updateBadgeAward(id: string, data: Partial<InsertBadgeAward>): Promise<BadgeAward | undefined>;
+  deleteBadgeAward(id: string): Promise<void>;
+
+  // Task Lists
+  getTaskLists(filters?: { traineeId?: string; sessionId?: string; status?: string }): Promise<TaskList[]>;
+  getTaskList(id: string): Promise<TaskList | undefined>;
+  createTaskList(list: InsertTaskList): Promise<TaskList>;
+  updateTaskList(id: string, data: Partial<InsertTaskList>): Promise<TaskList | undefined>;
+  deleteTaskList(id: string): Promise<void>;
+
+  // Task Items
+  getTaskItems(taskListId: string): Promise<TaskItem[]>;
+  getTaskItem(id: string): Promise<TaskItem | undefined>;
+  createTaskItem(item: InsertTaskItem): Promise<TaskItem>;
+  updateTaskItem(id: string, data: Partial<InsertTaskItem>): Promise<TaskItem | undefined>;
+  deleteTaskItem(id: string): Promise<void>;
+
+  // AI Document Analyses
+  getAiDocumentAnalyses(filters?: { traineeId?: string; trainerId?: string; status?: string }): Promise<AiDocumentAnalysis[]>;
+  getAiDocumentAnalysis(id: string): Promise<AiDocumentAnalysis | undefined>;
+  createAiDocumentAnalysis(analysis: InsertAiDocumentAnalysis): Promise<AiDocumentAnalysis>;
+  updateAiDocumentAnalysis(id: string, data: Partial<InsertAiDocumentAnalysis>): Promise<AiDocumentAnalysis | undefined>;
+  deleteAiDocumentAnalysis(id: string): Promise<void>;
+
+  // CESU Submissions
+  getCesuSubmissions(filters?: { sessionId?: string; status?: string }): Promise<CesuSubmission[]>;
+  getCesuSubmission(id: string): Promise<CesuSubmission | undefined>;
+  createCesuSubmission(submission: InsertCesuSubmission): Promise<CesuSubmission>;
+  updateCesuSubmission(id: string, data: Partial<InsertCesuSubmission>): Promise<CesuSubmission | undefined>;
+  deleteCesuSubmission(id: string): Promise<void>;
+
   // E-Learning Modules
   getElearningModules(sessionId?: string): Promise<ElearningModule[]>;
   getElearningModule(id: string): Promise<ElearningModule | undefined>;
@@ -211,6 +337,25 @@ export interface IStorage {
   createLearnerProgress(progress: InsertLearnerProgress): Promise<LearnerProgress>;
   updateLearnerProgress(id: string, progress: Partial<InsertLearnerProgress>): Promise<LearnerProgress | undefined>;
 
+  // Session Resources
+  getSessionResources(sessionId: string): Promise<SessionResource[]>;
+  getSessionResource(id: string): Promise<SessionResource | undefined>;
+  createSessionResource(resource: InsertSessionResource): Promise<SessionResource>;
+  updateSessionResource(id: string, data: Partial<InsertSessionResource>): Promise<SessionResource | undefined>;
+  deleteSessionResource(id: string): Promise<void>;
+
+  // SCORM Packages
+  getScormPackages(): Promise<ScormPackage[]>;
+  getScormPackage(id: string): Promise<ScormPackage | undefined>;
+  createScormPackage(pkg: InsertScormPackage): Promise<ScormPackage>;
+  deleteScormPackage(id: string): Promise<void>;
+
+  // Formative Submissions
+  getFormativeSubmissions(blockId?: string, traineeId?: string): Promise<FormativeSubmission[]>;
+  getFormativeSubmission(id: string): Promise<FormativeSubmission | undefined>;
+  createFormativeSubmission(submission: InsertFormativeSubmission): Promise<FormativeSubmission>;
+  updateFormativeSubmission(id: string, data: Partial<InsertFormativeSubmission>): Promise<FormativeSubmission | undefined>;
+
   // Survey Templates
   getSurveyTemplates(): Promise<SurveyTemplate[]>;
   getSurveyTemplate(id: string): Promise<SurveyTemplate | undefined>;
@@ -221,6 +366,14 @@ export interface IStorage {
   // Survey Responses
   getSurveyResponses(surveyId?: string, sessionId?: string): Promise<SurveyResponse[]>;
   createSurveyResponse(response: InsertSurveyResponse): Promise<SurveyResponse>;
+
+  // Evaluation Assignments
+  getEvaluationAssignments(sessionId?: string, traineeId?: string): Promise<EvaluationAssignment[]>;
+  getEvaluationAssignment(id: string): Promise<EvaluationAssignment | undefined>;
+  getEvaluationAssignmentByToken(token: string): Promise<EvaluationAssignment | undefined>;
+  createEvaluationAssignment(assignment: InsertEvaluationAssignment): Promise<EvaluationAssignment>;
+  updateEvaluationAssignment(id: string, data: Partial<InsertEvaluationAssignment>): Promise<EvaluationAssignment | undefined>;
+  getScheduledEvaluationAssignments(before: Date): Promise<EvaluationAssignment[]>;
 
   // Quality Actions
   getQualityActions(): Promise<QualityAction[]>;
@@ -238,6 +391,7 @@ export interface IStorage {
 
   // Attendance Records
   getAttendanceRecords(sheetId?: string): Promise<AttendanceRecord[]>;
+  getAttendanceRecordByToken(token: string): Promise<AttendanceRecord | undefined>;
   createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord>;
   updateAttendanceRecord(id: string, record: Partial<InsertAttendanceRecord>): Promise<AttendanceRecord | undefined>;
 
@@ -335,6 +489,97 @@ export interface IStorage {
   deleteTraineeCertification(id: string): Promise<void>;
   getExpiringCertifications(withinDays: number): Promise<TraineeCertification[]>;
   getCertificationsExpiringInRange(fromDays: number, toDays: number): Promise<TraineeCertification[]>;
+
+  // Forum
+  getForumPosts(sessionId: string): Promise<ForumPost[]>;
+  createForumPost(post: InsertForumPost): Promise<ForumPost>;
+  deleteForumPost(id: string): Promise<void>;
+  getForumReplies(postId: string): Promise<ForumReply[]>;
+  createForumReply(reply: InsertForumReply): Promise<ForumReply>;
+  deleteForumReply(id: string): Promise<void>;
+  getForumMute(userId: string, sessionId: string): Promise<ForumMute | undefined>;
+  createForumMute(mute: InsertForumMute): Promise<ForumMute>;
+  deleteForumMute(userId: string, sessionId: string): Promise<void>;
+
+  // Analysis Comments
+  getAnalysisComments(sessionId: string, visibility?: string): Promise<AnalysisComment[]>;
+  getAnalysisComment(id: string): Promise<AnalysisComment | undefined>;
+  createAnalysisComment(comment: InsertAnalysisComment): Promise<AnalysisComment>;
+  updateAnalysisComment(id: string, data: Partial<InsertAnalysisComment>): Promise<AnalysisComment | undefined>;
+  deleteAnalysisComment(id: string): Promise<void>;
+
+  // Messaging
+  getConversations(userId: string): Promise<Conversation[]>;
+  getConversation(id: string): Promise<Conversation | undefined>;
+  createConversation(conv: InsertConversation): Promise<Conversation>;
+  deleteConversation(id: string): Promise<void>;
+  getConversationParticipants(conversationId: string): Promise<ConversationParticipant[]>;
+  addConversationParticipant(participant: InsertConversationParticipant): Promise<ConversationParticipant>;
+  removeConversationParticipant(conversationId: string, userId: string): Promise<void>;
+  updateLastRead(conversationId: string, userId: string): Promise<void>;
+  getMessages(conversationId: string): Promise<DirectMessage[]>;
+  createMessage(message: InsertDirectMessage): Promise<DirectMessage>;
+  deleteMessage(id: string): Promise<void>;
+  findDirectConversation(userId1: string, userId2: string): Promise<Conversation | undefined>;
+
+  // CRM & Marketing
+  getContactTags(): Promise<ContactTag[]>;
+  createContactTag(tag: InsertContactTag): Promise<ContactTag>;
+  updateContactTag(id: string, data: Partial<InsertContactTag>): Promise<ContactTag | undefined>;
+  deleteContactTag(id: string): Promise<void>;
+  getContactTagAssignments(contactType?: string, contactId?: string): Promise<ContactTagAssignment[]>;
+  assignTag(assignment: InsertContactTagAssignment): Promise<ContactTagAssignment>;
+  removeTagAssignment(tagId: string, contactType: string, contactId: string): Promise<void>;
+  getMarketingCampaigns(): Promise<MarketingCampaign[]>;
+  getMarketingCampaign(id: string): Promise<MarketingCampaign | undefined>;
+  createMarketingCampaign(campaign: InsertMarketingCampaign): Promise<MarketingCampaign>;
+  updateMarketingCampaign(id: string, data: Partial<InsertMarketingCampaign>): Promise<MarketingCampaign | undefined>;
+  deleteMarketingCampaign(id: string): Promise<void>;
+  getCampaignRecipients(campaignId: string): Promise<CampaignRecipient[]>;
+  addCampaignRecipients(recipients: InsertCampaignRecipient[]): Promise<CampaignRecipient[]>;
+  updateCampaignRecipient(id: string, data: Partial<InsertCampaignRecipient>): Promise<void>;
+  getProspectActivities(prospectId: string): Promise<ProspectActivity[]>;
+  createProspectActivity(activity: InsertProspectActivity): Promise<ProspectActivity>;
+
+  // SSO Tokens
+  createSsoToken(data: InsertSsoToken): Promise<SsoToken>;
+  getSsoTokenByToken(token: string): Promise<SsoToken | undefined>;
+  markSsoTokenUsed(id: string): Promise<void>;
+
+  // API Keys
+  getApiKeys(): Promise<ApiKey[]>;
+  getApiKeyByKey(key: string): Promise<ApiKey | undefined>;
+  createApiKey(data: InsertApiKey): Promise<ApiKey>;
+  updateApiKey(id: string, data: Partial<InsertApiKey>): Promise<ApiKey | undefined>;
+  deleteApiKey(id: string): Promise<void>;
+
+  // Widget Configurations
+  getWidgetConfigurations(): Promise<WidgetConfiguration[]>;
+  getWidgetConfiguration(id: string): Promise<WidgetConfiguration | undefined>;
+  createWidgetConfiguration(data: InsertWidgetConfiguration): Promise<WidgetConfiguration>;
+  updateWidgetConfiguration(id: string, data: Partial<InsertWidgetConfiguration>): Promise<WidgetConfiguration | undefined>;
+  deleteWidgetConfiguration(id: string): Promise<void>;
+
+  // Audit Logs
+  getAuditLogs(filters?: { userId?: string; entityType?: string; action?: string; limit?: number; offset?: number }): Promise<AuditLog[]>;
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogCount(filters?: { userId?: string; entityType?: string; action?: string }): Promise<number>;
+
+  // RGPD Requests
+  getRgpdRequests(): Promise<RgpdRequest[]>;
+  createRgpdRequest(request: InsertRgpdRequest): Promise<RgpdRequest>;
+  updateRgpdRequest(id: string, data: Partial<InsertRgpdRequest>): Promise<RgpdRequest | undefined>;
+
+  // Data Imports
+  getDataImports(): Promise<DataImport[]>;
+  createDataImport(data: InsertDataImport): Promise<DataImport>;
+  updateDataImport(id: string, data: Partial<InsertDataImport>): Promise<DataImport | undefined>;
+
+  // Data Archives
+  getDataArchives(filters?: { entityType?: string; status?: string }): Promise<DataArchive[]>;
+  createDataArchive(data: InsertDataArchive): Promise<DataArchive>;
+  updateDataArchive(id: string, data: Partial<InsertDataArchive>): Promise<DataArchive | undefined>;
+  getDataArchiveCount(): Promise<number>;
 }
 
 const pool = new pg.Pool({
@@ -730,12 +975,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGeneratedDocument(doc: InsertGeneratedDocument): Promise<GeneratedDocument> {
-    const [result] = await db.insert(generatedDocuments).values(doc).returning();
+    const [result] = await db.insert(generatedDocuments).values(doc as any).returning();
     return result;
   }
 
   async updateGeneratedDocument(id: string, data: Partial<InsertGeneratedDocument>): Promise<GeneratedDocument | undefined> {
-    const [result] = await db.update(generatedDocuments).set(data).where(eq(generatedDocuments.id, id)).returning();
+    const [result] = await db.update(generatedDocuments).set(data as any).where(eq(generatedDocuments.id, id)).returning();
     return result;
   }
 
@@ -745,6 +990,18 @@ export class DatabaseStorage implements IStorage {
 
   async getGeneratedDocumentsByQuote(quoteId: string): Promise<GeneratedDocument[]> {
     return db.select().from(generatedDocuments).where(eq(generatedDocuments.quoteId, quoteId)).orderBy(desc(generatedDocuments.createdAt));
+  }
+
+  async getGeneratedDocumentsPendingSignature(signerId: string, signerType: string): Promise<GeneratedDocument[]> {
+    const allPending = await db.select().from(generatedDocuments)
+      .where(eq(generatedDocuments.signatureStatus, "pending"))
+      .orderBy(desc(generatedDocuments.createdAt));
+    return allPending.filter(doc => {
+      const requestedFor = (doc.signatureRequestedFor as any[]) || [];
+      return requestedFor.some(
+        (r: any) => r.signerId === signerId && r.signerType === signerType && r.status === "pending"
+      );
+    });
   }
 
   // ---- Prospects ----
@@ -848,6 +1105,327 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // ---- Payment Schedules ----
+  async getPaymentSchedules(invoiceId: string): Promise<PaymentSchedule[]> {
+    return db.select().from(paymentSchedules).where(eq(paymentSchedules.invoiceId, invoiceId)).orderBy(paymentSchedules.installmentNumber);
+  }
+
+  async createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule> {
+    const [result] = await db.insert(paymentSchedules).values(schedule).returning();
+    return result;
+  }
+
+  async updatePaymentSchedule(id: string, data: Partial<InsertPaymentSchedule>): Promise<PaymentSchedule | undefined> {
+    const [result] = await db.update(paymentSchedules).set(data).where(eq(paymentSchedules.id, id)).returning();
+    return result;
+  }
+
+  async deletePaymentSchedulesByInvoice(invoiceId: string): Promise<void> {
+    await db.delete(paymentSchedules).where(eq(paymentSchedules.invoiceId, invoiceId));
+  }
+
+  // ---- Bank Transactions ----
+  async getBankTransactions(): Promise<BankTransaction[]> {
+    return db.select().from(bankTransactions).orderBy(desc(bankTransactions.executionDate));
+  }
+
+  async createBankTransaction(tx: InsertBankTransaction): Promise<BankTransaction> {
+    const [result] = await db.insert(bankTransactions).values(tx).returning();
+    return result;
+  }
+
+  async updateBankTransaction(id: string, data: Partial<InsertBankTransaction>): Promise<BankTransaction | undefined> {
+    const [result] = await db.update(bankTransactions).set(data).where(eq(bankTransactions.id, id)).returning();
+    return result;
+  }
+
+  async matchBankTransaction(id: string, invoiceId: string, paymentId: string): Promise<BankTransaction | undefined> {
+    const [result] = await db.update(bankTransactions).set({
+      matchedInvoiceId: invoiceId,
+      matchedPaymentId: paymentId,
+      reconciliationStatus: "matched",
+    }).where(eq(bankTransactions.id, id)).returning();
+    return result;
+  }
+
+  // ---- Connection Logs ----
+  async getConnectionLogs(filters?: { userId?: string; sessionId?: string; from?: string; to?: string }): Promise<ConnectionLog[]> {
+    const conditions = [];
+    if (filters?.userId) conditions.push(eq(connectionLogs.userId, filters.userId));
+    if (filters?.sessionId) conditions.push(eq(connectionLogs.sessionId, filters.sessionId));
+    if (conditions.length > 0) {
+      return db.select().from(connectionLogs).where(and(...conditions)).orderBy(desc(connectionLogs.connectedAt));
+    }
+    return db.select().from(connectionLogs).orderBy(desc(connectionLogs.connectedAt));
+  }
+
+  async createConnectionLog(log: InsertConnectionLog): Promise<ConnectionLog> {
+    const [result] = await db.insert(connectionLogs).values(log).returning();
+    return result;
+  }
+
+  // ---- Absence Records ----
+  async getAbsenceRecords(filters?: { sessionId?: string; traineeId?: string; status?: string }): Promise<AbsenceRecord[]> {
+    const conditions = [];
+    if (filters?.sessionId) conditions.push(eq(absenceRecords.sessionId, filters.sessionId));
+    if (filters?.traineeId) conditions.push(eq(absenceRecords.traineeId, filters.traineeId));
+    if (filters?.status) conditions.push(eq(absenceRecords.status, filters.status));
+    if (conditions.length > 0) {
+      return db.select().from(absenceRecords).where(and(...conditions)).orderBy(desc(absenceRecords.createdAt));
+    }
+    return db.select().from(absenceRecords).orderBy(desc(absenceRecords.createdAt));
+  }
+
+  async getAbsenceRecord(id: string): Promise<AbsenceRecord | undefined> {
+    const [result] = await db.select().from(absenceRecords).where(eq(absenceRecords.id, id));
+    return result;
+  }
+
+  async createAbsenceRecord(record: InsertAbsenceRecord): Promise<AbsenceRecord> {
+    const [result] = await db.insert(absenceRecords).values(record).returning();
+    return result;
+  }
+
+  async updateAbsenceRecord(id: string, data: Partial<InsertAbsenceRecord>): Promise<AbsenceRecord | undefined> {
+    const [result] = await db.update(absenceRecords).set({ ...data, updatedAt: new Date() }).where(eq(absenceRecords.id, id)).returning();
+    return result;
+  }
+
+  async deleteAbsenceRecord(id: string): Promise<void> {
+    await db.delete(absenceRecords).where(eq(absenceRecords.id, id));
+  }
+
+  // ---- Quality Incidents ----
+  async getQualityIncidents(filters?: { sessionId?: string; status?: string; type?: string }): Promise<QualityIncident[]> {
+    const conditions = [];
+    if (filters?.sessionId) conditions.push(eq(qualityIncidents.sessionId, filters.sessionId));
+    if (filters?.status) conditions.push(eq(qualityIncidents.status, filters.status));
+    if (filters?.type) conditions.push(eq(qualityIncidents.type, filters.type));
+    if (conditions.length > 0) {
+      return db.select().from(qualityIncidents).where(and(...conditions)).orderBy(desc(qualityIncidents.createdAt));
+    }
+    return db.select().from(qualityIncidents).orderBy(desc(qualityIncidents.createdAt));
+  }
+
+  async getQualityIncident(id: string): Promise<QualityIncident | undefined> {
+    const [result] = await db.select().from(qualityIncidents).where(eq(qualityIncidents.id, id));
+    return result;
+  }
+
+  async createQualityIncident(incident: InsertQualityIncident): Promise<QualityIncident> {
+    const [result] = await db.insert(qualityIncidents).values(incident as any).returning();
+    return result;
+  }
+
+  async updateQualityIncident(id: string, data: Partial<InsertQualityIncident>): Promise<QualityIncident | undefined> {
+    const [result] = await db.update(qualityIncidents).set({ ...data, updatedAt: new Date() } as any).where(eq(qualityIncidents.id, id)).returning();
+    return result;
+  }
+
+  async deleteQualityIncident(id: string): Promise<void> {
+    await db.delete(qualityIncidents).where(eq(qualityIncidents.id, id));
+  }
+
+  // ---- Veille Entries ----
+  async getVeilleEntries(filters?: { type?: string; status?: string }): Promise<VeilleEntry[]> {
+    const conditions = [];
+    if (filters?.type) conditions.push(eq(veilleEntries.type, filters.type));
+    if (filters?.status) conditions.push(eq(veilleEntries.status, filters.status));
+    if (conditions.length > 0) {
+      return db.select().from(veilleEntries).where(and(...conditions)).orderBy(desc(veilleEntries.createdAt));
+    }
+    return db.select().from(veilleEntries).orderBy(desc(veilleEntries.createdAt));
+  }
+
+  async getVeilleEntry(id: string): Promise<VeilleEntry | undefined> {
+    const [result] = await db.select().from(veilleEntries).where(eq(veilleEntries.id, id));
+    return result;
+  }
+
+  async createVeilleEntry(entry: InsertVeilleEntry): Promise<VeilleEntry> {
+    const [result] = await db.insert(veilleEntries).values(entry as any).returning();
+    return result;
+  }
+
+  async updateVeilleEntry(id: string, data: Partial<InsertVeilleEntry>): Promise<VeilleEntry | undefined> {
+    const [result] = await db.update(veilleEntries).set({ ...data, updatedAt: new Date() } as any).where(eq(veilleEntries.id, id)).returning();
+    return result;
+  }
+
+  async deleteVeilleEntry(id: string): Promise<void> {
+    await db.delete(veilleEntries).where(eq(veilleEntries.id, id));
+  }
+
+  // ---- Digital Badges ----
+  async getDigitalBadges(): Promise<DigitalBadge[]> {
+    return db.select().from(digitalBadges).orderBy(desc(digitalBadges.createdAt));
+  }
+
+  async getDigitalBadge(id: string): Promise<DigitalBadge | undefined> {
+    const [result] = await db.select().from(digitalBadges).where(eq(digitalBadges.id, id));
+    return result;
+  }
+
+  async createDigitalBadge(badge: InsertDigitalBadge): Promise<DigitalBadge> {
+    const [result] = await db.insert(digitalBadges).values(badge).returning();
+    return result;
+  }
+
+  async updateDigitalBadge(id: string, data: Partial<InsertDigitalBadge>): Promise<DigitalBadge | undefined> {
+    const [result] = await db.update(digitalBadges).set({ ...data, updatedAt: new Date() }).where(eq(digitalBadges.id, id)).returning();
+    return result;
+  }
+
+  async deleteDigitalBadge(id: string): Promise<void> {
+    await db.delete(digitalBadges).where(eq(digitalBadges.id, id));
+  }
+
+  // ---- Badge Awards ----
+  async getBadgeAwards(filters?: { badgeId?: string; traineeId?: string }): Promise<BadgeAward[]> {
+    const conditions = [];
+    if (filters?.badgeId) conditions.push(eq(badgeAwards.badgeId, filters.badgeId));
+    if (filters?.traineeId) conditions.push(eq(badgeAwards.traineeId, filters.traineeId));
+    if (conditions.length > 0) {
+      return db.select().from(badgeAwards).where(and(...conditions)).orderBy(desc(badgeAwards.awardedAt));
+    }
+    return db.select().from(badgeAwards).orderBy(desc(badgeAwards.awardedAt));
+  }
+
+  async getBadgeAward(id: string): Promise<BadgeAward | undefined> {
+    const [result] = await db.select().from(badgeAwards).where(eq(badgeAwards.id, id));
+    return result;
+  }
+
+  async createBadgeAward(award: InsertBadgeAward): Promise<BadgeAward> {
+    const [result] = await db.insert(badgeAwards).values(award).returning();
+    return result;
+  }
+
+  async updateBadgeAward(id: string, data: Partial<InsertBadgeAward>): Promise<BadgeAward | undefined> {
+    const [result] = await db.update(badgeAwards).set(data).where(eq(badgeAwards.id, id)).returning();
+    return result;
+  }
+
+  async deleteBadgeAward(id: string): Promise<void> {
+    await db.delete(badgeAwards).where(eq(badgeAwards.id, id));
+  }
+
+  // ---- Task Lists ----
+  async getTaskLists(filters?: { traineeId?: string; sessionId?: string; status?: string }): Promise<TaskList[]> {
+    const conditions = [];
+    if (filters?.traineeId) conditions.push(eq(taskLists.traineeId, filters.traineeId));
+    if (filters?.sessionId) conditions.push(eq(taskLists.sessionId, filters.sessionId));
+    if (filters?.status) conditions.push(eq(taskLists.status, filters.status));
+    if (conditions.length > 0) {
+      return db.select().from(taskLists).where(and(...conditions)).orderBy(desc(taskLists.createdAt));
+    }
+    return db.select().from(taskLists).orderBy(desc(taskLists.createdAt));
+  }
+
+  async getTaskList(id: string): Promise<TaskList | undefined> {
+    const [result] = await db.select().from(taskLists).where(eq(taskLists.id, id));
+    return result;
+  }
+
+  async createTaskList(list: InsertTaskList): Promise<TaskList> {
+    const [result] = await db.insert(taskLists).values(list).returning();
+    return result;
+  }
+
+  async updateTaskList(id: string, data: Partial<InsertTaskList>): Promise<TaskList | undefined> {
+    const [result] = await db.update(taskLists).set({ ...data, updatedAt: new Date() }).where(eq(taskLists.id, id)).returning();
+    return result;
+  }
+
+  async deleteTaskList(id: string): Promise<void> {
+    await db.delete(taskLists).where(eq(taskLists.id, id));
+  }
+
+  // ---- Task Items ----
+  async getTaskItems(taskListId: string): Promise<TaskItem[]> {
+    return db.select().from(taskItems).where(eq(taskItems.taskListId, taskListId)).orderBy(taskItems.orderIndex);
+  }
+
+  async getTaskItem(id: string): Promise<TaskItem | undefined> {
+    const [result] = await db.select().from(taskItems).where(eq(taskItems.id, id));
+    return result;
+  }
+
+  async createTaskItem(item: InsertTaskItem): Promise<TaskItem> {
+    const [result] = await db.insert(taskItems).values(item).returning();
+    return result;
+  }
+
+  async updateTaskItem(id: string, data: Partial<InsertTaskItem>): Promise<TaskItem | undefined> {
+    const [result] = await db.update(taskItems).set(data).where(eq(taskItems.id, id)).returning();
+    return result;
+  }
+
+  async deleteTaskItem(id: string): Promise<void> {
+    await db.delete(taskItems).where(eq(taskItems.id, id));
+  }
+
+  // ---- AI Document Analyses ----
+  async getAiDocumentAnalyses(filters?: { traineeId?: string; trainerId?: string; status?: string }): Promise<AiDocumentAnalysis[]> {
+    const conditions = [];
+    if (filters?.traineeId) conditions.push(eq(aiDocumentAnalyses.traineeId, filters.traineeId));
+    if (filters?.trainerId) conditions.push(eq(aiDocumentAnalyses.trainerId, filters.trainerId));
+    if (filters?.status) conditions.push(eq(aiDocumentAnalyses.status, filters.status));
+    if (conditions.length > 0) {
+      return db.select().from(aiDocumentAnalyses).where(and(...conditions)).orderBy(desc(aiDocumentAnalyses.createdAt));
+    }
+    return db.select().from(aiDocumentAnalyses).orderBy(desc(aiDocumentAnalyses.createdAt));
+  }
+
+  async getAiDocumentAnalysis(id: string): Promise<AiDocumentAnalysis | undefined> {
+    const [result] = await db.select().from(aiDocumentAnalyses).where(eq(aiDocumentAnalyses.id, id));
+    return result;
+  }
+
+  async createAiDocumentAnalysis(analysis: InsertAiDocumentAnalysis): Promise<AiDocumentAnalysis> {
+    const [result] = await db.insert(aiDocumentAnalyses).values(analysis as any).returning();
+    return result;
+  }
+
+  async updateAiDocumentAnalysis(id: string, data: Partial<InsertAiDocumentAnalysis>): Promise<AiDocumentAnalysis | undefined> {
+    const [result] = await db.update(aiDocumentAnalyses).set(data as any).where(eq(aiDocumentAnalyses.id, id)).returning();
+    return result;
+  }
+
+  async deleteAiDocumentAnalysis(id: string): Promise<void> {
+    await db.delete(aiDocumentAnalyses).where(eq(aiDocumentAnalyses.id, id));
+  }
+
+  // ---- CESU Submissions ----
+  async getCesuSubmissions(filters?: { sessionId?: string; status?: string }): Promise<CesuSubmission[]> {
+    const conditions = [];
+    if (filters?.sessionId) conditions.push(eq(cesuSubmissions.sessionId, filters.sessionId));
+    if (filters?.status) conditions.push(eq(cesuSubmissions.status, filters.status));
+    if (conditions.length > 0) {
+      return db.select().from(cesuSubmissions).where(and(...conditions)).orderBy(desc(cesuSubmissions.createdAt));
+    }
+    return db.select().from(cesuSubmissions).orderBy(desc(cesuSubmissions.createdAt));
+  }
+
+  async getCesuSubmission(id: string): Promise<CesuSubmission | undefined> {
+    const [result] = await db.select().from(cesuSubmissions).where(eq(cesuSubmissions.id, id));
+    return result;
+  }
+
+  async createCesuSubmission(submission: InsertCesuSubmission): Promise<CesuSubmission> {
+    const [result] = await db.insert(cesuSubmissions).values(submission as any).returning();
+    return result;
+  }
+
+  async updateCesuSubmission(id: string, data: Partial<InsertCesuSubmission>): Promise<CesuSubmission | undefined> {
+    const [result] = await db.update(cesuSubmissions).set({ ...data, updatedAt: new Date() } as any).where(eq(cesuSubmissions.id, id)).returning();
+    return result;
+  }
+
+  async deleteCesuSubmission(id: string): Promise<void> {
+    await db.delete(cesuSubmissions).where(eq(cesuSubmissions.id, id));
+  }
+
   // ---- E-Learning Modules ----
   async getElearningModules(sessionId?: string): Promise<ElearningModule[]> {
     if (sessionId) {
@@ -886,12 +1464,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createElearningBlock(block: InsertElearningBlock): Promise<ElearningBlock> {
-    const [result] = await db.insert(elearningBlocks).values(block).returning();
+    const [result] = await db.insert(elearningBlocks).values(block as any).returning();
     return result;
   }
 
   async updateElearningBlock(id: string, data: Partial<InsertElearningBlock>): Promise<ElearningBlock | undefined> {
-    const [result] = await db.update(elearningBlocks).set(data).where(eq(elearningBlocks.id, id)).returning();
+    const [result] = await db.update(elearningBlocks).set(data as any).where(eq(elearningBlocks.id, id)).returning();
     return result;
   }
 
@@ -936,6 +1514,75 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // ---- Session Resources ----
+  async getSessionResources(sessionId: string): Promise<SessionResource[]> {
+    return db.select().from(sessionResources).where(eq(sessionResources.sessionId, sessionId)).orderBy(sessionResources.orderIndex);
+  }
+
+  async getSessionResource(id: string): Promise<SessionResource | undefined> {
+    const [result] = await db.select().from(sessionResources).where(eq(sessionResources.id, id));
+    return result;
+  }
+
+  async createSessionResource(resource: InsertSessionResource): Promise<SessionResource> {
+    const [result] = await db.insert(sessionResources).values(resource).returning();
+    return result;
+  }
+
+  async updateSessionResource(id: string, data: Partial<InsertSessionResource>): Promise<SessionResource | undefined> {
+    const [result] = await db.update(sessionResources).set(data).where(eq(sessionResources.id, id)).returning();
+    return result;
+  }
+
+  async deleteSessionResource(id: string): Promise<void> {
+    await db.delete(sessionResources).where(eq(sessionResources.id, id));
+  }
+
+  // ---- SCORM Packages ----
+  async getScormPackages(): Promise<ScormPackage[]> {
+    return db.select().from(scormPackages).orderBy(desc(scormPackages.createdAt));
+  }
+
+  async getScormPackage(id: string): Promise<ScormPackage | undefined> {
+    const [result] = await db.select().from(scormPackages).where(eq(scormPackages.id, id));
+    return result;
+  }
+
+  async createScormPackage(pkg: InsertScormPackage): Promise<ScormPackage> {
+    const [result] = await db.insert(scormPackages).values(pkg).returning();
+    return result;
+  }
+
+  async deleteScormPackage(id: string): Promise<void> {
+    await db.delete(scormPackages).where(eq(scormPackages.id, id));
+  }
+
+  // ---- Formative Submissions ----
+  async getFormativeSubmissions(blockId?: string, traineeId?: string): Promise<FormativeSubmission[]> {
+    const conditions = [];
+    if (blockId) conditions.push(eq(formativeSubmissions.blockId, blockId));
+    if (traineeId) conditions.push(eq(formativeSubmissions.traineeId, traineeId));
+    if (conditions.length > 0) {
+      return db.select().from(formativeSubmissions).where(and(...conditions)).orderBy(desc(formativeSubmissions.submittedAt));
+    }
+    return db.select().from(formativeSubmissions).orderBy(desc(formativeSubmissions.submittedAt));
+  }
+
+  async getFormativeSubmission(id: string): Promise<FormativeSubmission | undefined> {
+    const [result] = await db.select().from(formativeSubmissions).where(eq(formativeSubmissions.id, id));
+    return result;
+  }
+
+  async createFormativeSubmission(submission: InsertFormativeSubmission): Promise<FormativeSubmission> {
+    const [result] = await db.insert(formativeSubmissions).values(submission).returning();
+    return result;
+  }
+
+  async updateFormativeSubmission(id: string, data: Partial<InsertFormativeSubmission>): Promise<FormativeSubmission | undefined> {
+    const [result] = await db.update(formativeSubmissions).set(data).where(eq(formativeSubmissions.id, id)).returning();
+    return result;
+  }
+
   // ---- Survey Templates ----
   async getSurveyTemplates(): Promise<SurveyTemplate[]> {
     return db.select().from(surveyTemplates).orderBy(desc(surveyTemplates.createdAt));
@@ -977,6 +1624,46 @@ export class DatabaseStorage implements IStorage {
   async createSurveyResponse(response: InsertSurveyResponse): Promise<SurveyResponse> {
     const [result] = await db.insert(surveyResponses).values(response as any).returning();
     return result;
+  }
+
+  // ---- Evaluation Assignments ----
+  async getEvaluationAssignments(sessionId?: string, traineeId?: string): Promise<EvaluationAssignment[]> {
+    const conditions = [];
+    if (sessionId) conditions.push(eq(evaluationAssignments.sessionId, sessionId));
+    if (traineeId) conditions.push(eq(evaluationAssignments.traineeId, traineeId));
+    if (conditions.length > 0) {
+      return db.select().from(evaluationAssignments).where(and(...conditions)).orderBy(desc(evaluationAssignments.createdAt));
+    }
+    return db.select().from(evaluationAssignments).orderBy(desc(evaluationAssignments.createdAt));
+  }
+
+  async getEvaluationAssignment(id: string): Promise<EvaluationAssignment | undefined> {
+    const [result] = await db.select().from(evaluationAssignments).where(eq(evaluationAssignments.id, id));
+    return result;
+  }
+
+  async getEvaluationAssignmentByToken(token: string): Promise<EvaluationAssignment | undefined> {
+    const [result] = await db.select().from(evaluationAssignments).where(eq(evaluationAssignments.token, token));
+    return result;
+  }
+
+  async createEvaluationAssignment(assignment: InsertEvaluationAssignment): Promise<EvaluationAssignment> {
+    const [result] = await db.insert(evaluationAssignments).values(assignment as any).returning();
+    return result;
+  }
+
+  async updateEvaluationAssignment(id: string, data: Partial<InsertEvaluationAssignment>): Promise<EvaluationAssignment | undefined> {
+    const [result] = await db.update(evaluationAssignments).set(data as any).where(eq(evaluationAssignments.id, id)).returning();
+    return result;
+  }
+
+  async getScheduledEvaluationAssignments(before: Date): Promise<EvaluationAssignment[]> {
+    return db.select().from(evaluationAssignments).where(
+      and(
+        eq(evaluationAssignments.status, "pending"),
+        lte(evaluationAssignments.scheduledFor, before)
+      )
+    );
   }
 
   // ---- Quality Actions ----
@@ -1036,6 +1723,11 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(attendanceRecords).where(eq(attendanceRecords.sheetId, sheetId));
     }
     return db.select().from(attendanceRecords);
+  }
+
+  async getAttendanceRecordByToken(token: string): Promise<AttendanceRecord | undefined> {
+    const [result] = await db.select().from(attendanceRecords).where(eq(attendanceRecords.emargementToken, token));
+    return result;
   }
 
   async createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord> {
@@ -1390,6 +2082,402 @@ export class DatabaseStorage implements IStorage {
         eq(traineeCertifications.status, "valid"),
         sql`${traineeCertifications.expiresAt} IS NOT NULL AND ${traineeCertifications.expiresAt} >= ${fromDate.toISOString().split('T')[0]} AND ${traineeCertifications.expiresAt} <= ${toDate.toISOString().split('T')[0]}`
       ));
+  }
+  // ---- Forum ----
+  async getForumPosts(sessionId: string): Promise<ForumPost[]> {
+    return db.select().from(forumPosts)
+      .where(eq(forumPosts.sessionId, sessionId))
+      .orderBy(desc(forumPosts.pinned), desc(forumPosts.createdAt));
+  }
+
+  async createForumPost(post: InsertForumPost): Promise<ForumPost> {
+    const [result] = await db.insert(forumPosts).values(post).returning();
+    return result;
+  }
+
+  async deleteForumPost(id: string): Promise<void> {
+    await db.delete(forumReplies).where(eq(forumReplies.postId, id));
+    await db.delete(forumPosts).where(eq(forumPosts.id, id));
+  }
+
+  async getForumReplies(postId: string): Promise<ForumReply[]> {
+    return db.select().from(forumReplies)
+      .where(eq(forumReplies.postId, postId))
+      .orderBy(forumReplies.createdAt);
+  }
+
+  async createForumReply(reply: InsertForumReply): Promise<ForumReply> {
+    const [result] = await db.insert(forumReplies).values(reply).returning();
+    return result;
+  }
+
+  async deleteForumReply(id: string): Promise<void> {
+    await db.delete(forumReplies).where(eq(forumReplies.id, id));
+  }
+
+  async getForumMute(userId: string, sessionId: string): Promise<ForumMute | undefined> {
+    const [result] = await db.select().from(forumMutes)
+      .where(and(eq(forumMutes.userId, userId), eq(forumMutes.sessionId, sessionId)));
+    return result;
+  }
+
+  async createForumMute(mute: InsertForumMute): Promise<ForumMute> {
+    const [result] = await db.insert(forumMutes).values(mute).returning();
+    return result;
+  }
+
+  async deleteForumMute(userId: string, sessionId: string): Promise<void> {
+    await db.delete(forumMutes).where(
+      and(eq(forumMutes.userId, userId), eq(forumMutes.sessionId, sessionId))
+    );
+  }
+
+  // ---- Analysis Comments ----
+  async getAnalysisComments(sessionId: string, visibility?: string): Promise<AnalysisComment[]> {
+    const conditions = [eq(analysisComments.sessionId, sessionId)];
+    if (visibility) conditions.push(eq(analysisComments.visibility, visibility));
+    return db.select().from(analysisComments)
+      .where(and(...conditions))
+      .orderBy(desc(analysisComments.createdAt));
+  }
+
+  async getAnalysisComment(id: string): Promise<AnalysisComment | undefined> {
+    const [result] = await db.select().from(analysisComments).where(eq(analysisComments.id, id));
+    return result;
+  }
+
+  async createAnalysisComment(comment: InsertAnalysisComment): Promise<AnalysisComment> {
+    const [result] = await db.insert(analysisComments).values(comment).returning();
+    return result;
+  }
+
+  async updateAnalysisComment(id: string, data: Partial<InsertAnalysisComment>): Promise<AnalysisComment | undefined> {
+    const [result] = await db.update(analysisComments).set({ ...data, updatedAt: new Date() }).where(eq(analysisComments.id, id)).returning();
+    return result;
+  }
+
+  async deleteAnalysisComment(id: string): Promise<void> {
+    await db.delete(analysisComments).where(eq(analysisComments.id, id));
+  }
+
+  // ---- Messaging ----
+  async getConversations(userId: string): Promise<Conversation[]> {
+    const participations = await db.select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.userId, userId));
+    const ids = participations.map(p => p.conversationId);
+    if (ids.length === 0) return [];
+    return db.select().from(conversations)
+      .where(inArray(conversations.id, ids))
+      .orderBy(desc(conversations.updatedAt));
+  }
+
+  async getConversation(id: string): Promise<Conversation | undefined> {
+    const [result] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return result;
+  }
+
+  async createConversation(conv: InsertConversation): Promise<Conversation> {
+    const [result] = await db.insert(conversations).values(conv).returning();
+    return result;
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    await db.delete(directMessages).where(eq(directMessages.conversationId, id));
+    await db.delete(conversationParticipants).where(eq(conversationParticipants.conversationId, id));
+    await db.delete(conversations).where(eq(conversations.id, id));
+  }
+
+  async getConversationParticipants(conversationId: string): Promise<ConversationParticipant[]> {
+    return db.select().from(conversationParticipants)
+      .where(eq(conversationParticipants.conversationId, conversationId));
+  }
+
+  async addConversationParticipant(participant: InsertConversationParticipant): Promise<ConversationParticipant> {
+    const [result] = await db.insert(conversationParticipants).values(participant).returning();
+    return result;
+  }
+
+  async removeConversationParticipant(conversationId: string, userId: string): Promise<void> {
+    await db.delete(conversationParticipants).where(
+      and(eq(conversationParticipants.conversationId, conversationId), eq(conversationParticipants.userId, userId))
+    );
+  }
+
+  async updateLastRead(conversationId: string, userId: string): Promise<void> {
+    await db.update(conversationParticipants)
+      .set({ lastReadAt: new Date() })
+      .where(and(eq(conversationParticipants.conversationId, conversationId), eq(conversationParticipants.userId, userId)));
+  }
+
+  async getMessages(conversationId: string): Promise<DirectMessage[]> {
+    return db.select().from(directMessages)
+      .where(eq(directMessages.conversationId, conversationId))
+      .orderBy(directMessages.createdAt);
+  }
+
+  async createMessage(message: InsertDirectMessage): Promise<DirectMessage> {
+    const [result] = await db.insert(directMessages).values(message).returning();
+    await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, message.conversationId));
+    return result;
+  }
+
+  async deleteMessage(id: string): Promise<void> {
+    await db.delete(directMessages).where(eq(directMessages.id, id));
+  }
+
+  async findDirectConversation(userId1: string, userId2: string): Promise<Conversation | undefined> {
+    const p1 = await db.select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.userId, userId1));
+    const p2 = await db.select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.userId, userId2));
+    const ids1 = new Set(p1.map(p => p.conversationId));
+    const common = p2.filter(p => ids1.has(p.conversationId)).map(p => p.conversationId);
+    if (common.length === 0) return undefined;
+    const convs = await db.select().from(conversations)
+      .where(and(inArray(conversations.id, common), eq(conversations.type, "direct")));
+    return convs[0];
+  }
+
+  // ---- CRM & Marketing ----
+  async getContactTags(): Promise<ContactTag[]> {
+    return db.select().from(contactTags).orderBy(contactTags.name);
+  }
+
+  async createContactTag(tag: InsertContactTag): Promise<ContactTag> {
+    const [result] = await db.insert(contactTags).values(tag).returning();
+    return result;
+  }
+
+  async updateContactTag(id: string, data: Partial<InsertContactTag>): Promise<ContactTag | undefined> {
+    const [result] = await db.update(contactTags).set(data).where(eq(contactTags.id, id)).returning();
+    return result;
+  }
+
+  async deleteContactTag(id: string): Promise<void> {
+    await db.delete(contactTagAssignments).where(eq(contactTagAssignments.tagId, id));
+    await db.delete(contactTags).where(eq(contactTags.id, id));
+  }
+
+  async getContactTagAssignments(contactType?: string, contactId?: string): Promise<ContactTagAssignment[]> {
+    const conditions = [];
+    if (contactType) conditions.push(eq(contactTagAssignments.contactType, contactType));
+    if (contactId) conditions.push(eq(contactTagAssignments.contactId, contactId));
+    if (conditions.length > 0) {
+      return db.select().from(contactTagAssignments).where(and(...conditions));
+    }
+    return db.select().from(contactTagAssignments);
+  }
+
+  async assignTag(assignment: InsertContactTagAssignment): Promise<ContactTagAssignment> {
+    const [result] = await db.insert(contactTagAssignments).values(assignment).returning();
+    return result;
+  }
+
+  async removeTagAssignment(tagId: string, contactType: string, contactId: string): Promise<void> {
+    await db.delete(contactTagAssignments).where(
+      and(eq(contactTagAssignments.tagId, tagId), eq(contactTagAssignments.contactType, contactType), eq(contactTagAssignments.contactId, contactId))
+    );
+  }
+
+  async getMarketingCampaigns(): Promise<MarketingCampaign[]> {
+    return db.select().from(marketingCampaigns).orderBy(desc(marketingCampaigns.createdAt));
+  }
+
+  async getMarketingCampaign(id: string): Promise<MarketingCampaign | undefined> {
+    const [result] = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, id));
+    return result;
+  }
+
+  async createMarketingCampaign(campaign: InsertMarketingCampaign): Promise<MarketingCampaign> {
+    const [result] = await db.insert(marketingCampaigns).values(campaign as any).returning();
+    return result;
+  }
+
+  async updateMarketingCampaign(id: string, data: Partial<InsertMarketingCampaign>): Promise<MarketingCampaign | undefined> {
+    const [result] = await db.update(marketingCampaigns).set({ ...data, updatedAt: new Date() } as any).where(eq(marketingCampaigns.id, id)).returning();
+    return result;
+  }
+
+  async deleteMarketingCampaign(id: string): Promise<void> {
+    await db.delete(campaignRecipients).where(eq(campaignRecipients.campaignId, id));
+    await db.delete(marketingCampaigns).where(eq(marketingCampaigns.id, id));
+  }
+
+  async getCampaignRecipients(campaignId: string): Promise<CampaignRecipient[]> {
+    return db.select().from(campaignRecipients).where(eq(campaignRecipients.campaignId, campaignId));
+  }
+
+  async addCampaignRecipients(recipients: InsertCampaignRecipient[]): Promise<CampaignRecipient[]> {
+    if (recipients.length === 0) return [];
+    return db.insert(campaignRecipients).values(recipients).returning();
+  }
+
+  async updateCampaignRecipient(id: string, data: Partial<InsertCampaignRecipient>): Promise<void> {
+    await db.update(campaignRecipients).set(data).where(eq(campaignRecipients.id, id));
+  }
+
+  async getProspectActivities(prospectId: string): Promise<ProspectActivity[]> {
+    return db.select().from(prospectActivities).where(eq(prospectActivities.prospectId, prospectId)).orderBy(desc(prospectActivities.createdAt));
+  }
+
+  async createProspectActivity(activity: InsertProspectActivity): Promise<ProspectActivity> {
+    const [result] = await db.insert(prospectActivities).values(activity).returning();
+    return result;
+  }
+
+  // ---- SSO Tokens ----
+  async createSsoToken(data: InsertSsoToken): Promise<SsoToken> {
+    const [result] = await db.insert(ssoTokens).values(data as any).returning();
+    return result;
+  }
+
+  async getSsoTokenByToken(token: string): Promise<SsoToken | undefined> {
+    const [result] = await db.select().from(ssoTokens).where(eq(ssoTokens.token, token));
+    return result;
+  }
+
+  async markSsoTokenUsed(id: string): Promise<void> {
+    await db.update(ssoTokens).set({ used: true }).where(eq(ssoTokens.id, id));
+  }
+
+  // ---- API Keys ----
+  async getApiKeys(): Promise<ApiKey[]> {
+    return db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt));
+  }
+
+  async getApiKeyByKey(key: string): Promise<ApiKey | undefined> {
+    const [result] = await db.select().from(apiKeys).where(eq(apiKeys.key, key));
+    return result;
+  }
+
+  async createApiKey(data: InsertApiKey): Promise<ApiKey> {
+    const [result] = await db.insert(apiKeys).values(data as any).returning();
+    return result;
+  }
+
+  async updateApiKey(id: string, data: Partial<InsertApiKey>): Promise<ApiKey | undefined> {
+    const [result] = await db.update(apiKeys).set(data as any).where(eq(apiKeys.id, id)).returning();
+    return result;
+  }
+
+  async deleteApiKey(id: string): Promise<void> {
+    await db.delete(apiKeys).where(eq(apiKeys.id, id));
+  }
+
+  // ---- Widget Configurations ----
+  async getWidgetConfigurations(): Promise<WidgetConfiguration[]> {
+    return db.select().from(widgetConfigurations).orderBy(desc(widgetConfigurations.createdAt));
+  }
+
+  async getWidgetConfiguration(id: string): Promise<WidgetConfiguration | undefined> {
+    const [result] = await db.select().from(widgetConfigurations).where(eq(widgetConfigurations.id, id));
+    return result;
+  }
+
+  async createWidgetConfiguration(data: InsertWidgetConfiguration): Promise<WidgetConfiguration> {
+    const [result] = await db.insert(widgetConfigurations).values(data as any).returning();
+    return result;
+  }
+
+  async updateWidgetConfiguration(id: string, data: Partial<InsertWidgetConfiguration>): Promise<WidgetConfiguration | undefined> {
+    const [result] = await db.update(widgetConfigurations).set(data as any).where(eq(widgetConfigurations.id, id)).returning();
+    return result;
+  }
+
+  async deleteWidgetConfiguration(id: string): Promise<void> {
+    await db.delete(widgetConfigurations).where(eq(widgetConfigurations.id, id));
+  }
+
+  // ---- Audit Logs ----
+  async getAuditLogs(filters?: { userId?: string; entityType?: string; action?: string; limit?: number; offset?: number }): Promise<AuditLog[]> {
+    const conditions = [];
+    if (filters?.userId) conditions.push(eq(auditLogs.userId, filters.userId));
+    if (filters?.entityType) conditions.push(eq(auditLogs.entityType, filters.entityType));
+    if (filters?.action) conditions.push(eq(auditLogs.action, filters.action));
+
+    const query = db.select().from(auditLogs);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const results = whereClause
+      ? await query.where(whereClause).orderBy(desc(auditLogs.createdAt)).limit(filters?.limit || 100).offset(filters?.offset || 0)
+      : await query.orderBy(desc(auditLogs.createdAt)).limit(filters?.limit || 100).offset(filters?.offset || 0);
+    return results;
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [result] = await db.insert(auditLogs).values(log as any).returning();
+    return result;
+  }
+
+  async getAuditLogCount(filters?: { userId?: string; entityType?: string; action?: string }): Promise<number> {
+    const conditions = [];
+    if (filters?.userId) conditions.push(eq(auditLogs.userId, filters.userId));
+    if (filters?.entityType) conditions.push(eq(auditLogs.entityType, filters.entityType));
+    if (filters?.action) conditions.push(eq(auditLogs.action, filters.action));
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const query = db.select({ count: sql<number>`count(*)` }).from(auditLogs);
+    const [result] = whereClause ? await query.where(whereClause) : await query;
+    return Number(result.count);
+  }
+
+  // ---- RGPD Requests ----
+  async getRgpdRequests(): Promise<RgpdRequest[]> {
+    return db.select().from(rgpdRequests).orderBy(desc(rgpdRequests.createdAt));
+  }
+
+  async createRgpdRequest(request: InsertRgpdRequest): Promise<RgpdRequest> {
+    const [result] = await db.insert(rgpdRequests).values(request as any).returning();
+    return result;
+  }
+
+  async updateRgpdRequest(id: string, data: Partial<InsertRgpdRequest>): Promise<RgpdRequest | undefined> {
+    const [result] = await db.update(rgpdRequests).set(data as any).where(eq(rgpdRequests.id, id)).returning();
+    return result;
+  }
+
+  // ---- Data Imports ----
+  async getDataImports(): Promise<DataImport[]> {
+    return db.select().from(dataImports).orderBy(desc(dataImports.createdAt));
+  }
+
+  async createDataImport(data: InsertDataImport): Promise<DataImport> {
+    const [result] = await db.insert(dataImports).values(data as any).returning();
+    return result;
+  }
+
+  async updateDataImport(id: string, data: Partial<InsertDataImport>): Promise<DataImport | undefined> {
+    const [result] = await db.update(dataImports).set(data as any).where(eq(dataImports.id, id)).returning();
+    return result;
+  }
+
+  // ---- Data Archives ----
+  async getDataArchives(filters?: { entityType?: string; status?: string }): Promise<DataArchive[]> {
+    const conditions = [];
+    if (filters?.entityType) conditions.push(eq(dataArchives.entityType, filters.entityType));
+    if (filters?.status) conditions.push(eq(dataArchives.status, filters.status));
+    const query = db.select().from(dataArchives);
+    if (conditions.length > 0) {
+      return query.where(and(...conditions)).orderBy(desc(dataArchives.createdAt));
+    }
+    return query.orderBy(desc(dataArchives.createdAt));
+  }
+
+  async createDataArchive(data: InsertDataArchive): Promise<DataArchive> {
+    const [result] = await db.insert(dataArchives).values(data as any).returning();
+    return result;
+  }
+
+  async updateDataArchive(id: string, data: Partial<InsertDataArchive>): Promise<DataArchive | undefined> {
+    const [result] = await db.update(dataArchives).set(data as any).where(eq(dataArchives.id, id)).returning();
+    return result;
+  }
+
+  async getDataArchiveCount(): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(dataArchives);
+    return Number(result.count);
   }
 }
 

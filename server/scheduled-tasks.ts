@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { triggerSessionAutomation, triggerAutomation } from "./automation-engine";
+import { sendEmailNow } from "./email-service";
 import { log } from "./index";
 
 const SCAN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -153,6 +154,57 @@ async function scanRecyclingReminders(): Promise<void> {
 }
 
 /**
+ * Scan for scheduled evaluation assignments (cold evaluations) whose scheduledFor has passed.
+ */
+async function scanPendingEvaluations(): Promise<void> {
+  try {
+    const now = new Date();
+    const pendingAssignments = await storage.getScheduledEvaluationAssignments(now);
+
+    for (const assignment of pendingAssignments) {
+      const key = dedupKey("evaluation_send", assignment.id);
+      if (processedKeys.has(key)) continue;
+      processedKeys.add(key);
+
+      if (!assignment.respondentEmail) continue;
+
+      log(`Envoi evaluation programmee ${assignment.id} (${assignment.respondentType})`, "scheduled");
+
+      const template = await storage.getSurveyTemplate(assignment.templateId);
+      if (!template) continue;
+
+      const settings = await storage.getOrganizationSettings();
+      const orgName = settings.find((s: any) => s.key === "nom_organisme")?.value || "SO'SAFE Formation";
+      const baseUrl = settings.find((s: any) => s.key === "app_url")?.value || "";
+
+      const evalUrl = `${baseUrl}/evaluation/${assignment.token}`;
+      const subject = `${orgName} — Evaluation: ${template.title}`;
+      const body = `<p>Bonjour ${assignment.respondentName || ""},</p>
+<p>Vous etes invite(e) a completer l'evaluation suivante : <strong>${template.title}</strong></p>
+<p><a href="${evalUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;">Completer l'evaluation</a></p>
+<p>Cordialement,<br/>${orgName}</p>`;
+
+      const emailLog = await storage.createEmailLog({
+        templateId: null,
+        recipient: assignment.respondentEmail,
+        subject,
+        body,
+        status: "pending",
+      });
+
+      try { await sendEmailNow(emailLog.id); } catch {}
+
+      await storage.updateEvaluationAssignment(assignment.id, {
+        status: "sent",
+        sentAt: now,
+      });
+    }
+  } catch (err: any) {
+    log(`Erreur scan evaluations programmees: ${err.message}`, "scheduled");
+  }
+}
+
+/**
  * Run all scheduled scans.
  */
 async function runScheduledScans(): Promise<void> {
@@ -161,6 +213,7 @@ async function runScheduledScans(): Promise<void> {
     await scanSessionReminders();
     await scanExpiringCertifications();
     await scanRecyclingReminders();
+    await scanPendingEvaluations();
   } catch (err: any) {
     log(`Erreur globale scheduled scans: ${err.message}`, "scheduled");
   }

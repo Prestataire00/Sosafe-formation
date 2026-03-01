@@ -66,6 +66,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Program, InsertProgram, Session, ProgramPrerequisite } from "@shared/schema";
 import { PROGRAM_CATEGORIES, PROGRAM_CATEGORY_GROUPS, MODALITIES, TRAINEE_PROFESSIONS, FUNDING_TYPES } from "@shared/schema";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 
 const levels = [
   { value: "beginner", label: "Débutant" },
@@ -80,17 +84,12 @@ const statusOptions = [
 ];
 
 function ProgramStatusBadge({ status }: { status: string }) {
-  const variants: Record<string, string> = {
-    draft: "bg-accent text-accent-foreground",
-    published: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    archived: "bg-muted text-muted-foreground",
-  };
   const labels: Record<string, string> = {
     draft: "Brouillon",
     published: "Publié",
     archived: "Archivé",
   };
-  return <Badge variant="outline" className={variants[status] || ""}>{labels[status] || status}</Badge>;
+  return <StatusBadge status={status === "published" ? "actif" : status === "draft" ? "brouillon" : "archivé"} label={labels[status] || status} />;
 }
 
 function LevelBadge({ level }: { level: string }) {
@@ -508,15 +507,8 @@ function ProgramDetail({
     cancelled: "Annulée",
   };
 
-  const sessionStatusColors: Record<string, string> = {
-    planned: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    ongoing: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    cancelled: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  };
-
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <PageLayout>
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}>
@@ -780,9 +772,7 @@ function ProgramDetail({
                         {session.location && <span> | {session.location}</span>}
                       </p>
                     </div>
-                    <Badge variant="outline" className={sessionStatusColors[session.status] || ""}>
-                      {sessionStatusLabels[session.status] || session.status}
-                    </Badge>
+                    <StatusBadge status={session.status} label={sessionStatusLabels[session.status] || session.status} colorMap={{ planned: "purple", ongoing: "info", completed: "success", cancelled: "destructive" }} />
                   </div>
                 ))}
               </div>
@@ -790,7 +780,7 @@ function ProgramDetail({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -912,36 +902,38 @@ export default function Programs() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-programs-title">Formations</h1>
-          <p className="text-muted-foreground mt-1">Catalogue des formations SO'SAFE</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setCatalogCategories([]);
-              setCatalogDialogOpen(true);
-            }}
-          >
-            <FileDown className="w-4 h-4 mr-2" />
-            Catalogue PDF
-          </Button>
-          <Button onClick={() => { setEditProgram(undefined); setDialogOpen(true); }} data-testid="button-create-program">
-            <Plus className="w-4 h-4 mr-2" />
-            Nouvelle formation
-          </Button>
-        </div>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Formations"
+        subtitle="Catalogue des formations SO'SAFE"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCatalogCategories([]);
+                setCatalogDialogOpen(true);
+              }}
+            >
+              <FileDown className="w-4 h-4 mr-2" />
+              Catalogue PDF
+            </Button>
+            <Button onClick={() => { setEditProgram(undefined); setDialogOpen(true); }} data-testid="button-create-program">
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvelle formation
+            </Button>
+          </div>
+        }
+      />
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Rechercher une formation..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-programs" />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Rechercher une formation..."
+            className="max-w-sm"
+          />
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -1195,6 +1187,6 @@ export default function Programs() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

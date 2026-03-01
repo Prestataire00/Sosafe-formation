@@ -34,7 +34,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Search,
   Users,
   Mail,
   Phone,
@@ -58,6 +57,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 import type { Trainer, InsertTrainer, Session, TrainerCompetency } from "@shared/schema";
 import {
   TRAINER_DOCUMENT_TYPES, TRAINER_DOCUMENT_STATUSES, TRAINER_STATUSES,
@@ -421,6 +425,9 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
   const [compDialogOpen, setCompDialogOpen] = useState(false);
   const [editCompetency, setEditCompetency] = useState<TrainerCompetency | undefined>();
   const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string } | null>(null);
+  const [contractDialogOpen, setContractDialogOpen] = useState(false);
+  const [contractType, setContractType] = useState<"convention_intervention" | "contrat_cadre">("convention_intervention");
+  const [contractSessionId, setContractSessionId] = useState<string>("");
 
   const { data: documents } = useQuery<TrainerDocument[]>({
     queryKey: [`/api/trainers/${trainer.id}/documents`],
@@ -481,6 +488,20 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainer.id}/documents`] });
       toast({ title: "Document supprimé" });
     },
+  });
+
+  const generateContractMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/trainers/${trainer.id}/generate-contract`, {
+        type: contractType,
+        sessionId: contractSessionId || undefined,
+      }),
+    onSuccess: () => {
+      setContractDialogOpen(false);
+      toast({ title: "Contrat genere dans la GED" });
+    },
+    onError: (err: any) =>
+      toast({ title: err?.message || "Erreur de generation", variant: "destructive" }),
   });
 
   const createEvalMutation = useMutation({
@@ -580,7 +601,13 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Documents du formateur</CardTitle>
-              <Button size="sm" onClick={() => setDocDialogOpen(true)}><Plus className="w-4 h-4 mr-2" />Ajouter</Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setContractDialogOpen(true)}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Generer un contrat
+                </Button>
+                <Button size="sm" onClick={() => setDocDialogOpen(true)}><Plus className="w-4 h-4 mr-2" />Ajouter</Button>
+              </div>
             </CardHeader>
             <CardContent>
               {!documents || documents.length === 0 ? (
@@ -641,6 +668,60 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
           <Dialog open={docDialogOpen} onOpenChange={setDocDialogOpen}>
             <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Nouveau document</DialogTitle></DialogHeader>
               <DocumentForm onSubmit={(data) => createDocMutation.mutate(data)} isPending={createDocMutation.isPending} />
+            </DialogContent>
+          </Dialog>
+
+          {/* Generate trainer contract dialog */}
+          <Dialog open={contractDialogOpen} onOpenChange={setContractDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Generer un contrat formateur</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label>Type de contrat</Label>
+                  <Select value={contractType} onValueChange={(v) => setContractType(v as typeof contractType)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="convention_intervention">Convention d'intervention</SelectItem>
+                      <SelectItem value="contrat_cadre">Contrat cadre de sous-traitance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {contractType === "convention_intervention" && (
+                  <div className="space-y-2">
+                    <Label>Session associee (optionnel)</Label>
+                    <Select value={contractSessionId} onValueChange={setContractSessionId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selectionner une session..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Aucune session</SelectItem>
+                        {trainerSessions?.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Si une session est selectionnee, les dates et honoraires seront remplis automatiquement.
+                    </p>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground bg-muted rounded p-2">
+                  Le document sera genere dans la GED (onglet Documents). Un modele de type &quot;{contractType === "convention_intervention" ? "Convention d'intervention formateur" : "Contrat cadre de sous-traitance"}&quot; doit exister dans la GED.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setContractDialogOpen(false)}>Annuler</Button>
+                  <Button
+                    onClick={() => generateContractMutation.mutate()}
+                    disabled={generateContractMutation.isPending}
+                  >
+                    {generateContractMutation.isPending ? "Generation..." : "Generer"}
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
           <DocumentPreviewDialog
@@ -956,22 +1037,19 @@ export default function Trainers() {
   ) || [];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-trainers-title">Formateurs</h1>
-          <p className="text-muted-foreground mt-1">Gérez votre équipe de formateurs</p>
-        </div>
-        <Button onClick={() => { setEditTrainer(undefined); setDialogOpen(true); }} data-testid="button-create-trainer">
-          <Plus className="w-4 h-4 mr-2" />
-          Ajouter un formateur
-        </Button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Formateurs"
+        subtitle="Gérez vos formateurs et intervenants"
+        actions={
+          <Button onClick={() => { setEditTrainer(undefined); setDialogOpen(true); }} data-testid="button-create-trainer">
+            <Plus className="w-4 h-4 mr-2" />
+            Ajouter un formateur
+          </Button>
+        }
+      />
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Rechercher un formateur..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-trainers" />
-      </div>
+      <SearchInput value={search} onChange={setSearch} placeholder="Rechercher un formateur..." className="max-w-sm" />
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -980,12 +1058,14 @@ export default function Trainers() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Users className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucun formateur</h3>
-          <p className="text-sm text-muted-foreground mb-4">{search ? "Aucun résultat pour votre recherche" : "Ajoutez votre premier formateur"}</p>
-          {!search && (<Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-trainer"><Plus className="w-4 h-4 mr-2" />Ajouter un formateur</Button>)}
-        </div>
+        <EmptyState
+          icon={Users}
+          title="Aucun formateur"
+          description={search ? "Aucun résultat pour votre recherche" : "Ajoutez votre premier formateur"}
+          action={!search ? (
+            <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-trainer"><Plus className="w-4 h-4 mr-2" />Ajouter un formateur</Button>
+          ) : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((trainer) => (
@@ -1058,6 +1138,6 @@ export default function Trainers() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

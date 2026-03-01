@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -497,20 +499,18 @@ export default function TrainerCompetencies() {
 
   if (selectedTrainer) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <PageLayout>
         <TrainerDetailPanel trainer={selectedTrainer} onBack={() => setSelectedTrainer(undefined)} />
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">Suivi des competences</h1>
-        <p className="text-muted-foreground mt-1">
-          Matrice de competences formateurs et conformite Qualiopi
-        </p>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Suivi des compétences"
+        subtitle="Gestion des compétences formateurs"
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -638,6 +638,6 @@ export default function TrainerCompetencies() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageLayout>
   );
 }

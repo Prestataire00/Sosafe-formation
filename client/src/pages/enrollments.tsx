@@ -24,7 +24,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Search,
   ClipboardList,
   MoreHorizontal,
   Trash2,
@@ -33,6 +32,11 @@ import {
   Clock,
   UserCheck,
 } from "lucide-react";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,21 +56,15 @@ import type { Enrollment, InsertEnrollment, Session, Trainee, Enterprise, Progra
 import { VAE_STATUSES } from "@shared/schema";
 
 const ENROLLMENT_STATUSES = [
-  { value: "registered", label: "Inscrit", icon: Clock, className: "bg-accent text-accent-foreground" },
-  { value: "confirmed", label: "Confirmé", icon: UserCheck, className: "bg-primary/10 text-primary dark:bg-primary/20" },
-  { value: "completed", label: "Terminé", icon: CheckCircle, className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-  { value: "cancelled", label: "Annulé", icon: XCircle, className: "bg-destructive/10 text-destructive" },
+  { value: "registered", label: "Inscrit", icon: Clock },
+  { value: "confirmed", label: "Confirmé", icon: UserCheck },
+  { value: "completed", label: "Terminé", icon: CheckCircle },
+  { value: "cancelled", label: "Annulé", icon: XCircle },
 ];
 
 function EnrollmentStatusBadge({ status }: { status: string }) {
   const st = ENROLLMENT_STATUSES.find((s) => s.value === status) || ENROLLMENT_STATUSES[0];
-  const Icon = st.icon;
-  return (
-    <Badge variant="outline" className={`${st.className} gap-1`}>
-      <Icon className="w-3 h-3" />
-      {st.label}
-    </Badge>
-  );
+  return <StatusBadge status={st.value} label={st.label} />;
 }
 
 const ENROLLMENT_MEMORY_KEY = "enrollment_last_values";
@@ -294,17 +292,17 @@ export default function Enrollments() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-enrollments-title">Inscriptions</h1>
-          <p className="text-muted-foreground mt-1">Gérez les inscriptions aux sessions de formation</p>
-        </div>
-        <Button onClick={() => setDialogOpen(true)} data-testid="button-create-enrollment">
-          <Plus className="w-4 h-4 mr-2" />
-          Nouvelle inscription
-        </Button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Inscriptions"
+        subtitle="Gérez les inscriptions aux sessions"
+        actions={
+          <Button onClick={() => setDialogOpen(true)} data-testid="button-create-enrollment">
+            <Plus className="w-4 h-4 mr-2" />
+            Nouvelle inscription
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
@@ -326,31 +324,30 @@ export default function Enrollments() {
         ))}
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Rechercher..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-enrollments" />
-      </div>
+      <SearchInput value={search} onChange={setSearch} placeholder="Rechercher..." className="max-w-sm" />
 
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <ClipboardList className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucune inscription</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search || statusFilter !== "all"
+        <EmptyState
+          icon={ClipboardList}
+          title="Aucune inscription"
+          description={
+            search || statusFilter !== "all"
               ? "Aucun résultat pour vos filtres"
-              : "Commencez par inscrire un stagiaire à une session"}
-          </p>
-          {!search && statusFilter === "all" && (
-            <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-enrollment">
-              <Plus className="w-4 h-4 mr-2" />
-              Inscrire un stagiaire
-            </Button>
-          )}
-        </div>
+              : "Commencez par inscrire un stagiaire à une session"
+          }
+          action={
+            !search && statusFilter === "all" ? (
+              <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-enrollment">
+                <Plus className="w-4 h-4 mr-2" />
+                Inscrire un stagiaire
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -485,6 +482,6 @@ export default function Enrollments() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }

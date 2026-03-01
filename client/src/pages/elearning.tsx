@@ -29,8 +29,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Plus,
-  Search,
   BookOpen,
   Pencil,
   Trash2,
@@ -41,6 +46,24 @@ import {
   ArrowUp,
   ArrowDown,
   MoreHorizontal,
+  Package,
+  ClipboardCheck,
+  Upload,
+  Link,
+  Download,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Star,
+  CheckCircle,
+  Clock,
+  MessageSquare,
+  Sparkles,
+  Layers,
+  Globe,
+  MonitorPlay,
+  Image,
+  BarChart3,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -48,14 +71,33 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type {
   ElearningModule,
   ElearningBlock,
   QuizQuestion,
   Session,
   Program,
+  SessionResource,
+  ScormPackage,
+  FormativeSubmission,
+  Trainee,
 } from "@shared/schema";
-import { ELEARNING_BLOCK_TYPES } from "@shared/schema";
+import { ELEARNING_BLOCK_TYPES, DEFAULT_QUIZ_QUESTIONS } from "@shared/schema";
+import { uploadFile } from "@/lib/queryClient";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 
 // ============================================================
 // STATUS HELPERS
@@ -68,19 +110,23 @@ const MODULE_STATUSES = [
 ];
 
 function ModuleStatusBadge({ status }: { status: string }) {
-  const variants: Record<string, string> = {
-    draft: "bg-accent text-accent-foreground",
-    published: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    archived: "bg-muted text-muted-foreground",
-  };
   const labels: Record<string, string> = {};
   MODULE_STATUSES.forEach((s) => { labels[s.value] = s.label; });
-  return <Badge variant="outline" className={variants[status] || ""}>{labels[status] || status}</Badge>;
+  return <StatusBadge status={status} label={labels[status] || status} />;
 }
 
 function BlockTypeIcon({ type }: { type: string }) {
   if (type === "video") return <Video className="w-4 h-4 text-blue-500" />;
   if (type === "quiz") return <HelpCircle className="w-4 h-4 text-amber-500" />;
+  if (type === "video_quiz") return <Video className="w-4 h-4 text-purple-500" />;
+  if (type === "scorm") return <Package className="w-4 h-4 text-teal-500" />;
+  if (type === "assignment") return <ClipboardCheck className="w-4 h-4 text-orange-500" />;
+  if (type === "flashcard") return <Layers className="w-4 h-4 text-pink-500" />;
+  if (type === "resource_web") return <Globe className="w-4 h-4 text-indigo-500" />;
+  if (type === "virtual_class") return <MonitorPlay className="w-4 h-4 text-emerald-500" />;
+  if (type === "document") return <Download className="w-4 h-4 text-sky-500" />;
+  if (type === "image") return <Image className="w-4 h-4 text-rose-500" />;
+  if (type === "survey") return <BarChart3 className="w-4 h-4 text-violet-500" />;
   return <FileText className="w-4 h-4 text-muted-foreground" />;
 }
 
@@ -226,16 +272,123 @@ function BlockForm({
   const [videoUrl, setVideoUrl] = useState(block?.videoUrl || "");
   const [orderIndex, setOrderIndex] = useState(block?.orderIndex?.toString() || "0");
 
+  // Quiz config
+  const existingConfig = (block?.quizConfig as any) || {};
+  const [timerSeconds, setTimerSeconds] = useState(existingConfig.timerSeconds?.toString() || "");
+  const [showOneAtATime, setShowOneAtATime] = useState(existingConfig.showOneAtATime ?? true);
+  const [passingScore, setPassingScore] = useState(existingConfig.passingScore?.toString() || "70");
+  const [allowRetry, setAllowRetry] = useState(existingConfig.allowRetry ?? false);
+
+  // SCORM
+  const [scormPackageId, setScormPackageId] = useState(block?.scormPackageId || "");
+  const { data: scormPackages } = useQuery<ScormPackage[]>({
+    queryKey: ["/api/scorm-packages"],
+    enabled: type === "scorm",
+  });
+
+  // Assignment config
+  const existingAssignment = (block?.assignmentConfig as any) || {};
+  const [assignInstructions, setAssignInstructions] = useState(existingAssignment.instructions || "");
+  const [allowText, setAllowText] = useState(existingAssignment.allowText ?? true);
+  const [allowFile, setAllowFile] = useState(existingAssignment.allowFile ?? true);
+
+  // Flashcards
+  const existingFlashcards = (block?.flashcards as Array<{ front: string; back: string }>) || [];
+  const [flashcards, setFlashcards] = useState<Array<{ front: string; back: string }>>(
+    existingFlashcards.length > 0 ? existingFlashcards : [{ front: "", back: "" }]
+  );
+
+  // Resource web (iframe)
+  const [embedUrl, setEmbedUrl] = useState((block as any)?.embedUrl || "");
+  const [embedCode, setEmbedCode] = useState((block as any)?.embedCode || "");
+
+  // Virtual class
+  const [virtualClassUrl, setVirtualClassUrl] = useState((block as any)?.virtualClassUrl || "");
+  const [virtualClassDate, setVirtualClassDate] = useState((block as any)?.virtualClassDate || "");
+
+  // Document
+  const [fileUrl, setFileUrl] = useState((block as any)?.fileUrl || "");
+  const [fileName, setFileName] = useState((block as any)?.fileName || "");
+
+  // Image / gallery
+  const [imageUrls, setImageUrls] = useState<string[]>(
+    ((block as any)?.imageUrls as string[]) || [""]
+  );
+
+  // Activity config (Digiforma-style)
+  const [duration, setDuration] = useState((block as any)?.duration?.toString() || "");
+  const [completionCondition, setCompletionCondition] = useState((block as any)?.completionCondition || "finished");
+  const [minScore, setMinScore] = useState((block as any)?.minScore?.toString() || "");
+  const [minViewPercent, setMinViewPercent] = useState((block as any)?.minViewPercent?.toString() || "");
+
+  const addFlashcard = () => setFlashcards([...flashcards, { front: "", back: "" }]);
+  const removeFlashcard = (idx: number) => {
+    if (flashcards.length <= 1) return;
+    setFlashcards(flashcards.filter((_, i) => i !== idx));
+  };
+  const updateFlashcard = (idx: number, side: "front" | "back", value: string) => {
+    const updated = [...flashcards];
+    updated[idx] = { ...updated[idx], [side]: value };
+    setFlashcards(updated);
+  };
+
+  const addImageUrl = () => setImageUrls([...imageUrls, ""]);
+  const removeImageUrl = (idx: number) => {
+    if (imageUrls.length <= 1) return;
+    setImageUrls(imageUrls.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
+    const data: Record<string, unknown> = {
       moduleId,
       type,
       title,
-      content: type === "text" ? content : null,
-      videoUrl: type === "video" ? videoUrl : null,
+      content: ["text", "assignment"].includes(type) ? content : null,
+      videoUrl: ["video", "video_quiz"].includes(type) ? videoUrl : null,
       orderIndex: parseInt(orderIndex) || 0,
-    });
+      duration: duration ? parseInt(duration) : null,
+      completionCondition,
+      minScore: minScore ? parseInt(minScore) : null,
+      minViewPercent: minViewPercent ? parseInt(minViewPercent) : null,
+    };
+    if (type === "quiz" || type === "video_quiz" || type === "survey") {
+      data.quizConfig = {
+        timerSeconds: timerSeconds ? parseInt(timerSeconds) : undefined,
+        showOneAtATime,
+        passingScore: type === "survey" ? 0 : parseInt(passingScore) || 70,
+        allowRetry,
+      };
+    }
+    if (type === "scorm") {
+      data.scormPackageId = scormPackageId || null;
+    }
+    if (type === "assignment") {
+      data.assignmentConfig = {
+        instructions: assignInstructions,
+        allowText,
+        allowFile,
+      };
+    }
+    if (type === "flashcard") {
+      data.flashcards = flashcards.filter((f) => f.front.trim() || f.back.trim());
+    }
+    if (type === "resource_web") {
+      data.embedUrl = embedUrl || null;
+      data.embedCode = embedCode || null;
+    }
+    if (type === "virtual_class") {
+      data.virtualClassUrl = virtualClassUrl || null;
+      data.virtualClassDate = virtualClassDate || null;
+    }
+    if (type === "document") {
+      data.fileUrl = fileUrl || null;
+      data.fileName = fileName || null;
+    }
+    if (type === "image") {
+      data.imageUrls = imageUrls.filter((u) => u.trim());
+    }
+    onSubmit(data);
   };
 
   return (
@@ -273,9 +426,9 @@ function BlockForm({
           />
         </div>
       )}
-      {type === "video" && (
+      {(type === "video" || type === "video_quiz") && (
         <div className="space-y-2">
-          <Label htmlFor="block-video">URL de la vidéo</Label>
+          <Label htmlFor="block-video">URL de la video</Label>
           <Input
             id="block-video"
             value={videoUrl}
@@ -284,11 +437,320 @@ function BlockForm({
           />
         </div>
       )}
-      {type === "quiz" && (
-        <p className="text-sm text-muted-foreground">
-          Les questions du quiz pourront être ajoutées après la création du bloc.
-        </p>
+      {(type === "quiz" || type === "video_quiz") && (
+        <div className="space-y-4 rounded-lg border p-3">
+          <p className="text-sm font-medium">Configuration du quiz</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Temps par question (sec)</Label>
+              <Input
+                type="number"
+                value={timerSeconds}
+                onChange={(e) => setTimerSeconds(e.target.value)}
+                placeholder="Ex: 30 (vide = illimite)"
+                min="5"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Score de passage (%)</Label>
+              <Input
+                type="number"
+                value={passingScore}
+                onChange={(e) => setPassingScore(e.target.value)}
+                min="0"
+                max="100"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Affichage une question a la fois (style Kahoot)</Label>
+            <Switch checked={showOneAtATime} onCheckedChange={setShowOneAtATime} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Autoriser les tentatives multiples</Label>
+            <Switch checked={allowRetry} onCheckedChange={setAllowRetry} />
+          </div>
+          {type === "quiz" && (
+            <p className="text-xs text-muted-foreground">
+              Les questions seront ajoutees apres la creation du bloc.
+            </p>
+          )}
+          {type === "video_quiz" && (
+            <p className="text-xs text-muted-foreground">
+              Les questions apparaitront apres la video. Ajoutez-les apres la creation du bloc.
+            </p>
+          )}
+        </div>
       )}
+      {type === "scorm" && (
+        <div className="space-y-2">
+          <Label>Package SCORM</Label>
+          <Select value={scormPackageId} onValueChange={setScormPackageId}>
+            <SelectTrigger><SelectValue placeholder="Selectionner un package SCORM" /></SelectTrigger>
+            <SelectContent>
+              {scormPackages?.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.title} ({p.version})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Telechargez vos packages SCORM depuis l'onglet Ressources, puis selectionnez-les ici.
+          </p>
+        </div>
+      )}
+      {type === "assignment" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Evaluation formative</p>
+          <div className="space-y-2">
+            <Label className="text-xs">Instructions pour l'apprenant</Label>
+            <Textarea
+              value={assignInstructions}
+              onChange={(e) => setAssignInstructions(e.target.value)}
+              placeholder="Decrivez ce que l'apprenant doit soumettre..."
+              className="resize-none min-h-[80px]"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Autoriser la soumission de texte</Label>
+            <Switch checked={allowText} onCheckedChange={setAllowText} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Autoriser le depot de fichier</Label>
+            <Switch checked={allowFile} onCheckedChange={setAllowFile} />
+          </div>
+        </div>
+      )}
+
+      {/* Flashcards */}
+      {type === "flashcard" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Cartes de memorisation</p>
+            <Button type="button" variant="outline" size="sm" onClick={addFlashcard}>
+              <Plus className="w-3 h-3 mr-1" />
+              Ajouter une carte
+            </Button>
+          </div>
+          {flashcards.map((card, idx) => (
+            <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
+              <div className="space-y-1">
+                <Label className="text-xs">Recto (question)</Label>
+                <Input
+                  value={card.front}
+                  onChange={(e) => updateFlashcard(idx, "front", e.target.value)}
+                  placeholder="Question ou terme..."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Verso (reponse)</Label>
+                <Input
+                  value={card.back}
+                  onChange={(e) => updateFlashcard(idx, "back", e.target.value)}
+                  placeholder="Reponse ou definition..."
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 mt-5 text-destructive"
+                disabled={flashcards.length <= 1}
+                onClick={() => removeFlashcard(idx)}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Les apprenants pourront retourner les cartes et s'auto-evaluer.
+          </p>
+        </div>
+      )}
+
+      {/* Resource web (iframe) */}
+      {type === "resource_web" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Ressource web integree</p>
+          <div className="space-y-2">
+            <Label className="text-xs">URL a integrer (iframe)</Label>
+            <Input
+              value={embedUrl}
+              onChange={(e) => setEmbedUrl(e.target.value)}
+              placeholder="https://view.genially.com/... ou https://docs.google.com/..."
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Ou code d'integration HTML (optionnel)</Label>
+            <Textarea
+              value={embedCode}
+              onChange={(e) => setEmbedCode(e.target.value)}
+              placeholder='<iframe src="..." width="100%" height="600"></iframe>'
+              className="resize-none min-h-[80px] font-mono text-xs"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Compatible avec Genially, Google Docs, H5P, Padlet, Canva et autres outils.
+          </p>
+        </div>
+      )}
+
+      {/* Virtual class */}
+      {type === "virtual_class" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Classe virtuelle</p>
+          <div className="space-y-2">
+            <Label className="text-xs">Lien de la classe virtuelle</Label>
+            <Input
+              value={virtualClassUrl}
+              onChange={(e) => setVirtualClassUrl(e.target.value)}
+              placeholder="https://zoom.us/j/... ou https://meet.google.com/..."
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Date et heure prevues</Label>
+            <Input
+              type="datetime-local"
+              value={virtualClassDate}
+              onChange={(e) => setVirtualClassDate(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            L'apprenant pourra rejoindre la classe virtuelle depuis son portail.
+          </p>
+        </div>
+      )}
+
+      {/* Document */}
+      {type === "document" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Document telechargeable</p>
+          <div className="space-y-2">
+            <Label className="text-xs">URL du document</Label>
+            <Input
+              value={fileUrl}
+              onChange={(e) => setFileUrl(e.target.value)}
+              placeholder="https://... (PDF, DOCX, etc.)"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Nom du fichier</Label>
+            <Input
+              value={fileName}
+              onChange={(e) => setFileName(e.target.value)}
+              placeholder="guide-pratique.pdf"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            L'apprenant pourra telecharger ce document depuis son portail.
+          </p>
+        </div>
+      )}
+
+      {/* Image / Gallery */}
+      {type === "image" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Images / Galerie</p>
+            <Button type="button" variant="outline" size="sm" onClick={addImageUrl}>
+              <Plus className="w-3 h-3 mr-1" />
+              Ajouter une image
+            </Button>
+          </div>
+          {imageUrls.map((url, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <Input
+                value={url}
+                onChange={(e) => {
+                  const updated = [...imageUrls];
+                  updated[idx] = e.target.value;
+                  setImageUrls(updated);
+                }}
+                placeholder="https://... (URL de l'image)"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive"
+                disabled={imageUrls.length <= 1}
+                onClick={() => removeImageUrl(idx)}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Survey (non-scored quiz) */}
+      {type === "survey" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Configuration du sondage</p>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Affichage une question a la fois</Label>
+            <Switch checked={showOneAtATime} onCheckedChange={setShowOneAtATime} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Les questions seront ajoutees apres la creation du bloc. Contrairement au quiz, le sondage n'est pas note.
+          </p>
+        </div>
+      )}
+
+      {/* Activity config (Digiforma-style) */}
+      <div className="space-y-3 rounded-lg border p-3">
+        <p className="text-sm font-medium">Configuration de l'activite</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Duree estimee (minutes)</Label>
+            <Input
+              type="number"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              placeholder="Ex: 30"
+              min="1"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Condition de completion</Label>
+            <Select value={completionCondition} onValueChange={setCompletionCondition}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="finished">Terminee</SelectItem>
+                <SelectItem value="score">Score minimum</SelectItem>
+                <SelectItem value="date">Date limite</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {completionCondition === "score" && (
+          <div className="space-y-1">
+            <Label className="text-xs">Score minimum requis (%)</Label>
+            <Input
+              type="number"
+              value={minScore}
+              onChange={(e) => setMinScore(e.target.value)}
+              placeholder="Ex: 70"
+              min="0"
+              max="100"
+            />
+          </div>
+        )}
+        {(type === "video" || type === "video_quiz") && (
+          <div className="space-y-1">
+            <Label className="text-xs">Pourcentage minimum de visionnage (%)</Label>
+            <Input
+              type="number"
+              value={minViewPercent}
+              onChange={(e) => setMinViewPercent(e.target.value)}
+              placeholder="Ex: 80"
+              min="0"
+              max="100"
+            />
+          </div>
+        )}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="block-order">Ordre</Label>
         <Input
@@ -301,7 +763,7 @@ function BlockForm({
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Enregistrement..." : block ? "Modifier" : "Créer"}
+          {isPending ? "Enregistrement..." : block ? "Modifier" : "Creer"}
         </Button>
       </div>
     </form>
@@ -316,6 +778,7 @@ function QuizQuestionBuilder({ blockId }: { blockId: string }) {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editQuestion, setEditQuestion] = useState<QuizQuestion | undefined>();
+  const [prefillCategory, setPrefillCategory] = useState("");
 
   const { data: questions, isLoading } = useQuery<QuizQuestion[]>({
     queryKey: ["/api/quiz-questions", `?blockId=${blockId}`],
@@ -352,6 +815,33 @@ function QuizQuestionBuilder({ blockId }: { blockId: string }) {
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
 
+  const prefillMutation = useMutation({
+    mutationFn: async (category: string) => {
+      const defaultQuestions = DEFAULT_QUIZ_QUESTIONS[category];
+      if (!defaultQuestions) return;
+      const startIndex = questions?.length || 0;
+      for (let i = 0; i < defaultQuestions.length; i++) {
+        const q = defaultQuestions[i];
+        await apiRequest("POST", "/api/quiz-questions", {
+          blockId,
+          question: q.question,
+          type: "qcm",
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          orderIndex: startIndex + i,
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quiz-questions"] });
+      setPrefillCategory("");
+      toast({ title: "Questions suggerees ajoutees" });
+    },
+    onError: () => toast({ title: "Erreur lors de l'ajout des questions", variant: "destructive" }),
+  });
+
+  const quizCategories = Object.keys(DEFAULT_QUIZ_QUESTIONS);
+
   return (
     <div className="mt-3 space-y-3">
       <div className="flex items-center justify-between">
@@ -363,6 +853,28 @@ function QuizQuestionBuilder({ blockId }: { blockId: string }) {
         >
           <Plus className="w-3 h-3 mr-1" />
           Ajouter
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Select value={prefillCategory} onValueChange={setPrefillCategory}>
+          <SelectTrigger className="flex-1 h-8 text-xs">
+            <SelectValue placeholder="Pre-remplir par thematique..." />
+          </SelectTrigger>
+          <SelectContent>
+            {quizCategories.map((cat) => (
+              <SelectItem key={cat} value={cat}>{cat} ({DEFAULT_QUIZ_QUESTIONS[cat].length} questions)</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!prefillCategory || prefillMutation.isPending}
+          onClick={() => prefillCategory && prefillMutation.mutate(prefillCategory)}
+        >
+          <Sparkles className="w-3 h-3 mr-1" />
+          {prefillMutation.isPending ? "Ajout..." : "Ajouter"}
         </Button>
       </div>
 
@@ -715,8 +1227,55 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
                     {block.type === "video" && block.videoUrl && (
                       <p className="text-xs text-blue-500 truncate">{block.videoUrl}</p>
                     )}
-                    {block.type === "quiz" && (
+                    {block.type === "video_quiz" && block.videoUrl && (
+                      <p className="text-xs text-purple-500 truncate">{block.videoUrl}</p>
+                    )}
+                    {(block.type === "quiz" || block.type === "video_quiz") && (
                       <QuizQuestionBuilder blockId={block.id} />
+                    )}
+                    {block.type === "scorm" && block.scormPackageId && (
+                      <p className="text-xs text-teal-600">Package SCORM associe</p>
+                    )}
+                    {block.type === "assignment" && (
+                      <SubmissionReviewer blockId={block.id} />
+                    )}
+                    {block.type === "flashcard" && (block as any).flashcards && (
+                      <p className="text-xs text-pink-500">
+                        {((block as any).flashcards as Array<{ front: string; back: string }>).length} carte(s)
+                      </p>
+                    )}
+                    {block.type === "resource_web" && (block as any).embedUrl && (
+                      <p className="text-xs text-indigo-500 truncate">{(block as any).embedUrl}</p>
+                    )}
+                    {block.type === "virtual_class" && (
+                      <div className="flex items-center gap-2">
+                        {(block as any).virtualClassUrl && (
+                          <p className="text-xs text-emerald-500 truncate">{(block as any).virtualClassUrl}</p>
+                        )}
+                        {(block as any).virtualClassDate && (
+                          <Badge variant="outline" className="text-xs">
+                            <Clock className="w-3 h-3 mr-1" />
+                            {new Date((block as any).virtualClassDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {block.type === "document" && (block as any).fileName && (
+                      <p className="text-xs text-sky-500">{(block as any).fileName}</p>
+                    )}
+                    {block.type === "image" && (block as any).imageUrls && (
+                      <p className="text-xs text-rose-500">
+                        {((block as any).imageUrls as string[]).length} image(s)
+                      </p>
+                    )}
+                    {block.type === "survey" && (
+                      <QuizQuestionBuilder blockId={block.id} />
+                    )}
+                    {(block as any).duration && (
+                      <Badge variant="outline" className="text-xs mt-1">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {(block as any).duration} min
+                      </Badge>
                     )}
                   </div>
                   <DropdownMenu>
@@ -767,6 +1326,420 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
 // ============================================================
 // MAIN PAGE
 // ============================================================
+
+// ============================================================
+// SESSION RESOURCE MANAGER
+// ============================================================
+
+function SessionResourceManager() {
+  const [selectedSession, setSelectedSession] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editResource, setEditResource] = useState<SessionResource | undefined>();
+  const [resType, setResType] = useState<"file" | "link">("file");
+  const [resTitle, setResTitle] = useState("");
+  const [resDescription, setResDescription] = useState("");
+  const [resExternalUrl, setResExternalUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [fileData, setFileData] = useState<{ fileUrl: string; fileName: string; fileSize: number; mimeType: string } | null>(null);
+  const { toast } = useToast();
+
+  const { data: sessions } = useQuery<Session[]>({ queryKey: ["/api/sessions"] });
+  const { data: resources, isLoading } = useQuery<SessionResource[]>({
+    queryKey: ["/api/session-resources", selectedSession],
+    queryFn: async () => {
+      if (!selectedSession) return [];
+      const resp = await fetch(`/api/session-resources?sessionId=${selectedSession}`, { credentials: "include" });
+      return resp.json();
+    },
+    enabled: !!selectedSession,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest("POST", "/api/session-resources", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/session-resources"] });
+      resetForm();
+      toast({ title: "Ressource ajoutee" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/session-resources/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/session-resources"] });
+      toast({ title: "Ressource supprimee" });
+    },
+  });
+
+  const toggleVisibilityMutation = useMutation({
+    mutationFn: ({ id, visible }: { id: string; visible: boolean }) =>
+      apiRequest("PATCH", `/api/session-resources/${id}`, { visible }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/session-resources"] }),
+  });
+
+  const resetForm = () => {
+    setDialogOpen(false);
+    setEditResource(undefined);
+    setResType("file");
+    setResTitle("");
+    setResDescription("");
+    setResExternalUrl("");
+    setFileData(null);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await uploadFile(file);
+      setFileData(result);
+      if (!resTitle) setResTitle(file.name);
+    } catch {
+      toast({ title: "Erreur lors du telechargement", variant: "destructive" });
+    }
+    setUploading(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createMutation.mutate({
+      sessionId: selectedSession,
+      title: resTitle,
+      description: resDescription || null,
+      type: resType,
+      ...(resType === "file" && fileData
+        ? { fileUrl: fileData.fileUrl, fileName: fileData.fileName, fileSize: fileData.fileSize, mimeType: fileData.mimeType }
+        : {}),
+      ...(resType === "link" ? { externalUrl: resExternalUrl } : {}),
+    });
+  };
+
+  // SCORM upload
+  const [scormUploading, setScormUploading] = useState(false);
+  const handleScormUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScormUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", file.name.replace(/\.zip$/i, ""));
+      const resp = await fetch("/api/scorm-packages/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error("Upload failed");
+      const pkg = await resp.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/scorm-packages"] });
+      toast({ title: `Package SCORM "${pkg.title}" telecharge (${pkg.version})` });
+    } catch {
+      toast({ title: "Erreur lors du telechargement SCORM", variant: "destructive" });
+    }
+    setScormUploading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="space-y-1 flex-1 max-w-xs">
+          <Label className="text-sm">Session</Label>
+          <Select value={selectedSession || "none"} onValueChange={(v) => setSelectedSession(v === "none" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Selectionner une session" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Choisir une session</SelectItem>
+              {sessions?.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {selectedSession && (
+          <Button className="mt-5" onClick={() => { resetForm(); setDialogOpen(true); }}>
+            <Plus className="w-4 h-4 mr-2" />Ajouter une ressource
+          </Button>
+        )}
+      </div>
+
+      {/* SCORM Upload section */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Packages SCORM</p>
+              <p className="text-xs text-muted-foreground">Telechargez des modules SCORM (ZIP) pour les utiliser dans vos blocs e-learning</p>
+            </div>
+            <div>
+              <input
+                type="file"
+                accept=".zip"
+                onChange={handleScormUpload}
+                className="hidden"
+                id="scorm-upload"
+                disabled={scormUploading}
+              />
+              <label htmlFor="scorm-upload">
+                <Button variant="outline" size="sm" asChild disabled={scormUploading}>
+                  <span><Upload className="w-4 h-4 mr-1" />{scormUploading ? "Telechargement..." : "Telecharger un ZIP SCORM"}</span>
+                </Button>
+              </label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {!selectedSession ? (
+        <div className="text-center py-16">
+          <FileText className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+          <h3 className="text-lg font-medium mb-1">Selectionnez une session</h3>
+          <p className="text-sm text-muted-foreground">Choisissez une session pour gerer ses ressources pedagogiques</p>
+        </div>
+      ) : isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+        </div>
+      ) : !resources || resources.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="Aucune ressource pour cette session"
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Titre</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Taille</TableHead>
+                  <TableHead>Visible</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {resources.map((res) => (
+                  <TableRow key={res.id}>
+                    <TableCell>
+                      <p className="text-sm font-medium">{res.title}</p>
+                      {res.description && <p className="text-xs text-muted-foreground">{res.description}</p>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {res.type === "file" ? <FileText className="w-3 h-3 mr-1" /> : <Link className="w-3 h-3 mr-1" />}
+                        {res.type === "file" ? "Fichier" : "Lien"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">
+                        {res.fileSize ? `${(res.fileSize / 1024).toFixed(0)} Ko` : "-"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={res.visible ?? true}
+                        onCheckedChange={(v) => toggleVisibilityMutation.mutate({ id: res.id, visible: v })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {res.type === "file" && res.fileUrl && (
+                          <a href={res.fileUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Download className="w-3.5 h-3.5" />
+                            </Button>
+                          </a>
+                        )}
+                        {res.type === "link" && res.externalUrl && (
+                          <a href={res.externalUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                          </a>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          onClick={() => deleteMutation.mutate(res.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setDialogOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ajouter une ressource</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={resType} onValueChange={(v) => setResType(v as "file" | "link")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="file">Fichier</SelectItem>
+                  <SelectItem value="link">Lien externe</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Titre</Label>
+              <Input value={resTitle} onChange={(e) => setResTitle(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea value={resDescription} onChange={(e) => setResDescription(e.target.value)} rows={2} />
+            </div>
+            {resType === "file" && (
+              <div className="space-y-2">
+                <Label>Fichier</Label>
+                <Input type="file" onChange={handleFileUpload} disabled={uploading} />
+                {uploading && <p className="text-xs text-muted-foreground">Telechargement en cours...</p>}
+                {fileData && <p className="text-xs text-green-600">Fichier telecharge: {fileData.fileName}</p>}
+              </div>
+            )}
+            {resType === "link" && (
+              <div className="space-y-2">
+                <Label>URL</Label>
+                <Input value={resExternalUrl} onChange={(e) => setResExternalUrl(e.target.value)} placeholder="https://..." />
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button type="submit" disabled={createMutation.isPending || (resType === "file" && !fileData)}>
+                {createMutation.isPending ? "Ajout..." : "Ajouter"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================================
+// SUBMISSION REVIEWER
+// ============================================================
+
+function SubmissionReviewer({ blockId }: { blockId: string }) {
+  const { toast } = useToast();
+  const { data: submissions, isLoading } = useQuery<FormativeSubmission[]>({
+    queryKey: ["/api/formative-submissions", { blockId }],
+    queryFn: async () => {
+      const resp = await fetch(`/api/formative-submissions?blockId=${blockId}`, { credentials: "include" });
+      return resp.json();
+    },
+  });
+  const { data: trainees } = useQuery<Trainee[]>({ queryKey: ["/api/trainees"] });
+  const [gradingId, setGradingId] = useState<string | null>(null);
+  const [grade, setGrade] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  const gradeMutation = useMutation({
+    mutationFn: async ({ id, grade, feedback }: { id: string; grade: number; feedback: string }) => {
+      const resp = await apiRequest("PATCH", `/api/formative-submissions/${id}`, {
+        grade,
+        feedback,
+        status: "graded",
+        reviewedAt: new Date().toISOString(),
+      });
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/formative-submissions"] });
+      setGradingId(null);
+      setGrade("");
+      setFeedback("");
+      toast({ title: "Note enregistree" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  if (isLoading) return <Skeleton className="h-12 w-full" />;
+  if (!submissions || submissions.length === 0) {
+    return <p className="text-xs text-muted-foreground py-2">Aucune soumission pour ce bloc.</p>;
+  }
+
+  const statusBadge = (status: string) => {
+    if (status === "graded") return <StatusBadge status="graded" label="Note" />;
+    if (status === "reviewing") return <StatusBadge status="reviewing" label="En revue" />;
+    return <StatusBadge status="submitted" label="Soumis" />;
+  };
+
+  return (
+    <div className="space-y-2 mt-2 border-t pt-2">
+      <p className="text-xs font-medium text-muted-foreground">Soumissions ({submissions.length})</p>
+      {submissions.map((sub) => {
+        const trainee = trainees?.find(t => t.id === sub.traineeId);
+        return (
+          <div key={sub.id} className="border rounded-md p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{trainee ? `${trainee.firstName} ${trainee.lastName}` : sub.traineeId}</span>
+                {statusBadge(sub.status)}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString("fr-FR") : ""}
+              </span>
+            </div>
+            {sub.textContent && (
+              <p className="text-sm bg-muted/50 rounded p-2">{sub.textContent}</p>
+            )}
+            {sub.fileUrl && (
+              <a href={sub.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1">
+                <Download className="w-3 h-3" />{sub.fileName || "Fichier"}
+              </a>
+            )}
+            {sub.grade != null && (
+              <p className="text-sm"><strong>Note:</strong> {sub.grade}/100 {sub.feedback && `— ${sub.feedback}`}</p>
+            )}
+            {sub.status !== "graded" && gradingId !== sub.id && (
+              <Button variant="outline" size="sm" onClick={() => { setGradingId(sub.id); setGrade(""); setFeedback(""); }}>
+                <Star className="w-3 h-3 mr-1" />Noter
+              </Button>
+            )}
+            {gradingId === sub.id && (
+              <div className="space-y-2 border-t pt-2">
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                    placeholder="Note /100"
+                    min="0"
+                    max="100"
+                    className="w-28"
+                  />
+                  <Input
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    placeholder="Commentaire..."
+                    className="flex-1"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => gradeMutation.mutate({ id: sub.id, grade: parseInt(grade) || 0, feedback })} disabled={gradeMutation.isPending}>
+                    Valider
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setGradingId(null)}>Annuler</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Elearning() {
   const [search, setSearch] = useState("");
@@ -831,12 +1804,18 @@ export default function Elearning() {
     .sort((a, b) => a.orderIndex - b.orderIndex) || [];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <PageLayout>
+      <PageHeader title="E-Learning" subtitle="Gérez vos modules de formation en ligne" />
+
+      <Tabs defaultValue="modules" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="modules"><BookOpen className="w-4 h-4 mr-2" />Modules</TabsTrigger>
+          <TabsTrigger value="resources"><FileText className="w-4 h-4 mr-2" />Ressources</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="modules">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">E-Learning / LMS</h1>
-          <p className="text-muted-foreground mt-1">Gérez vos modules et contenus de formation en ligne</p>
-        </div>
+        <div />
         <Button onClick={() => { setEditModule(undefined); setModuleDialogOpen(true); }}>
           <Plus className="w-4 h-4 mr-2" />
           Nouveau module
@@ -844,15 +1823,7 @@ export default function Elearning() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher un module..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput value={search} onChange={setSearch} placeholder="Rechercher un module..." className="max-w-sm" />
         <Select value={sessionFilter} onValueChange={setSessionFilter}>
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="Filtrer par session" />
@@ -871,21 +1842,19 @@ export default function Elearning() {
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucun module e-learning</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search || sessionFilter !== "all"
-              ? "Aucun résultat pour vos filtres"
-              : "Créez votre premier module de formation en ligne"}
-          </p>
-          {!search && sessionFilter === "all" && (
+        <EmptyState
+          icon={BookOpen}
+          title="Aucun module e-learning"
+          description={search || sessionFilter !== "all"
+            ? "Aucun résultat pour vos filtres"
+            : "Créez votre premier module de formation en ligne"}
+          action={!search && sessionFilter === "all" ? (
             <Button onClick={() => setModuleDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Créer un module
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
       ) : (
         <Card>
           <CardContent className="p-4">
@@ -977,6 +1946,12 @@ export default function Elearning() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+        </TabsContent>
+
+        <TabsContent value="resources">
+          <SessionResourceManager />
+        </TabsContent>
+      </Tabs>
+    </PageLayout>
   );
 }

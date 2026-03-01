@@ -53,6 +53,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PageLayout } from "@/components/shared/PageLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 import type { Enterprise, InsertEnterprise, Enrollment, Session } from "@shared/schema";
 import { ENTERPRISE_FORMATS_JURIDIQUES, ENTERPRISE_CONTACT_ROLES } from "@shared/schema";
 
@@ -451,9 +456,7 @@ function EnterpriseDetail({ enterprise, onBack }: { enterprise: Enterprise; onBa
             {enterprise.formatJuridique && <span> - {formatLabels[enterprise.formatJuridique] || enterprise.formatJuridique}</span>}
           </p>
         </div>
-        <Badge variant="outline" className={enterprise.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 ml-auto" : "bg-muted text-muted-foreground ml-auto"}>
-          {enterprise.status === "active" ? "Actif" : "Inactif"}
-        </Badge>
+        <StatusBadge status={enterprise.status === "active" ? "active" : "inactive"} label={enterprise.status === "active" ? "Actif" : "Inactif"} />
       </div>
 
       <Tabs defaultValue="fiche" className="space-y-4">
@@ -691,28 +694,19 @@ export default function Enterprises() {
   ) || [];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-enterprises-title">Entreprises clientes</h1>
-          <p className="text-muted-foreground mt-1">Gérez vos entreprises clientes et établissements</p>
-        </div>
-        <Button onClick={() => { setEditEnterprise(undefined); setDialogOpen(true); }} data-testid="button-create-enterprise">
-          <Plus className="w-4 h-4 mr-2" />
-          Ajouter une entreprise
-        </Button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Entreprises"
+        subtitle="Gérez vos entreprises clientes"
+        actions={
+          <Button onClick={() => { setEditEnterprise(undefined); setDialogOpen(true); }} data-testid="button-create-enterprise">
+            <Plus className="w-4 h-4 mr-2" />
+            Ajouter une entreprise
+          </Button>
+        }
+      />
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher une entreprise..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-enterprises"
-        />
-      </div>
+      <SearchInput value={search} onChange={setSearch} placeholder="Rechercher une entreprise..." className="max-w-sm" />
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -721,19 +715,17 @@ export default function Enterprises() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Building2 className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="text-lg font-medium mb-1">Aucune entreprise</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {search ? "Aucun résultat pour votre recherche" : "Ajoutez votre première entreprise cliente"}
-          </p>
-          {!search && (
+        <EmptyState
+          icon={Building2}
+          title="Aucune entreprise"
+          description={search ? "Aucun résultat pour votre recherche" : "Ajoutez votre première entreprise cliente"}
+          action={!search ? (
             <Button onClick={() => setDialogOpen(true)} data-testid="button-create-first-enterprise">
               <Plus className="w-4 h-4 mr-2" />
               Ajouter une entreprise
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((ent) => (
@@ -747,9 +739,7 @@ export default function Enterprises() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Badge variant="outline" className={ent.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}>
-                      {ent.status === "active" ? "Actif" : "Inactif"}
-                    </Badge>
+                    <StatusBadge status={ent.status === "active" ? "active" : "inactive"} label={ent.status === "active" ? "Actif" : "Inactif"} />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" data-testid={`button-enterprise-menu-${ent.id}`}>
@@ -819,6 +809,6 @@ export default function Enterprises() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 }
