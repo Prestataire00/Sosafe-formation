@@ -1097,21 +1097,18 @@ type SatisfactionStats = {
 };
 
 // ============================================================
-// PLANNING / DISPONIBILITES TAB
+// PLANNING / DISPONIBILITES TAB — Vue calendrier
 // ============================================================
 
 function PlanningTab({ trainerId }: { trainerId: string }) {
   const { toast } = useToast();
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formType, setFormType] = useState<"available" | "unavailable">("unavailable");
-  const [formStartDate, setFormStartDate] = useState("");
-  const [formEndDate, setFormEndDate] = useState("");
-  const [formStartTime, setFormStartTime] = useState("");
-  const [formEndTime, setFormEndTime] = useState("");
-  const [formReason, setFormReason] = useState("");
-  const [formNotes, setFormNotes] = useState("");
-  const [formRecurrence, setFormRecurrence] = useState("none");
+  const today = new Date();
+  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
+  const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [paintMode, setPaintMode] = useState<"available" | "unavailable" | null>(null);
+  const [reasonDialog, setReasonDialog] = useState<{ date: string; type: string; existingId?: string } | null>(null);
+  const [reason, setReason] = useState("");
 
   const { data: availabilities, isLoading } = useQuery<any[]>({
     queryKey: [`/api/trainers/${trainerId}/availabilities`],
@@ -1129,8 +1126,6 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
-      toast({ title: "Disponibilité ajoutée" });
-      resetForm();
     },
   });
 
@@ -1140,8 +1135,6 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
-      toast({ title: "Disponibilité modifiée" });
-      resetForm();
     },
   });
 
@@ -1151,57 +1144,128 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
-      toast({ title: "Entrée supprimée" });
     },
   });
 
-  const resetForm = () => {
-    setShowAddDialog(false);
-    setEditingId(null);
-    setFormType("unavailable");
-    setFormStartDate("");
-    setFormEndDate("");
-    setFormStartTime("");
-    setFormEndTime("");
-    setFormReason("");
-    setFormNotes("");
-    setFormRecurrence("none");
+  // Build a map: dateStr -> { type, id, reason }
+  const dateMap = useMemo(() => {
+    const map = new Map<string, { type: string; id: string; reason: string | null }>();
+    for (const a of availabilities || []) {
+      const start = new Date(a.startDate + "T00:00:00");
+      const end = new Date(a.endDate + "T00:00:00");
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = d.toISOString().split("T")[0];
+        map.set(key, { type: a.type, id: a.id, reason: a.reason });
+      }
+    }
+    return map;
+  }, [availabilities]);
+
+  // Session days map
+  const sessionDays = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of sessions || []) {
+      const start = new Date(s.startDate + "T00:00:00");
+      const end = new Date(s.endDate + "T00:00:00");
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        map.set(d.toISOString().split("T")[0], s.title);
+      }
+    }
+    return map;
+  }, [sessions]);
+
+  // Calendar generation
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const firstDayOfWeek = (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7; // Monday = 0
+  const monthName = new Date(currentYear, currentMonth).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+  const prevMonth = () => {
+    if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); }
+    else setCurrentMonth(currentMonth - 1);
+  };
+  const nextMonth = () => {
+    if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(currentYear + 1); }
+    else setCurrentMonth(currentMonth + 1);
   };
 
-  const openEdit = (item: any) => {
-    setEditingId(item.id);
-    setFormType(item.type);
-    setFormStartDate(item.startDate);
-    setFormEndDate(item.endDate);
-    setFormStartTime(item.startTime || "");
-    setFormEndTime(item.endTime || "");
-    setFormReason(item.reason || "");
-    setFormNotes(item.notes || "");
-    setFormRecurrence(item.recurrence || "none");
-    setShowAddDialog(true);
-  };
+  const handleCellClick = (dateStr: string) => {
+    const existing = dateMap.get(dateStr);
 
-  const handleSubmit = () => {
-    if (!formStartDate || !formEndDate) {
-      toast({ title: "Veuillez remplir les dates", variant: "destructive" });
+    if (paintMode) {
+      // Quick paint mode
+      if (existing && existing.type === paintMode) {
+        // Same type: remove
+        deleteMutation.mutate(existing.id);
+        return;
+      }
+      if (existing) {
+        // Different type: switch
+        deleteMutation.mutate(existing.id);
+      }
+      if (paintMode === "unavailable") {
+        // Ask for reason
+        setReasonDialog({ date: dateStr, type: "unavailable" });
+        setReason("");
+      } else {
+        createMutation.mutate({
+          type: "available",
+          startDate: dateStr,
+          endDate: dateStr,
+          createdBy: "trainer",
+        });
+      }
       return;
     }
-    const payload = {
-      type: formType,
-      startDate: formStartDate,
-      endDate: formEndDate,
-      startTime: formStartTime || null,
-      endTime: formEndTime || null,
-      reason: formReason || null,
-      notes: formNotes || null,
-      recurrence: formRecurrence,
-      createdBy: "trainer",
-    };
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, data: payload });
+
+    // No paint mode: show details or toggle
+    if (existing) {
+      setSelectedDate(dateStr);
     } else {
-      createMutation.mutate(payload);
+      setSelectedDate(dateStr);
     }
+  };
+
+  const handleReasonSubmit = () => {
+    if (reasonDialog) {
+      createMutation.mutate({
+        type: reasonDialog.type,
+        startDate: reasonDialog.date,
+        endDate: reasonDialog.date,
+        reason: reason || null,
+        createdBy: "trainer",
+      });
+      setReasonDialog(null);
+      setReason("");
+    }
+  };
+
+  const handleQuickSet = (type: "available" | "unavailable") => {
+    if (!selectedDate) return;
+    const existing = dateMap.get(selectedDate);
+    if (existing) {
+      deleteMutation.mutate(existing.id);
+    }
+    if (type === "unavailable") {
+      setReasonDialog({ date: selectedDate, type: "unavailable" });
+      setReason("");
+      setSelectedDate(null);
+    } else {
+      createMutation.mutate({
+        type: "available",
+        startDate: selectedDate,
+        endDate: selectedDate,
+        createdBy: "trainer",
+      });
+      setSelectedDate(null);
+    }
+  };
+
+  const handleRemove = () => {
+    if (!selectedDate) return;
+    const existing = dateMap.get(selectedDate);
+    if (existing) deleteMutation.mutate(existing.id);
+    setSelectedDate(null);
   };
 
   if (isLoading) {
@@ -1212,207 +1276,189 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
     );
   }
 
-  const upcoming = (availabilities || []).filter((a) => new Date(a.endDate) >= new Date());
-  const past = (availabilities || []).filter((a) => new Date(a.endDate) < new Date());
+  const selectedInfo = selectedDate ? dateMap.get(selectedDate) : null;
+  const selectedSession = selectedDate ? sessionDays.get(selectedDate) : null;
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Mon planning de disponibilités</h2>
-        <Button onClick={() => { resetForm(); setShowAddDialog(true); }} size="sm">
-          <Plus className="w-4 h-4 mr-2" /> Ajouter
-        </Button>
-      </div>
+      {/* Légende + mode peinture */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded bg-emerald-500" />
+                <span>Disponible</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded bg-red-500" />
+                <span>Indisponible</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded bg-blue-500" />
+                <span>Session planifiée</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Mode peinture :</span>
+              <Button
+                size="sm"
+                variant={paintMode === "available" ? "default" : "outline"}
+                className={paintMode === "available" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                onClick={() => setPaintMode(paintMode === "available" ? null : "available")}
+              >
+                Dispo
+              </Button>
+              <Button
+                size="sm"
+                variant={paintMode === "unavailable" ? "default" : "outline"}
+                className={paintMode === "unavailable" ? "bg-red-600 hover:bg-red-700" : ""}
+                onClick={() => setPaintMode(paintMode === "unavailable" ? null : "unavailable")}
+              >
+                Indispo
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Sessions assignées */}
-      {sessions && sessions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Mes sessions planifiées
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {sessions.filter((s) => new Date(s.endDate) >= new Date()).map((s) => (
-                <div key={s.id} className="flex items-center justify-between p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-sm">
-                  <span className="font-medium">{s.title}</span>
-                  <span className="text-muted-foreground">
-                    {new Date(s.startDate).toLocaleDateString("fr-FR")} — {new Date(s.endDate).toLocaleDateString("fr-FR")}
+      {/* Calendrier */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={prevMonth}>
+              <ChevronDown className="w-4 h-4 rotate-90" />
+            </Button>
+            <CardTitle className="text-lg capitalize">{monthName}</CardTitle>
+            <Button variant="ghost" size="sm" onClick={nextMonth}>
+              <ChevronDown className="w-4 h-4 -rotate-90" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Jours de la semaine */}
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {weekDays.map((d) => (
+              <div key={d} className="text-center text-xs font-medium text-muted-foreground py-1">{d}</div>
+            ))}
+          </div>
+
+          {/* Grille du calendrier */}
+          <div className="grid grid-cols-7 gap-1">
+            {/* Cellules vides avant le 1er */}
+            {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+              <div key={`empty-${i}`} className="aspect-square" />
+            ))}
+
+            {/* Jours du mois */}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+              const info = dateMap.get(dateStr);
+              const session = sessionDays.get(dateStr);
+              const isToday = dateStr === today.toISOString().split("T")[0];
+              const isWeekend = ((firstDayOfWeek + i) % 7) >= 5;
+              const isSelected = selectedDate === dateStr;
+
+              let bgClass = "bg-muted/30 hover:bg-muted/60";
+              if (info?.type === "available") bgClass = "bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-900/60";
+              if (info?.type === "unavailable") bgClass = "bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60";
+              if (isWeekend && !info) bgClass = "bg-muted/10 hover:bg-muted/30";
+
+              return (
+                <button
+                  key={day}
+                  onClick={() => handleCellClick(dateStr)}
+                  className={`
+                    aspect-square rounded-lg flex flex-col items-center justify-center relative transition-all text-sm
+                    ${bgClass}
+                    ${isToday ? "ring-2 ring-primary ring-offset-1" : ""}
+                    ${isSelected ? "ring-2 ring-blue-500 ring-offset-1" : ""}
+                    ${paintMode ? "cursor-pointer" : "cursor-pointer"}
+                  `}
+                >
+                  <span className={`font-medium ${isToday ? "text-primary" : ""} ${info?.type === "unavailable" ? "text-red-700 dark:text-red-300" : ""} ${info?.type === "available" ? "text-emerald-700 dark:text-emerald-300" : ""}`}>
+                    {day}
                   </span>
-                </div>
-              ))}
+                  {session && (
+                    <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  )}
+                  {info?.reason && (
+                    <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Détail du jour sélectionné */}
+      {selectedDate && (
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">
+                  {new Date(selectedDate + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                </p>
+                {selectedInfo && (
+                  <p className="text-sm mt-1">
+                    <Badge variant={selectedInfo.type === "available" ? "default" : "destructive"} className={selectedInfo.type === "available" ? "bg-emerald-600" : ""}>
+                      {selectedInfo.type === "available" ? "Disponible" : "Indisponible"}
+                    </Badge>
+                    {selectedInfo.reason && <span className="ml-2 text-muted-foreground">— {selectedInfo.reason}</span>}
+                  </p>
+                )}
+                {selectedSession && (
+                  <p className="text-sm mt-1 text-blue-600">Session : {selectedSession}</p>
+                )}
+                {!selectedInfo && !selectedSession && (
+                  <p className="text-sm text-muted-foreground mt-1">Aucun statut défini</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleQuickSet("available")}>
+                  Dispo
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => handleQuickSet("unavailable")}>
+                  Indispo
+                </Button>
+                {selectedInfo && (
+                  <Button size="sm" variant="outline" onClick={handleRemove}>
+                    Effacer
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Disponibilités à venir */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Disponibilités et indisponibilités à venir</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {upcoming.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              Aucune entrée de planning. Cliquez sur "Ajouter" pour déclarer vos disponibilités ou indisponibilités.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Du</TableHead>
-                  <TableHead>Au</TableHead>
-                  <TableHead>Horaires</TableHead>
-                  <TableHead>Motif</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {upcoming.map((item: any) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <Badge variant={item.type === "available" ? "default" : "destructive"}>
-                        {item.type === "available" ? "Disponible" : "Indisponible"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{new Date(item.startDate).toLocaleDateString("fr-FR")}</TableCell>
-                    <TableCell>{new Date(item.endDate).toLocaleDateString("fr-FR")}</TableCell>
-                    <TableCell>
-                      {item.startTime && item.endTime ? `${item.startTime} - ${item.endTime}` : "Journée entière"}
-                    </TableCell>
-                    <TableCell>{item.reason || "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
-                          <PenTool className="w-3 h-3" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(item.id)}>
-                          <AlertCircle className="w-3 h-3 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Historique */}
-      {past.length > 0 && (
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="w-full justify-between">
-              Historique ({past.length}) <ChevronDown className="w-4 h-4" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <Card>
-              <CardContent className="pt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Du</TableHead>
-                      <TableHead>Au</TableHead>
-                      <TableHead>Motif</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {past.map((item: any) => (
-                      <TableRow key={item.id} className="opacity-60">
-                        <TableCell>
-                          <Badge variant={item.type === "available" ? "outline" : "secondary"}>
-                            {item.type === "available" ? "Disponible" : "Indisponible"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(item.startDate).toLocaleDateString("fr-FR")}</TableCell>
-                        <TableCell>{new Date(item.endDate).toLocaleDateString("fr-FR")}</TableCell>
-                        <TableCell>{item.reason || "—"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-
-      {/* Dialog ajout/modification */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) resetForm(); }}>
+      {/* Dialog motif indisponibilité */}
+      <Dialog open={!!reasonDialog} onOpenChange={(open) => { if (!open) setReasonDialog(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingId ? "Modifier" : "Ajouter"} une disponibilité</DialogTitle>
+            <DialogTitle>Motif d'indisponibilité</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {reasonDialog && new Date(reasonDialog.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+            </p>
             <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={formType} onValueChange={(v: any) => setFormType(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="available">Disponible</SelectItem>
-                  <SelectItem value="unavailable">Indisponible</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Date début</Label>
-                <Input type="date" value={formStartDate} onChange={(e) => setFormStartDate(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Date fin</Label>
-                <Input type="date" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Heure début (optionnel)</Label>
-                <Input type="time" value={formStartTime} onChange={(e) => setFormStartTime(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Heure fin (optionnel)</Label>
-                <Input type="time" value={formEndTime} onChange={(e) => setFormEndTime(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Récurrence</Label>
-              <Select value={formRecurrence} onValueChange={setFormRecurrence}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucune (ponctuel)</SelectItem>
-                  <SelectItem value="weekly">Chaque semaine</SelectItem>
-                  <SelectItem value="monthly">Chaque mois</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Motif</Label>
+              <Label>Motif (optionnel)</Label>
               <Input
-                value={formReason}
-                onChange={(e) => setFormReason(e.target.value)}
-                placeholder={formType === "unavailable" ? "Ex: Congés, formation personnelle..." : "Ex: Libre pour interventions"}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Ex: Congés, RDV médical, formation personnelle..."
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") handleReasonSubmit(); }}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Notes (optionnel)</Label>
-              <Textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Précisions supplémentaires..." rows={2} />
-            </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={resetForm}>Annuler</Button>
-              <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
-                {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {editingId ? "Modifier" : "Ajouter"}
+              <Button variant="outline" onClick={() => setReasonDialog(null)}>Annuler</Button>
+              <Button variant="destructive" onClick={handleReasonSubmit}>
+                Marquer indisponible
               </Button>
             </div>
           </div>
