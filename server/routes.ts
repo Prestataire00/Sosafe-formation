@@ -5631,125 +5631,7 @@ Le contenu doit être en français, clair et bien structuré.`;
   });
 
   // ============================================================
-  // EMARGEMENT — Send emails & QR codes (Section 8.1)
-  // ============================================================
-
-  // POST /api/attendance-records/send-emargement — send emargement emails for a sheet
-  app.post("/api/attendance-records/send-emargement", async (req, res) => {
-    try {
-      const { sheetId } = req.body;
-      if (!sheetId) return res.status(400).json({ message: "sheetId requis" });
-
-      const sheet = await storage.getAttendanceSheet(sheetId);
-      if (!sheet) return res.status(404).json({ message: "Feuille introuvable" });
-
-      const session = await storage.getSession(sheet.sessionId);
-      const enrollments = await storage.getEnrollments(sheet.sessionId);
-      const activeEnrollments = enrollments.filter((e: any) => e.status !== "cancelled");
-
-      const appUrl = process.env.APP_URL
-        || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
-        || `http://localhost:${process.env.PORT || 3000}`;
-
-      let sentCount = 0;
-
-      for (const enrollment of activeEnrollments) {
-        const trainee = await storage.getTrainee(enrollment.traineeId);
-        if (!trainee?.email) continue;
-
-        // Find or create attendance record
-        const records = await storage.getAttendanceRecords(sheetId);
-        let record = records.find((r: any) => r.traineeId === enrollment.traineeId);
-
-        if (!record) {
-          record = await storage.createAttendanceRecord({
-            sheetId,
-            traineeId: enrollment.traineeId,
-            status: "absent",
-          });
-        }
-
-        // Skip if already signed
-        if (record.signedAt) continue;
-
-        // Generate token if needed
-        let token = record.emargementToken;
-        if (!token) {
-          token = crypto.randomUUID();
-          await storage.updateAttendanceRecord(record.id, { emargementToken: token } as any);
-        }
-
-        const signUrl = `${appUrl}/emargement/${token}`;
-        const periodLabel = sheet.period === "matin" ? "Matin"
-          : sheet.period === "apres-midi" ? "Apres-midi" : "Journee entiere";
-        const dateStr = new Date(sheet.date).toLocaleDateString("fr-FR");
-
-        const subject = `Emargement - ${session?.title || "Formation"} - ${dateStr} ${periodLabel}`;
-        const body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-          <h2 style="color:#1a1a1a;">Emargement de presence</h2>
-          <p>Bonjour ${trainee.firstName},</p>
-          <p>Merci de confirmer votre presence pour :</p>
-          <ul>
-            <li><strong>Formation :</strong> ${session?.title || ""}</li>
-            <li><strong>Date :</strong> ${dateStr}</li>
-            <li><strong>Periode :</strong> ${periodLabel}</li>
-          </ul>
-          <p><a href="${signUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Signer mon emargement</a></p>
-          <p style="color:#666;font-size:12px;margin-top:20px;">Ce lien est personnel et unique. Ne le partagez pas.</p>
-        </div>`;
-
-        const emailLog = await storage.createEmailLog({
-          recipient: trainee.email,
-          subject,
-          body,
-          status: "pending",
-        });
-
-        try {
-          const { sendEmailNow } = await import("./email-service");
-          await sendEmailNow(emailLog.id);
-        } catch {}
-
-        sentCount++;
-      }
-
-      res.json({ success: true, sentCount });
-    } catch (err) {
-      console.error("[emargement] send error:", err);
-      res.status(500).json({ message: "Erreur lors de l'envoi" });
-    }
-  });
-
-  // GET /api/attendance-records/:id/qrcode — generate QR code for a record
-  app.get("/api/attendance-records/:id/qrcode", async (req, res) => {
-    try {
-      const records = await storage.getAttendanceRecords();
-      const record = records.find((r: any) => r.id === req.params.id);
-      if (!record) return res.status(404).json({ message: "Enregistrement introuvable" });
-
-      let token = record.emargementToken;
-      if (!token) {
-        token = crypto.randomUUID();
-        await storage.updateAttendanceRecord(record.id, { emargementToken: token } as any);
-      }
-
-      const appUrl = process.env.APP_URL
-        || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
-        || `http://localhost:${process.env.PORT || 3000}`;
-
-      const QRCode = (await import("qrcode")).default;
-      const url = `${appUrl}/emargement/${token}`;
-      const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
-
-      res.json({ qrDataUrl, url });
-    } catch (err) {
-      console.error("[emargement] QR error:", err);
-      res.status(500).json({ message: "Erreur generation QR" });
-    }
-  });
-
-  // ============================================================
-  // ATTENDANCE REPORTS (Section 8.2)
+  // ATTENDANCE REPORTS (Section 8.2) — MUST be before /:id routes
   // ============================================================
 
   // GET /api/attendance-records/report-detail — detailed report with per-trainee breakdown
@@ -5984,6 +5866,124 @@ Le contenu doit être en français, clair et bien structuré.`;
     } catch (err) {
       console.error("[attendance-report] generate error:", err);
       res.status(500).json({ message: "Erreur generation rapport" });
+    }
+  });
+
+  // ============================================================
+  // EMARGEMENT — Send emails & QR codes (Section 8.1)
+  // ============================================================
+
+  // POST /api/attendance-records/send-emargement — send emargement emails for a sheet
+  app.post("/api/attendance-records/send-emargement", async (req, res) => {
+    try {
+      const { sheetId } = req.body;
+      if (!sheetId) return res.status(400).json({ message: "sheetId requis" });
+
+      const sheet = await storage.getAttendanceSheet(sheetId);
+      if (!sheet) return res.status(404).json({ message: "Feuille introuvable" });
+
+      const session = await storage.getSession(sheet.sessionId);
+      const enrollments = await storage.getEnrollments(sheet.sessionId);
+      const activeEnrollments = enrollments.filter((e: any) => e.status !== "cancelled");
+
+      const appUrl = process.env.APP_URL
+        || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+        || `http://localhost:${process.env.PORT || 3000}`;
+
+      let sentCount = 0;
+
+      for (const enrollment of activeEnrollments) {
+        const trainee = await storage.getTrainee(enrollment.traineeId);
+        if (!trainee?.email) continue;
+
+        // Find or create attendance record
+        const records = await storage.getAttendanceRecords(sheetId);
+        let record = records.find((r: any) => r.traineeId === enrollment.traineeId);
+
+        if (!record) {
+          record = await storage.createAttendanceRecord({
+            sheetId,
+            traineeId: enrollment.traineeId,
+            status: "absent",
+          });
+        }
+
+        // Skip if already signed
+        if (record.signedAt) continue;
+
+        // Generate token if needed
+        let token = record.emargementToken;
+        if (!token) {
+          token = crypto.randomUUID();
+          await storage.updateAttendanceRecord(record.id, { emargementToken: token } as any);
+        }
+
+        const signUrl = `${appUrl}/emargement/${token}`;
+        const periodLabel = sheet.period === "matin" ? "Matin"
+          : sheet.period === "apres-midi" ? "Apres-midi" : "Journee entiere";
+        const dateStr = new Date(sheet.date).toLocaleDateString("fr-FR");
+
+        const subject = `Emargement - ${session?.title || "Formation"} - ${dateStr} ${periodLabel}`;
+        const body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+          <h2 style="color:#1a1a1a;">Emargement de presence</h2>
+          <p>Bonjour ${trainee.firstName},</p>
+          <p>Merci de confirmer votre presence pour :</p>
+          <ul>
+            <li><strong>Formation :</strong> ${session?.title || ""}</li>
+            <li><strong>Date :</strong> ${dateStr}</li>
+            <li><strong>Periode :</strong> ${periodLabel}</li>
+          </ul>
+          <p><a href="${signUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Signer mon emargement</a></p>
+          <p style="color:#666;font-size:12px;margin-top:20px;">Ce lien est personnel et unique. Ne le partagez pas.</p>
+        </div>`;
+
+        const emailLog = await storage.createEmailLog({
+          recipient: trainee.email,
+          subject,
+          body,
+          status: "pending",
+        });
+
+        try {
+          const { sendEmailNow } = await import("./email-service");
+          await sendEmailNow(emailLog.id);
+        } catch {}
+
+        sentCount++;
+      }
+
+      res.json({ success: true, sentCount });
+    } catch (err) {
+      console.error("[emargement] send error:", err);
+      res.status(500).json({ message: "Erreur lors de l'envoi" });
+    }
+  });
+
+  // GET /api/attendance-records/:id/qrcode — generate QR code for a record
+  app.get("/api/attendance-records/:id/qrcode", async (req, res) => {
+    try {
+      const records = await storage.getAttendanceRecords();
+      const record = records.find((r: any) => r.id === req.params.id);
+      if (!record) return res.status(404).json({ message: "Enregistrement introuvable" });
+
+      let token = record.emargementToken;
+      if (!token) {
+        token = crypto.randomUUID();
+        await storage.updateAttendanceRecord(record.id, { emargementToken: token } as any);
+      }
+
+      const appUrl = process.env.APP_URL
+        || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+        || `http://localhost:${process.env.PORT || 3000}`;
+
+      const QRCode = (await import("qrcode")).default;
+      const url = `${appUrl}/emargement/${token}`;
+      const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
+
+      res.json({ qrDataUrl, url });
+    } catch (err) {
+      console.error("[emargement] QR error:", err);
+      res.status(500).json({ message: "Erreur generation QR" });
     }
   });
 
