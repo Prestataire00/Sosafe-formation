@@ -943,7 +943,7 @@ function CesuTab() {
                       {(selectedSubmission.trainees as any[]).map((t: any, i: number) => (
                         <TableRow key={i}>
                           <TableCell className="font-medium">{t.name}</TableCell>
-                          <TableCell className="text-sm">{t.email || "-"}</TableCell>
+                          <TableCell className="text-sm">{t.email ? <a href={`mailto:${t.email}`} className="text-primary hover:underline">{t.email}</a> : "-"}</TableCell>
                           <TableCell>
                             {t.diplomaValid ? (
                               <Badge className="bg-green-100 text-green-700">

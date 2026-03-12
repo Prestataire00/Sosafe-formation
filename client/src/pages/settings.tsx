@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, uploadFile } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -64,6 +64,7 @@ import {
   UserX,
   ClipboardList,
   Eye,
+  Upload,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type {
@@ -220,13 +221,59 @@ function OrganismeTab() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="org_logo_url">URL du logo</Label>
-            <Input
-              id="org_logo_url"
-              value={form.org_logo_url}
-              onChange={(e) => updateField("org_logo_url", e.target.value)}
-              placeholder="https://example.com/logo.png"
-            />
+            <Label>Logo de l'entreprise</Label>
+            {form.org_logo_url && (
+              <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                <img
+                  src={form.org_logo_url}
+                  alt="Logo"
+                  className="h-12 max-w-[200px] object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateField("org_logo_url", "")}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Supprimer
+                </Button>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <Input
+                id="org_logo_url"
+                value={form.org_logo_url}
+                onChange={(e) => updateField("org_logo_url", e.target.value)}
+                placeholder="https://example.com/logo.png ou téléverser →"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = "image/png,image/jpeg,image/svg+xml";
+                  input.onchange = async () => {
+                    const file = input.files?.[0];
+                    if (!file) return;
+                    try {
+                      const result = await uploadFile(file);
+                      updateField("org_logo_url", result.fileUrl);
+                    } catch { /* ignore */ }
+                  };
+                  input.click();
+                }}
+              >
+                <Upload className="w-3.5 h-3.5" /> Téléverser
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Ce logo apparaîtra sur tous les documents générés (conventions, attestations, catalogue, factures…)
+            </p>
           </div>
           <div className="flex justify-end pt-2">
             <Button type="submit" disabled={saveMutation.isPending}>
@@ -1211,8 +1258,8 @@ function UtilisateursTab() {
                   </TableCell>
                   <TableCell>{user.firstName}</TableCell>
                   <TableCell>{user.lastName}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {user.email || "—"}
+                  <TableCell className="text-sm">
+                    {user.email ? <a href={`mailto:${user.email}`} className="text-primary hover:underline">{user.email}</a> : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell>
                     <RoleBadge role={user.role} />

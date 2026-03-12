@@ -4,6 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -31,6 +32,7 @@ import {
   XCircle,
   Clock,
   UserCheck,
+  ArrowRight,
 } from "lucide-react";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -60,6 +62,7 @@ const ENROLLMENT_STATUSES = [
   { value: "confirmed", label: "Confirmé", icon: UserCheck },
   { value: "completed", label: "Terminé", icon: CheckCircle },
   { value: "cancelled", label: "Annulé", icon: XCircle },
+  { value: "waitlisted", label: "Liste d'attente", icon: Clock },
 ];
 
 function EnrollmentStatusBadge({ status }: { status: string }) {
@@ -210,6 +213,10 @@ export default function Enrollments() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [batchCount, setBatchCount] = useState(0);
   const [formKey, setFormKey] = useState(0);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveEnrollment, setMoveEnrollment] = useState<Enrollment | null>(null);
+  const [selectedTargetSession, setSelectedTargetSession] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const { data: enrollments, isLoading } = useQuery<Enrollment[]>({
@@ -273,6 +280,53 @@ export default function Enrollments() {
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
 
+  const { data: alternatives } = useQuery<Array<{ id: string; title: string; startDate: string; endDate: string; location: string | null; modality: string; remainingSpots: number }>>({
+    queryKey: ["/api/sessions", moveEnrollment?.sessionId, "alternatives"],
+    queryFn: () => fetch(`/api/sessions/${moveEnrollment?.sessionId}/alternatives`).then(r => r.json()),
+    enabled: !!moveEnrollment?.sessionId && moveDialogOpen,
+  });
+
+  const moveToSessionMutation = useMutation({
+    mutationFn: ({ enrollmentId, targetSessionId }: { enrollmentId: string; targetSessionId: string }) =>
+      apiRequest("POST", `/api/enrollments/${enrollmentId}/move-to-session`, { targetSessionId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
+      setMoveDialogOpen(false);
+      setMoveEnrollment(null);
+      setSelectedTargetSession("");
+      toast({ title: "Stagiaire déplacé vers la nouvelle session" });
+    },
+    onError: () => toast({ title: "Erreur lors du déplacement", variant: "destructive" }),
+  });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: string }) => {
+      const res = await apiRequest("POST", "/api/enrollments/bulk-update", { ids, status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/enrollment-counts"] });
+      setSelectedIds(new Set());
+      toast({ title: "Statut mis à jour en masse" });
+    },
+    onError: () => toast({ title: "Erreur lors de la mise à jour en masse", variant: "destructive" }),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/enrollments/bulk-delete", { ids });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/enrollment-counts"] });
+      setSelectedIds(new Set());
+      toast({ title: "Inscriptions supprimées en masse" });
+    },
+    onError: () => toast({ title: "Erreur lors de la suppression en masse", variant: "destructive" }),
+  });
+
   const filtered = enrollments?.filter((e) => {
     const session = sessions?.find((s) => s.id === e.sessionId);
     const trainee = trainees?.find((t) => t.id === e.traineeId);
@@ -289,6 +343,7 @@ export default function Enrollments() {
     confirmed: enrollments?.filter((e) => e.status === "confirmed").length || 0,
     completed: enrollments?.filter((e) => e.status === "completed").length || 0,
     cancelled: enrollments?.filter((e) => e.status === "cancelled").length || 0,
+    waitlisted: enrollments?.filter((e) => e.status === "waitlisted").length || 0,
   };
 
   return (
@@ -304,13 +359,14 @@ export default function Enrollments() {
         }
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         {[
           { value: "all", label: "Toutes" },
           { value: "registered", label: "Inscrits" },
           { value: "confirmed", label: "Confirmés" },
           { value: "completed", label: "Terminés" },
           { value: "cancelled", label: "Annulés" },
+          { value: "waitlisted", label: "En attente" },
         ].map((s) => (
           <Button
             key={s.value}
@@ -354,6 +410,18 @@ export default function Enrollments() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id))}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedIds(new Set(filtered.map((e) => e.id)));
+                        } else {
+                          setSelectedIds(new Set());
+                        }
+                      }}
+                    />
+                  </TableHead>
                   <TableHead>Stagiaire</TableHead>
                   <TableHead>Session</TableHead>
                   <TableHead>Entreprise</TableHead>
@@ -373,9 +441,25 @@ export default function Enrollments() {
                   return (
                     <TableRow key={enrollment.id} data-testid={`row-enrollment-${enrollment.id}`}>
                       <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(enrollment.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (checked) {
+                                next.add(enrollment.id);
+                              } else {
+                                next.delete(enrollment.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
                         <div>
                           <p className="text-sm font-medium">{trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}</p>
-                          <p className="text-xs text-muted-foreground">{trainee?.email}</p>
+                          {trainee?.email ? <a href={`mailto:${trainee.email}`} className="text-xs text-primary hover:underline">{trainee.email}</a> : null}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -385,7 +469,12 @@ export default function Enrollments() {
                         <p className="text-sm text-muted-foreground">{enterprise?.name || "-"}</p>
                       </TableCell>
                       <TableCell>
-                        <EnrollmentStatusBadge status={enrollment.status} />
+                        <div className="flex items-center gap-2">
+                          <EnrollmentStatusBadge status={enrollment.status} />
+                          {enrollment.status === "waitlisted" && enrollment.waitlistPosition && (
+                            <Badge variant="outline" className="text-xs">#{enrollment.waitlistPosition}</Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {isVaeProgram ? (
@@ -431,6 +520,12 @@ export default function Enrollments() {
                                 {s.label}
                               </DropdownMenuItem>
                             ))}
+                            {enrollment.status === "waitlisted" && (
+                              <DropdownMenuItem onClick={() => { setMoveEnrollment(enrollment); setMoveDialogOpen(true); }}>
+                                <ArrowRight className="w-4 h-4 mr-2" />
+                                Déplacer vers une autre session
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(enrollment.id)} data-testid={`button-delete-enrollment-${enrollment.id}`}>
                               <Trash2 className="w-4 h-4 mr-2" />
                               Supprimer
@@ -480,6 +575,88 @@ export default function Enrollments() {
             isPending={createMutation.isPending}
             batchCount={batchCount}
           />
+        </DialogContent>
+      </Dialog>
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-background border rounded-lg shadow-lg px-5 py-3">
+          <span className="text-sm font-medium">{selectedIds.size} sélectionné{selectedIds.size > 1 ? "s" : ""}</span>
+          <Button
+            size="sm"
+            className="bg-green-600 hover:bg-green-700 text-white"
+            disabled={bulkUpdateMutation.isPending}
+            onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), status: "confirmed" })}
+          >
+            <CheckCircle className="w-4 h-4 mr-1" />
+            Confirmer
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={bulkUpdateMutation.isPending}
+            onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), status: "cancelled" })}
+          >
+            <XCircle className="w-4 h-4 mr-1" />
+            Annuler
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={bulkDeleteMutation.isPending}
+            onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            Supprimer
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Déselectionner
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={moveDialogOpen} onOpenChange={(open) => { setMoveDialogOpen(open); if (!open) { setMoveEnrollment(null); setSelectedTargetSession(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Déplacer vers une autre session</DialogTitle>
+          </DialogHeader>
+          {moveEnrollment && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Sélectionnez une session alternative (même programme) pour déplacer ce stagiaire.
+              </p>
+              {alternatives && alternatives.length > 0 ? (
+                <>
+                  <Select value={selectedTargetSession} onValueChange={setSelectedTargetSession}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choisir une session" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {alternatives.map((alt) => (
+                        <SelectItem key={alt.id} value={alt.id}>
+                          {alt.title} — {new Date(alt.startDate).toLocaleDateString("fr-FR")} ({alt.remainingSpots} place{alt.remainingSpots > 1 ? "s" : ""})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setMoveDialogOpen(false)}>Annuler</Button>
+                    <Button
+                      disabled={!selectedTargetSession || moveToSessionMutation.isPending}
+                      onClick={() => moveToSessionMutation.mutate({ enrollmentId: moveEnrollment.id, targetSessionId: selectedTargetSession })}
+                    >
+                      {moveToSessionMutation.isPending ? "Déplacement..." : "Déplacer"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">Aucune session alternative disponible pour ce programme.</p>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </PageLayout>

@@ -92,7 +92,7 @@ interface InvoiceStats {
 // ============================================================
 
 function centimesToEuros(centimes: number): string {
-  return (centimes / 100).toFixed(2).replace(".", ",");
+  return (centimes / 100).toFixed(2);
 }
 
 function eurosToCentimes(euros: string): number {
@@ -102,7 +102,7 @@ function eurosToCentimes(euros: string): number {
 }
 
 function formatEuros(centimes: number): string {
-  return `${centimesToEuros(centimes)} €`;
+  return `${(centimes / 100).toFixed(2).replace(".", ",")} €`;
 }
 
 // ============================================================
@@ -852,7 +852,7 @@ function PaymentSchedulesTab({ invoices, enterprises }: { invoices: Invoice[]; e
 
   const { data: schedules, isLoading } = useQuery<PaymentSchedule[]>({
     queryKey: ["/api/payment-schedules", selectedInvoiceId],
-    queryFn: () => apiRequest("GET", `/api/payment-schedules?invoiceId=${selectedInvoiceId}`).then(r => r as unknown as PaymentSchedule[]),
+    queryFn: () => apiRequest("GET", `/api/payment-schedules?invoiceId=${selectedInvoiceId}`).then(r => r.json()) as Promise<PaymentSchedule[]>,
     enabled: !!selectedInvoiceId,
   });
 
@@ -1021,6 +1021,16 @@ function BankReconciliationTab({ invoices, enterprises }: { invoices: Invoice[];
     onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
 
+  const deleteTxMutation = useMutation({
+    mutationFn: (txId: string) =>
+      apiRequest("DELETE", `/api/bank-transactions/${txId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bank-transactions"] });
+      toast({ title: "Transaction supprimée" });
+    },
+    onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
+  });
+
   const syncMutation = useMutation({
     mutationFn: () =>
       apiRequest("POST", "/api/bank-transactions/sync-ponto", {
@@ -1127,29 +1137,38 @@ function BankReconciliationTab({ invoices, enterprises }: { invoices: Invoice[];
                         ) : "-"}
                       </TableCell>
                       <TableCell>
-                        {tx.reconciliationStatus === "unmatched" && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedTx(tx);
-                                setMatchInvoiceId("");
-                                setMatchDialogOpen(true);
-                              }}>
-                                <Link2 className="w-4 h-4 mr-2" />
-                                Rapprocher avec facture
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => ignoreMutation.mutate(tx.id)}>
-                                <Ban className="w-4 h-4 mr-2" />
-                                Ignorer
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {tx.reconciliationStatus === "unmatched" && (
+                              <>
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedTx(tx);
+                                  setMatchInvoiceId("");
+                                  setMatchDialogOpen(true);
+                                }}>
+                                  <Link2 className="w-4 h-4 mr-2" />
+                                  Rapprocher avec facture
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => ignoreMutation.mutate(tx.id)}>
+                                  <Ban className="w-4 h-4 mr-2" />
+                                  Ignorer
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => deleteTxMutation.mutate(tx.id)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Supprimer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   );
@@ -1255,7 +1274,7 @@ export default function Invoices() {
 
   const { data: scheduleForDialog } = useQuery<PaymentSchedule[]>({
     queryKey: ["/api/payment-schedules", scheduleInvoice?.id],
-    queryFn: () => apiRequest("GET", `/api/payment-schedules?invoiceId=${scheduleInvoice?.id}`).then(r => r as unknown as PaymentSchedule[]),
+    queryFn: () => apiRequest("GET", `/api/payment-schedules?invoiceId=${scheduleInvoice?.id}`).then(r => r.json()) as Promise<PaymentSchedule[]>,
     enabled: !!scheduleInvoice?.id,
   });
 

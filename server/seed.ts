@@ -525,5 +525,322 @@ export async function seedDatabase() {
     notes: null,
   });
 
+  // Seed attendance sheets & records for session 1
+  const sheet1 = await storage.createAttendanceSheet({
+    sessionId: session1.id,
+    date: "2026-03-10",
+    period: "matin",
+    notes: null,
+  });
+  const sheet2 = await storage.createAttendanceSheet({
+    sessionId: session1.id,
+    date: "2026-03-10",
+    period: "apres-midi",
+    notes: null,
+  });
+  const sheet3 = await storage.createAttendanceSheet({
+    sessionId: session1.id,
+    date: "2026-03-11",
+    period: "journee",
+    notes: null,
+  });
+
+  // Create attendance records for enrolled trainees
+  await storage.createAttendanceRecord({ sheetId: sheet1.id, traineeId: trainee1.id, status: "present", signedAt: new Date("2026-03-10T08:30:00"), notes: null, signatureData: null, emargementToken: null });
+  await storage.createAttendanceRecord({ sheetId: sheet1.id, traineeId: trainee2.id, status: "present", signedAt: new Date("2026-03-10T08:35:00"), notes: null, signatureData: null, emargementToken: null });
+  await storage.createAttendanceRecord({ sheetId: sheet1.id, traineeId: trainee3.id, status: "absent", signedAt: null, notes: null, signatureData: null, emargementToken: null });
+
+  await storage.createAttendanceRecord({ sheetId: sheet2.id, traineeId: trainee1.id, status: "present", signedAt: new Date("2026-03-10T13:30:00"), notes: null, signatureData: null, emargementToken: null });
+  await storage.createAttendanceRecord({ sheetId: sheet2.id, traineeId: trainee2.id, status: "late", signedAt: new Date("2026-03-10T14:05:00"), notes: "Arrivé en retard de 35 min", signatureData: null, emargementToken: null });
+  await storage.createAttendanceRecord({ sheetId: sheet2.id, traineeId: trainee3.id, status: "excused", signedAt: null, notes: "Justificatif médical", signatureData: null, emargementToken: null });
+
+  await storage.createAttendanceRecord({ sheetId: sheet3.id, traineeId: trainee1.id, status: "present", signedAt: new Date("2026-03-11T09:00:00"), notes: null, signatureData: null, emargementToken: null });
+  await storage.createAttendanceRecord({ sheetId: sheet3.id, traineeId: trainee2.id, status: "present", signedAt: new Date("2026-03-11T09:02:00"), notes: null, signatureData: null, emargementToken: null });
+  await storage.createAttendanceRecord({ sheetId: sheet3.id, traineeId: trainee3.id, status: "present", signedAt: new Date("2026-03-11T09:10:00"), notes: null, signatureData: null, emargementToken: null });
+
+  // Seed default organization settings (logo, name, etc.)
+  const defaultSettings: { key: string; value: string }[] = [
+    { key: "org_name", value: "SO'SAFE" },
+    { key: "org_email", value: "contact@so-safe.fr" },
+    { key: "org_phone", value: "06 00 00 00 00" },
+    { key: "org_address", value: "481 Chemin du gros chêne, 83390 PUGET VILLE" },
+    { key: "org_logo_url", value: "/logo-sosafe-official.png" },
+  ];
+  for (const s of defaultSettings) {
+    await storage.upsertOrganizationSetting(s);
+  }
+
   console.log("Database seeded successfully with SO'SAFE data");
+}
+
+/**
+ * Ensures essential organization settings exist (logo, name, etc.).
+ * Safe to call multiple times — only sets values if key is missing.
+ */
+export async function seedOrganizationDefaults() {
+  const existing = await storage.getOrganizationSettings();
+  const existingKeys = new Set(existing.map(s => s.key));
+
+  const defaults: { key: string; value: string }[] = [
+    { key: "org_name", value: "SO'SAFE" },
+    { key: "org_email", value: "contact@so-safe.fr" },
+    { key: "org_phone", value: "06 00 00 00 00" },
+    { key: "org_address", value: "481 Chemin du gros chêne, 83390 PUGET VILLE" },
+    { key: "org_logo_url", value: "/logo-sosafe-official.png" },
+  ];
+
+  for (const s of defaults) {
+    if (!existingKeys.has(s.key)) {
+      await storage.upsertOrganizationSetting(s);
+    }
+  }
+}
+
+/**
+ * Ensures essential email templates and automation rules exist.
+ * Safe to call multiple times — only creates what's missing.
+ */
+export async function seedAutomationDefaults() {
+  const templates = await storage.getEmailTemplates();
+  const rules = await storage.getAutomationRules();
+
+  // ---- Confirmation email template ----
+  const confirmTplName = "Confirmation d'inscription";
+  let confirmTemplate = templates.find(t => t.name === confirmTplName);
+  if (!confirmTemplate) {
+    confirmTemplate = await storage.createEmailTemplate({
+      name: confirmTplName,
+      subject: "Confirmation de votre inscription — {titre_session}",
+      body: `<p>Bonjour {prenom} {nom},</p>
+<p>Nous avons le plaisir de vous confirmer votre inscription à la session de formation suivante :</p>
+<ul>
+  <li><strong>Formation :</strong> {titre_formation}</li>
+  <li><strong>Session :</strong> {titre_session}</li>
+  <li><strong>Dates :</strong> du {date_debut} au {date_fin}</li>
+  <li><strong>Lieu :</strong> {lieu}</li>
+  <li><strong>Modalité :</strong> {modalite}</li>
+</ul>
+<p>Vous recevrez prochainement les informations complémentaires (convocation, programme détaillé, etc.).</p>
+<p>Cordialement,<br/>L'équipe SO'SAFE Formation</p>`,
+      category: "inscription",
+    });
+    console.log("[seed] Created email template:", confirmTplName);
+  }
+
+  // ---- Cancellation email template ----
+  const cancelTplName = "Annulation d'inscription";
+  let cancelTemplate = templates.find(t => t.name === cancelTplName);
+  if (!cancelTemplate) {
+    cancelTemplate = await storage.createEmailTemplate({
+      name: cancelTplName,
+      subject: "Annulation de votre inscription — {titre_session}",
+      body: `<p>Bonjour {prenom} {nom},</p>
+<p>Nous vous informons que votre inscription à la session suivante a été annulée :</p>
+<ul>
+  <li><strong>Formation :</strong> {titre_formation}</li>
+  <li><strong>Session :</strong> {titre_session}</li>
+  <li><strong>Dates :</strong> du {date_debut} au {date_fin}</li>
+</ul>
+<p>Si vous souhaitez vous inscrire à une autre session, n'hésitez pas à consulter notre catalogue de formations.</p>
+<p>Cordialement,<br/>L'équipe SO'SAFE Formation</p>`,
+      category: "inscription",
+    });
+    console.log("[seed] Created email template:", cancelTplName);
+  }
+
+  // ---- Automation rule: send confirmation email ----
+  const confirmRuleName = "Email de confirmation d'inscription";
+  if (!rules.find(r => r.name === confirmRuleName)) {
+    await storage.createAutomationRule({
+      name: confirmRuleName,
+      event: "enrollment_confirmed",
+      action: "send_email",
+      templateId: confirmTemplate.id,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", confirmRuleName);
+  }
+
+  // ---- Automation rule: send cancellation email ----
+  const cancelRuleName = "Email d'annulation d'inscription";
+  if (!rules.find(r => r.name === cancelRuleName)) {
+    await storage.createAutomationRule({
+      name: cancelRuleName,
+      event: "enrollment_cancelled",
+      action: "send_email",
+      templateId: cancelTemplate.id,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", cancelRuleName);
+  }
+
+  // ========================================================================
+  // CASCADE WORKFLOW RULES (Section 5.1 du cahier des charges)
+  // ========================================================================
+
+  // ---- 1. Devis signé → Génération convention ----
+  const quoteSignedRuleName = "Cascade : Devis signé → Convention";
+  if (!rules.find(r => r.name === quoteSignedRuleName)) {
+    await storage.createAutomationRule({
+      name: quoteSignedRuleName,
+      event: "quote_signed",
+      action: "generate_convention",
+      templateId: null,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", quoteSignedRuleName);
+  }
+
+  // ---- 2. Convention signée → Convocation ----
+  const conventionConvocationRuleName = "Cascade : Convention signée → Convocation";
+  if (!rules.find(r => r.name === conventionConvocationRuleName)) {
+    await storage.createAutomationRule({
+      name: conventionConvocationRuleName,
+      event: "convention_signed",
+      action: "generate_convocation",
+      templateId: null,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", conventionConvocationRuleName);
+  }
+
+  // ---- 2b. Convention signée → Facture ----
+  const conventionInvoiceRuleName = "Cascade : Convention signée → Facture";
+  if (!rules.find(r => r.name === conventionInvoiceRuleName)) {
+    await storage.createAutomationRule({
+      name: conventionInvoiceRuleName,
+      event: "convention_signed",
+      action: "create_invoice",
+      templateId: null,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", conventionInvoiceRuleName);
+  }
+
+  // ---- 3. Formation terminée → Attestation de réalisation ----
+  const completedAttestationRuleName = "Cascade : Formation terminée → Attestation";
+  if (!rules.find(r => r.name === completedAttestationRuleName)) {
+    await storage.createAutomationRule({
+      name: completedAttestationRuleName,
+      event: "enrollment_completed",
+      action: "generate_attestation_presence",
+      templateId: null,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", completedAttestationRuleName);
+  }
+
+  // ---- 4. Absence détectée → Email à l'apprenant ----
+  const absenceTraineeTplName = "Notification d'absence — Apprenant";
+  let absenceTraineeTemplate = templates.find(t => t.name === absenceTraineeTplName);
+  if (!absenceTraineeTemplate) {
+    absenceTraineeTemplate = await storage.createEmailTemplate({
+      name: absenceTraineeTplName,
+      subject: "Absence constatée — {titre_session}",
+      body: `<p>Bonjour {prenom} {nom},</p>
+<p>Nous avons constaté votre absence à la session de formation suivante :</p>
+<ul>
+  <li><strong>Formation :</strong> {titre_formation}</li>
+  <li><strong>Session :</strong> {titre_session}</li>
+  <li><strong>Dates :</strong> du {date_debut} au {date_fin}</li>
+</ul>
+<p>Cette absence a été signalée et peut avoir un impact sur la délivrance de votre attestation de formation.</p>
+<p>Si vous pensez qu'il s'agit d'une erreur, veuillez contacter votre organisme de formation dans les plus brefs délais.</p>
+<p>Cordialement,<br/>L'équipe {nom_organisme}</p>`,
+      category: "suivi",
+    });
+    console.log("[seed] Created email template:", absenceTraineeTplName);
+  }
+
+  const absenceTraineeRuleName = "Cascade : Absence → Email apprenant";
+  if (!rules.find(r => r.name === absenceTraineeRuleName)) {
+    await storage.createAutomationRule({
+      name: absenceTraineeRuleName,
+      event: "absence_detected",
+      action: "send_email",
+      templateId: absenceTraineeTemplate.id,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", absenceTraineeRuleName);
+  }
+
+  // ---- 4b. Absence détectée → Email à l'entreprise (commanditaire) ----
+  const absenceEnterpriseTplName = "Notification d'absence — Entreprise";
+  let absenceEnterpriseTemplate = templates.find(t => t.name === absenceEnterpriseTplName);
+  if (!absenceEnterpriseTemplate) {
+    absenceEnterpriseTemplate = await storage.createEmailTemplate({
+      name: absenceEnterpriseTplName,
+      subject: "Absence constatée — {prenom} {nom} — {titre_session}",
+      body: `<p>Bonjour,</p>
+<p>Nous souhaitons vous informer de l'absence constatée de votre collaborateur/trice lors de la session de formation suivante :</p>
+<ul>
+  <li><strong>Stagiaire :</strong> {prenom} {nom}</li>
+  <li><strong>Formation :</strong> {titre_formation}</li>
+  <li><strong>Session :</strong> {titre_session}</li>
+  <li><strong>Dates :</strong> du {date_debut} au {date_fin}</li>
+</ul>
+<p>Cette absence a été enregistrée et le certificat de réalisation ne pourra pas être délivré en l'état.</p>
+<p>Cordialement,<br/>L'équipe {nom_organisme}</p>`,
+      category: "suivi",
+    });
+    console.log("[seed] Created email template:", absenceEnterpriseTplName);
+  }
+
+  const absenceEnterpriseRuleName = "Cascade : Absence → Email entreprise";
+  if (!rules.find(r => r.name === absenceEnterpriseRuleName)) {
+    await storage.createAutomationRule({
+      name: absenceEnterpriseRuleName,
+      event: "absence_detected",
+      action: "send_email_enterprise",
+      templateId: absenceEnterpriseTemplate.id,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", absenceEnterpriseRuleName);
+  }
+
+  // ---- 4c. Absence détectée → Blocage certificat ----
+  const absenceBlockRuleName = "Cascade : Absence → Blocage certificat";
+  if (!rules.find(r => r.name === absenceBlockRuleName)) {
+    await storage.createAutomationRule({
+      name: absenceBlockRuleName,
+      event: "absence_detected",
+      action: "block_certificate",
+      templateId: null,
+      delay: 0,
+      active: true,
+      conditions: {},
+    });
+    console.log("[seed] Created automation rule:", absenceBlockRuleName);
+  }
+
+  // ---- 5. Fin de formation → Questionnaire de satisfaction ----
+  const satisfactionRuleName = "Cascade : Fin formation → Satisfaction à chaud";
+  if (!rules.find(r => r.name === satisfactionRuleName)) {
+    await storage.createAutomationRule({
+      name: satisfactionRuleName,
+      event: "post_session_followup",
+      action: "send_evaluation",
+      templateId: null,
+      delay: 0,
+      active: true,
+      conditions: { evaluationType: "satisfaction_hot" },
+    });
+    console.log("[seed] Created automation rule:", satisfactionRuleName);
+  }
 }

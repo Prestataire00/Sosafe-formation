@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +19,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -64,6 +76,27 @@ import {
   MonitorPlay,
   Image,
   BarChart3,
+  Loader2,
+  FileUp,
+  Trophy,
+  RotateCcw,
+  Timer,
+  ThumbsUp,
+  Lock,
+  ChevronRight,
+  ChevronLeft,
+  Play,
+  Smile,
+  ArrowRight,
+  Zap,
+  Target,
+  Award,
+  Send,
+  EyeOff as EyeOffIcon,
+  Archive,
+  Maximize2,
+  GitBranch,
+  Gamepad2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -72,6 +105,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -93,6 +127,7 @@ import type {
 } from "@shared/schema";
 import { ELEARNING_BLOCK_TYPES, DEFAULT_QUIZ_QUESTIONS } from "@shared/schema";
 import { uploadFile } from "@/lib/queryClient";
+import { ImmersiveModuleViewer } from "@/pages/learner/components/ImmersiveModuleViewer";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
@@ -127,6 +162,8 @@ function BlockTypeIcon({ type }: { type: string }) {
   if (type === "document") return <Download className="w-4 h-4 text-sky-500" />;
   if (type === "image") return <Image className="w-4 h-4 text-rose-500" />;
   if (type === "survey") return <BarChart3 className="w-4 h-4 text-violet-500" />;
+  if (type === "scenario") return <GitBranch className="w-4 h-4 text-cyan-500" />;
+  if (type === "simulation") return <Gamepad2 className="w-4 h-4 text-lime-500" />;
   return <FileText className="w-4 h-4 text-muted-foreground" />;
 }
 
@@ -158,6 +195,8 @@ function ModuleForm({
   const [sessionId, setSessionId] = useState(module?.sessionId || "");
   const [status, setStatus] = useState(module?.status || "draft");
   const [orderIndex, setOrderIndex] = useState(module?.orderIndex?.toString() || "0");
+  const [requireSequential, setRequireSequential] = useState(module?.requireSequential !== false);
+  const [pathType, setPathType] = useState((module as any)?.pathType || "combined");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,6 +207,8 @@ function ModuleForm({
       sessionId: sessionId || null,
       status,
       orderIndex: parseInt(orderIndex) || 0,
+      requireSequential,
+      pathType,
     });
   };
 
@@ -240,6 +281,44 @@ function ModuleForm({
             onChange={(e) => setOrderIndex(e.target.value)}
             min="0"
           />
+        </div>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div className="space-y-0.5">
+          <Label>Progression séquentielle</Label>
+          <p className="text-xs text-muted-foreground">
+            L'apprenant doit valider chaque bloc avant d'accéder au suivant
+          </p>
+        </div>
+        <Switch checked={requireSequential} onCheckedChange={setRequireSequential} />
+      </div>
+      <div className="space-y-2">
+        <Label>Type de parcours</Label>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { value: "combined", label: "Combiné", desc: "Textes + Quiz + Flashcards", icon: <Layers className="w-4 h-4" />, color: "blue" },
+            { value: "learning", label: "Apprentissage", desc: "Textes + Flashcards", icon: <BookOpen className="w-4 h-4" />, color: "green" },
+            { value: "assessment", label: "Évaluation", desc: "Quiz uniquement", icon: <Target className="w-4 h-4" />, color: "orange" },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setPathType(opt.value)}
+              className={`flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-all text-center ${
+                pathType === opt.value
+                  ? opt.color === "blue"
+                    ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                    : opt.color === "green"
+                    ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                    : "border-orange-500 bg-orange-50 dark:bg-orange-900/20"
+                  : "border-muted hover:border-muted-foreground/30"
+              }`}
+            >
+              <span className={pathType === opt.value ? (opt.color === "blue" ? "text-blue-600" : opt.color === "green" ? "text-green-600" : "text-orange-600") : "text-muted-foreground"}>{opt.icon}</span>
+              <span className="text-xs font-medium">{opt.label}</span>
+              <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
+            </button>
+          ))}
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-2">
@@ -321,6 +400,35 @@ function BlockForm({
   const [minScore, setMinScore] = useState((block as any)?.minScore?.toString() || "");
   const [minViewPercent, setMinViewPercent] = useState((block as any)?.minViewPercent?.toString() || "");
 
+  // Scenario config
+  const existingScenario = (block as any)?.scenarioConfig as any;
+  const [scenarioNodes, setScenarioNodes] = useState<Array<{
+    id: string; situation: string; imageUrl?: string;
+    choices: Array<{ id: string; text: string; feedback: string; points: number; nextNodeId: string | null }>;
+  }>>(existingScenario?.nodes || [{ id: "node-1", situation: "", choices: [{ id: "c-1-1", text: "", feedback: "", points: 10, nextNodeId: null }] }]);
+
+  // Simulation config
+  const existingSim = (block as any)?.simulationConfig as any;
+  const [simSubType, setSimSubType] = useState<string>(existingSim?.subType || "ordering");
+  const [simInstructions, setSimInstructions] = useState(existingSim?.instructions || "");
+  const [simOrderingItems, setSimOrderingItems] = useState<Array<{ id: string; text: string; correctPosition: number }>>(
+    existingSim?.orderingItems || [{ id: "o-1", text: "", correctPosition: 0 }]
+  );
+  const [simMatchingPairs, setSimMatchingPairs] = useState<Array<{ id: string; left: string; right: string }>>(
+    existingSim?.matchingPairs || [{ id: "m-1", left: "", right: "" }]
+  );
+  const [simFillBlankText, setSimFillBlankText] = useState(existingSim?.fillBlankText || "");
+  const [simFillBlankAnswers, setSimFillBlankAnswers] = useState<Array<{ blankIndex: number; correctAnswer: string }>>(
+    existingSim?.fillBlankAnswers || [{ blankIndex: 0, correctAnswer: "" }]
+  );
+  const [simWordBank, setSimWordBank] = useState<string[]>(existingSim?.wordBank || []);
+  const [simHotspotImageUrl, setSimHotspotImageUrl] = useState(existingSim?.hotspotImageUrl || "");
+  const [simHotspotZones, setSimHotspotZones] = useState<Array<{ id: string; x: number; y: number; width: number; height: number; label: string; isCorrect: boolean }>>(
+    existingSim?.hotspotZones || []
+  );
+  const [simAllowRetry, setSimAllowRetry] = useState(existingSim?.allowRetry ?? true);
+  const [simPassingScore, setSimPassingScore] = useState(existingSim?.passingScore?.toString() || "70");
+
   const addFlashcard = () => setFlashcards([...flashcards, { front: "", back: "" }]);
   const removeFlashcard = (idx: number) => {
     if (flashcards.length <= 1) return;
@@ -387,6 +495,32 @@ function BlockForm({
     }
     if (type === "image") {
       data.imageUrls = imageUrls.filter((u) => u.trim());
+    }
+    if (type === "scenario") {
+      data.scenarioConfig = {
+        startNodeId: scenarioNodes[0]?.id || "node-1",
+        nodes: scenarioNodes,
+      };
+    }
+    if (type === "simulation") {
+      const simConfig: Record<string, unknown> = {
+        subType: simSubType,
+        instructions: simInstructions,
+        allowRetry: simAllowRetry,
+        passingScore: parseInt(simPassingScore) || 70,
+      };
+      if (simSubType === "ordering") simConfig.orderingItems = simOrderingItems;
+      if (simSubType === "matching") simConfig.matchingPairs = simMatchingPairs;
+      if (simSubType === "fill_blank") {
+        simConfig.fillBlankText = simFillBlankText;
+        simConfig.fillBlankAnswers = simFillBlankAnswers;
+        simConfig.wordBank = simWordBank.filter(w => w.trim());
+      }
+      if (simSubType === "hotspot") {
+        simConfig.hotspotImageUrl = simHotspotImageUrl;
+        simConfig.hotspotZones = simHotspotZones;
+      }
+      data.simulationConfig = simConfig;
     }
     onSubmit(data);
   };
@@ -694,6 +828,320 @@ function BlockForm({
           <p className="text-xs text-muted-foreground">
             Les questions seront ajoutees apres la creation du bloc. Contrairement au quiz, le sondage n'est pas note.
           </p>
+        </div>
+      )}
+
+      {/* SCENARIO EDITOR */}
+      {type === "scenario" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Noeuds du scenario</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => {
+              const newId = `node-${scenarioNodes.length + 1}`;
+              setScenarioNodes([...scenarioNodes, {
+                id: newId, situation: "",
+                choices: [{ id: `c-${newId}-1`, text: "", feedback: "", points: 10, nextNodeId: null }],
+              }]);
+            }}>
+              <Plus className="w-3 h-3 mr-1" /> Ajouter un noeud
+            </Button>
+          </div>
+          {scenarioNodes.map((node, nIdx) => (
+            <div key={node.id} className="space-y-2 border rounded-lg p-3 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase text-muted-foreground">Noeud {nIdx + 1} ({node.id})</p>
+                {scenarioNodes.length > 1 && (
+                  <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive"
+                    onClick={() => setScenarioNodes(scenarioNodes.filter((_, i) => i !== nIdx))}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
+              <Textarea
+                value={node.situation}
+                onChange={(e) => {
+                  const updated = [...scenarioNodes];
+                  updated[nIdx] = { ...updated[nIdx], situation: e.target.value };
+                  setScenarioNodes(updated);
+                }}
+                placeholder="Description de la situation..."
+                rows={3}
+              />
+              <div className="space-y-1">
+                <Label className="text-xs">Image URL (optionnel)</Label>
+                <Input
+                  value={node.imageUrl || ""}
+                  onChange={(e) => {
+                    const updated = [...scenarioNodes];
+                    updated[nIdx] = { ...updated[nIdx], imageUrl: e.target.value };
+                    setScenarioNodes(updated);
+                  }}
+                  placeholder="https://..."
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium">Choix</p>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => {
+                    const updated = [...scenarioNodes];
+                    updated[nIdx].choices.push({
+                      id: `c-${node.id}-${node.choices.length + 1}`,
+                      text: "", feedback: "", points: 0, nextNodeId: null,
+                    });
+                    setScenarioNodes(updated);
+                  }}>
+                    <Plus className="w-3 h-3 mr-1" /> Choix
+                  </Button>
+                </div>
+                {node.choices.map((choice, cIdx) => (
+                  <div key={choice.id} className="space-y-1 border rounded p-2 bg-background">
+                    <div className="flex gap-2">
+                      <Input
+                        value={choice.text}
+                        onChange={(e) => {
+                          const updated = [...scenarioNodes];
+                          updated[nIdx].choices[cIdx].text = e.target.value;
+                          setScenarioNodes(updated);
+                        }}
+                        placeholder="Texte du choix"
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        value={choice.points}
+                        onChange={(e) => {
+                          const updated = [...scenarioNodes];
+                          updated[nIdx].choices[cIdx].points = parseInt(e.target.value) || 0;
+                          setScenarioNodes(updated);
+                        }}
+                        placeholder="Pts"
+                        className="w-16"
+                      />
+                      {node.choices.length > 1 && (
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                          onClick={() => {
+                            const updated = [...scenarioNodes];
+                            updated[nIdx].choices = updated[nIdx].choices.filter((_, i) => i !== cIdx);
+                            setScenarioNodes(updated);
+                          }}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                    <Input
+                      value={choice.feedback}
+                      onChange={(e) => {
+                        const updated = [...scenarioNodes];
+                        updated[nIdx].choices[cIdx].feedback = e.target.value;
+                        setScenarioNodes(updated);
+                      }}
+                      placeholder="Feedback contextuel..."
+                    />
+                    <Select
+                      value={choice.nextNodeId || "__end__"}
+                      onValueChange={(v) => {
+                        const updated = [...scenarioNodes];
+                        updated[nIdx].choices[cIdx].nextNodeId = v === "__end__" ? null : v;
+                        setScenarioNodes(updated);
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Noeud suivant" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__end__">Fin du scenario</SelectItem>
+                        {scenarioNodes.filter(n => n.id !== node.id).map(n => (
+                          <SelectItem key={n.id} value={n.id}>Noeud: {n.situation?.substring(0, 30) || n.id}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* SIMULATION EDITOR */}
+      {type === "simulation" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Configuration de l'exercice pratique</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Type d'exercice</Label>
+              <Select value={simSubType} onValueChange={setSimSubType}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ordering">Classement (remettre en ordre)</SelectItem>
+                  <SelectItem value="matching">Appariement (relier les paires)</SelectItem>
+                  <SelectItem value="fill_blank">Texte a trous</SelectItem>
+                  <SelectItem value="hotspot">Zones sensibles (clic sur image)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Score minimum (%)</Label>
+              <Input type="number" value={simPassingScore} onChange={(e) => setSimPassingScore(e.target.value)} min="0" max="100" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Instructions</Label>
+            <Textarea value={simInstructions} onChange={(e) => setSimInstructions(e.target.value)} placeholder="Instructions pour l'apprenant..." rows={2} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Autoriser les tentatives multiples</Label>
+            <Switch checked={simAllowRetry} onCheckedChange={setSimAllowRetry} />
+          </div>
+
+          {/* ORDERING */}
+          {simSubType === "ordering" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium">Elements a ordonner</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() =>
+                  setSimOrderingItems([...simOrderingItems, { id: `o-${simOrderingItems.length + 1}`, text: "", correctPosition: simOrderingItems.length }])
+                }>
+                  <Plus className="w-3 h-3 mr-1" /> Ajouter
+                </Button>
+              </div>
+              {simOrderingItems.map((item, idx) => (
+                <div key={item.id} className="flex gap-2 items-center">
+                  <span className="text-xs text-muted-foreground w-6">{idx + 1}.</span>
+                  <Input value={item.text} onChange={(e) => {
+                    const updated = [...simOrderingItems];
+                    updated[idx].text = e.target.value;
+                    setSimOrderingItems(updated);
+                  }} placeholder="Element" className="flex-1" />
+                  <Input type="number" value={item.correctPosition} onChange={(e) => {
+                    const updated = [...simOrderingItems];
+                    updated[idx].correctPosition = parseInt(e.target.value) || 0;
+                    setSimOrderingItems(updated);
+                  }} placeholder="Pos" className="w-16" title="Position correcte (0-indexe)" />
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                    disabled={simOrderingItems.length <= 1}
+                    onClick={() => setSimOrderingItems(simOrderingItems.filter((_, i) => i !== idx))}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* MATCHING */}
+          {simSubType === "matching" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium">Paires a associer</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() =>
+                  setSimMatchingPairs([...simMatchingPairs, { id: `m-${simMatchingPairs.length + 1}`, left: "", right: "" }])
+                }>
+                  <Plus className="w-3 h-3 mr-1" /> Ajouter
+                </Button>
+              </div>
+              {simMatchingPairs.map((pair, idx) => (
+                <div key={pair.id} className="flex gap-2 items-center">
+                  <Input value={pair.left} onChange={(e) => {
+                    const updated = [...simMatchingPairs];
+                    updated[idx].left = e.target.value;
+                    setSimMatchingPairs(updated);
+                  }} placeholder="Element gauche" className="flex-1" />
+                  <span className="text-muted-foreground">→</span>
+                  <Input value={pair.right} onChange={(e) => {
+                    const updated = [...simMatchingPairs];
+                    updated[idx].right = e.target.value;
+                    setSimMatchingPairs(updated);
+                  }} placeholder="Correspondance droite" className="flex-1" />
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                    disabled={simMatchingPairs.length <= 1}
+                    onClick={() => setSimMatchingPairs(simMatchingPairs.filter((_, i) => i !== idx))}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* FILL BLANK */}
+          {simSubType === "fill_blank" && (
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Texte (utilisez {"{blank}"} pour les trous)</Label>
+                <Textarea value={simFillBlankText} onChange={(e) => setSimFillBlankText(e.target.value)}
+                  placeholder="La {blank} est le processus par lequel {blank} se transforme..." rows={3} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Reponses correctes (par ordre des trous)</Label>
+                {simFillBlankAnswers.map((ans, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <span className="text-xs text-muted-foreground w-12">Trou {idx + 1}</span>
+                    <Input value={ans.correctAnswer} onChange={(e) => {
+                      const updated = [...simFillBlankAnswers];
+                      updated[idx].correctAnswer = e.target.value;
+                      setSimFillBlankAnswers(updated);
+                    }} placeholder="Reponse correcte" className="flex-1" />
+                  </div>
+                ))}
+                <Button type="button" variant="ghost" size="sm" onClick={() =>
+                  setSimFillBlankAnswers([...simFillBlankAnswers, { blankIndex: simFillBlankAnswers.length, correctAnswer: "" }])
+                }>
+                  <Plus className="w-3 h-3 mr-1" /> Ajouter un trou
+                </Button>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Banque de mots (un par ligne)</Label>
+                <Textarea value={simWordBank.join("\n")} onChange={(e) => setSimWordBank(e.target.value.split("\n"))}
+                  placeholder="mot1\nmot2\nmot3" rows={2} />
+              </div>
+            </div>
+          )}
+
+          {/* HOTSPOT */}
+          {simSubType === "hotspot" && (
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label className="text-xs">URL de l'image</Label>
+                <Input value={simHotspotImageUrl} onChange={(e) => setSimHotspotImageUrl(e.target.value)} placeholder="https://..." />
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium">Zones cliquables (en % de l'image)</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() =>
+                  setSimHotspotZones([...simHotspotZones, { id: `z-${simHotspotZones.length + 1}`, x: 10, y: 10, width: 20, height: 20, label: "", isCorrect: true }])
+                }>
+                  <Plus className="w-3 h-3 mr-1" /> Zone
+                </Button>
+              </div>
+              {simHotspotZones.map((zone, idx) => (
+                <div key={zone.id} className="flex gap-1 items-center flex-wrap border rounded p-2 bg-background">
+                  <Input value={zone.label} onChange={(e) => {
+                    const updated = [...simHotspotZones];
+                    updated[idx].label = e.target.value;
+                    setSimHotspotZones(updated);
+                  }} placeholder="Label" className="w-24" />
+                  <Input type="number" value={zone.x} onChange={(e) => {
+                    const updated = [...simHotspotZones]; updated[idx].x = parseInt(e.target.value) || 0; setSimHotspotZones(updated);
+                  }} className="w-14" title="X %" />
+                  <Input type="number" value={zone.y} onChange={(e) => {
+                    const updated = [...simHotspotZones]; updated[idx].y = parseInt(e.target.value) || 0; setSimHotspotZones(updated);
+                  }} className="w-14" title="Y %" />
+                  <Input type="number" value={zone.width} onChange={(e) => {
+                    const updated = [...simHotspotZones]; updated[idx].width = parseInt(e.target.value) || 0; setSimHotspotZones(updated);
+                  }} className="w-14" title="Largeur %" />
+                  <Input type="number" value={zone.height} onChange={(e) => {
+                    const updated = [...simHotspotZones]; updated[idx].height = parseInt(e.target.value) || 0; setSimHotspotZones(updated);
+                  }} className="w-14" title="Hauteur %" />
+                  <div className="flex items-center gap-1">
+                    <Switch checked={zone.isCorrect} onCheckedChange={(v) => {
+                      const updated = [...simHotspotZones]; updated[idx].isCorrect = v; setSimHotspotZones(updated);
+                    }} />
+                    <span className="text-xs">{zone.isCorrect ? "Correcte" : "Incorrecte"}</span>
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive"
+                    onClick={() => setSimHotspotZones(simHotspotZones.filter((_, i) => i !== idx))}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1107,10 +1555,38 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
   const { toast } = useToast();
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [editBlock, setEditBlock] = useState<ElearningBlock | undefined>();
+  const [aiEditBlock, setAiEditBlock] = useState<ElearningBlock | null>(null);
+  const [aiAction, setAiAction] = useState<string>("");
+  const [aiInstructions, setAiInstructions] = useState("");
+  const [aiCount, setAiCount] = useState("5");
+  const [aiLoading, setAiLoading] = useState(false);
 
   const { data: blocks, isLoading } = useQuery<ElearningBlock[]>({
     queryKey: ["/api/elearning-blocks", `?moduleId=${moduleId}`],
   });
+
+  const handleAiEdit = async () => {
+    if (!aiEditBlock || !aiAction) return;
+    setAiLoading(true);
+    try {
+      const resp = await apiRequest("POST", `/api/elearning-blocks/${aiEditBlock.id}/ai-edit`, {
+        action: aiAction,
+        instructions: aiInstructions || undefined,
+        count: parseInt(aiCount) || 5,
+      });
+      const data = await resp.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-blocks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quiz-questions"] });
+      toast({ title: data.message || "Modification IA appliquée" });
+      setAiEditBlock(null);
+      setAiAction("");
+      setAiInstructions("");
+    } catch (err: any) {
+      toast({ title: err?.message || "Erreur IA", variant: "destructive" });
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const createBlockMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => apiRequest("POST", "/api/elearning-blocks", data),
@@ -1191,9 +1667,9 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
       ) : (
         <div className="space-y-2">
           {sortedBlocks.map((block, idx) => (
-            <Card key={block.id} className="border">
-              <CardContent className="p-3">
-                <div className="flex items-start gap-2">
+            <Card key={block.id} className="border overflow-hidden">
+              <CardContent className="p-2 sm:p-3">
+                <div className="flex items-start gap-2 min-w-0">
                   <div className="flex flex-col items-center gap-0.5 pt-0.5">
                     <Button
                       variant="ghost"
@@ -1289,6 +1765,30 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
                         <Pencil className="w-4 h-4 mr-2" />
                         Modifier
                       </DropdownMenuItem>
+                      {block.type === "text" && (
+                        <>
+                          <DropdownMenuItem onClick={() => { setAiEditBlock(block); setAiAction("enrich_text"); }}>
+                            <Sparkles className="w-4 h-4 mr-2 text-amber-500" />
+                            Enrichir avec l'IA
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setAiEditBlock(block); setAiAction("rewrite"); }}>
+                            <Sparkles className="w-4 h-4 mr-2 text-blue-500" />
+                            Réécrire avec l'IA
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {(block.type === "quiz" || block.type === "video_quiz" || block.type === "survey") && (
+                        <DropdownMenuItem onClick={() => { setAiEditBlock(block); setAiAction("add_questions"); }}>
+                          <Sparkles className="w-4 h-4 mr-2 text-green-500" />
+                          Ajouter des questions (IA)
+                        </DropdownMenuItem>
+                      )}
+                      {block.type === "flashcard" && (
+                        <DropdownMenuItem onClick={() => { setAiEditBlock(block); setAiAction("add_flashcards"); }}>
+                          <Sparkles className="w-4 h-4 mr-2 text-pink-500" />
+                          Ajouter des flashcards (IA)
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem className="text-destructive" onClick={() => deleteBlockMutation.mutate(block.id)}>
                         <Trash2 className="w-4 h-4 mr-2" />
                         Supprimer
@@ -1317,6 +1817,79 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
             }
             isPending={createBlockMutation.isPending || updateBlockMutation.isPending}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Edit Dialog */}
+      <Dialog open={!!aiEditBlock} onOpenChange={(open) => { if (!open) { setAiEditBlock(null); setAiAction(""); setAiInstructions(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              {aiAction === "add_questions" && "Ajouter des questions avec l'IA"}
+              {aiAction === "add_flashcards" && "Ajouter des flashcards avec l'IA"}
+              {aiAction === "enrich_text" && "Enrichir le contenu avec l'IA"}
+              {aiAction === "rewrite" && "Réécrire avec l'IA"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {aiEditBlock && (
+              <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
+                <span className="font-medium">Bloc :</span> {aiEditBlock.title}
+              </div>
+            )}
+
+            {(aiAction === "add_questions" || aiAction === "add_flashcards") && (
+              <div className="space-y-2">
+                <Label>Nombre à générer</Label>
+                <Select value={aiCount} onValueChange={setAiCount}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3</SelectItem>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="8">8</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="15">15</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Instructions supplémentaires (optionnel)</Label>
+              <Textarea
+                value={aiInstructions}
+                onChange={(e) => setAiInstructions(e.target.value)}
+                placeholder={
+                  aiAction === "add_questions"
+                    ? "Ex: Questions plus difficiles, axées sur la sécurité incendie..."
+                    : aiAction === "add_flashcards"
+                      ? "Ex: Focalisées sur les définitions clés..."
+                      : "Ex: Ajouter des exemples concrets, structurer en listes..."
+                }
+                rows={3}
+              />
+            </div>
+
+            <Button className="w-full" onClick={handleAiEdit} disabled={aiLoading}>
+              {aiLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Génération en cours...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {aiAction === "add_questions" && `Générer ${aiCount} questions`}
+                  {aiAction === "add_flashcards" && `Générer ${aiCount} flashcards`}
+                  {aiAction === "enrich_text" && "Enrichir le contenu"}
+                  {aiAction === "rewrite" && "Réécrire le contenu"}
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -1443,8 +2016,8 @@ function SessionResourceManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <div className="space-y-1 flex-1 max-w-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="space-y-1 flex-1 sm:max-w-xs">
           <Label className="text-sm">Session</Label>
           <Select value={selectedSession || "none"} onValueChange={(v) => setSelectedSession(v === "none" ? "" : v)}>
             <SelectTrigger><SelectValue placeholder="Selectionner une session" /></SelectTrigger>
@@ -1466,12 +2039,12 @@ function SessionResourceManager() {
       {/* SCORM Upload section */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0">
               <p className="font-medium text-sm">Packages SCORM</p>
               <p className="text-xs text-muted-foreground">Telechargez des modules SCORM (ZIP) pour les utiliser dans vos blocs e-learning</p>
             </div>
-            <div>
+            <div className="shrink-0">
               <input
                 type="file"
                 accept=".zip"
@@ -1507,7 +2080,7 @@ function SessionResourceManager() {
         />
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1741,11 +2314,858 @@ function SubmissionReviewer({ blockId }: { blockId: string }) {
   );
 }
 
+// ============================================================
+// KAHOOT-STYLE COLORS
+// ============================================================
+const PREVIEW_KAHOOT_COLORS = [
+  "bg-red-500 hover:bg-red-600 text-white",
+  "bg-blue-500 hover:bg-blue-600 text-white",
+  "bg-green-500 hover:bg-green-600 text-white",
+  "bg-yellow-500 hover:bg-yellow-600 text-white",
+];
+
+const BLOCK_TYPE_ICONS: Record<string, typeof BookOpen> = {
+  text: FileText,
+  quiz: Zap,
+  flashcard: Layers,
+  video: MonitorPlay,
+  video_quiz: MonitorPlay,
+  document: FileText,
+  image: Image,
+  assignment: ClipboardCheck,
+  survey: ClipboardCheck,
+  scenario: GitBranch,
+  simulation: Gamepad2,
+};
+
+const BLOCK_TYPE_LABELS: Record<string, string> = {
+  text: "Texte",
+  video: "Vidéo",
+  quiz: "Quiz",
+  video_quiz: "Vidéo + Quiz",
+  flashcard: "Flashcards",
+  scorm: "SCORM",
+  assignment: "Évaluation",
+  resource_web: "Ressource web",
+  virtual_class: "Classe virtuelle",
+  document: "Document",
+  image: "Image / Galerie",
+  survey: "Sondage",
+  scenario: "Scénario",
+  simulation: "Mise en situation",
+};
+
+// ============================================================
+// IMMERSIVE QUIZ PLAYER (Preview Mode)
+// ============================================================
+function PreviewQuizPlayer({
+  questions,
+  onComplete,
+}: {
+  questions: QuizQuestion[];
+  onComplete: (score: number, passed: boolean) => void;
+}) {
+  const sorted = useMemo(
+    () => questions.slice().sort((a, b) => a.orderIndex - b.orderIndex),
+    [questions]
+  );
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [results, setResults] = useState<Record<number, boolean>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(15);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Timer per question
+  useEffect(() => {
+    if (submitted || showFeedback) return;
+    setTimeLeft(15);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          handleAnswer(-1);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [currentIdx, submitted, showFeedback]);
+
+  const handleAnswer = useCallback((optIdx: number) => {
+    if (submitted || showFeedback) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    const q = sorted[currentIdx];
+    if (!q) return;
+    const isCorrect = optIdx === q.correctAnswer;
+
+    setAnswers((prev) => ({ ...prev, [currentIdx]: optIdx }));
+    setResults((prev) => ({ ...prev, [currentIdx]: isCorrect }));
+    setShowFeedback(true);
+
+    setTimeout(() => {
+      setShowFeedback(false);
+      if (currentIdx < sorted.length - 1) {
+        setCurrentIdx((i) => i + 1);
+      } else {
+        // Compute final score
+        const finalResults = { ...results, [currentIdx]: isCorrect };
+        const correct = Object.values(finalResults).filter(Boolean).length;
+        const pct = Math.round((correct / sorted.length) * 100);
+        setScore(pct);
+        setSubmitted(true);
+        onComplete(pct, pct >= 70);
+      }
+    }, 1200);
+  }, [currentIdx, submitted, showFeedback, sorted, results, onComplete]);
+
+  if (sorted.length === 0) {
+    return <p className="text-sm text-muted-foreground py-4">Aucune question disponible.</p>;
+  }
+
+  // Score screen
+  if (submitted) {
+    const correct = Object.values(results).filter(Boolean).length;
+    const passed = score >= 70;
+    return (
+      <div className="space-y-6">
+        <div className={`text-center p-8 rounded-2xl border-2 ${
+          passed
+            ? "bg-gradient-to-br from-green-50 to-emerald-50 border-green-300 dark:from-green-900/20 dark:to-emerald-900/20 dark:border-green-700"
+            : "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300 dark:from-amber-900/20 dark:to-orange-900/20 dark:border-amber-700"
+        }`}>
+          {score >= 90 ? (
+            <Trophy className="w-16 h-16 mx-auto text-amber-500 mb-3 animate-bounce" />
+          ) : passed ? (
+            <ThumbsUp className="w-16 h-16 mx-auto text-green-500 mb-3" />
+          ) : (
+            <Smile className="w-16 h-16 mx-auto text-amber-500 mb-3" />
+          )}
+          <p className="text-5xl font-bold mb-2">{score}%</p>
+          <p className="text-base font-medium text-muted-foreground">
+            {passed ? "Félicitations, quiz réussi !" : `Score insuffisant (70% requis)`}
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            {correct}/{sorted.length} réponses correctes
+          </p>
+        </div>
+
+        {/* Correction détaillée */}
+        <div className="space-y-3">
+          <p className="text-sm font-semibold">Correction détaillée :</p>
+          {sorted.map((q, i) => {
+            const wasCorrect = results[i];
+            const opts = (q.options as string[]) || [];
+            return (
+              <div key={q.id} className={`p-3 rounded-lg border ${wasCorrect ? "border-green-200 bg-green-50/50 dark:bg-green-900/10" : "border-red-200 bg-red-50/50 dark:bg-red-900/10"}`}>
+                <div className="flex items-start gap-2">
+                  {wasCorrect ? <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" /> : <span className="text-red-500 font-bold text-sm mt-0.5 shrink-0">✗</span>}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{i + 1}. {q.question}</p>
+                    {!wasCorrect && (
+                      <p className="text-xs text-green-600 mt-1">Bonne réponse : {opts[q.correctAnswer] || "?"}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {!passed && (
+          <Button className="w-full" onClick={() => {
+            setCurrentIdx(0);
+            setAnswers({});
+            setResults({});
+            setSubmitted(false);
+            setScore(0);
+            setShowFeedback(false);
+          }}>
+            <RotateCcw className="w-4 h-4 mr-2" /> Réessayer le quiz
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // Question display — Kahoot style
+  const q = sorted[currentIdx];
+  const options = (q.options as string[]) || [];
+
+  return (
+    <div className="space-y-5">
+      {/* Progress */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-bold text-primary">
+          {currentIdx + 1}/{sorted.length}
+        </span>
+        <Progress value={((currentIdx) / sorted.length) * 100} className="flex-1 h-2.5" />
+      </div>
+
+      {/* Timer */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Timer className={`w-4 h-4 ${timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-muted-foreground"}`} />
+            <span className={`text-lg font-mono font-bold ${timeLeft <= 5 ? "text-red-500" : ""}`}>{timeLeft}s</span>
+          </div>
+          <div className="flex gap-1">
+            {sorted.map((_, i) => (
+              <div key={i} className={`w-2 h-2 rounded-full ${
+                i < currentIdx ? (results[i] ? "bg-green-500" : "bg-red-400") : i === currentIdx ? "bg-primary" : "bg-muted"
+              }`} />
+            ))}
+          </div>
+        </div>
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-1000 ease-linear ${timeLeft <= 5 ? "bg-red-500" : "bg-blue-500"}`}
+            style={{ width: `${(timeLeft / 15) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Question */}
+      <div className="text-center py-6 px-4">
+        <Badge variant="secondary" className="text-xs mb-3">
+          {q.type === "vrai_faux" ? "Vrai/Faux" : "QCM"}
+        </Badge>
+        <p className="text-xl font-bold leading-snug">{q.question}</p>
+      </div>
+
+      {/* Kahoot-style options */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {options.map((opt, optIdx) => {
+          const colorClass = PREVIEW_KAHOOT_COLORS[optIdx % PREVIEW_KAHOOT_COLORS.length];
+          const isFeedbackCorrect = showFeedback && optIdx === q.correctAnswer;
+          const isFeedbackWrong = showFeedback && answers[currentIdx] === optIdx && optIdx !== q.correctAnswer;
+
+          return (
+            <button
+              key={optIdx}
+              onClick={() => handleAnswer(optIdx)}
+              disabled={showFeedback}
+              className={`p-5 rounded-xl text-left font-semibold text-base transition-all transform ${
+                isFeedbackCorrect
+                  ? "bg-green-500 text-white ring-4 ring-green-300 scale-105 shadow-lg"
+                  : isFeedbackWrong
+                    ? "bg-gray-400 text-white opacity-60 scale-95"
+                    : showFeedback
+                      ? "bg-gray-200 text-gray-500 opacity-40 dark:bg-gray-700 dark:text-gray-400"
+                      : colorClass
+              } ${!showFeedback ? "hover:scale-[1.03] active:scale-95 shadow-md hover:shadow-lg cursor-pointer" : ""}`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
+                  {String.fromCharCode(65 + optIdx)}
+                </span>
+                {opt}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// IMMERSIVE FLASHCARD PLAYER (Preview Mode)
+// ============================================================
+function PreviewFlashcardPlayer({
+  cards,
+  onComplete,
+}: {
+  cards: { front: string; back: string }[];
+  onComplete: () => void;
+}) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [knownCards, setKnownCards] = useState<Set<number>>(new Set());
+  const [completed, setCompleted] = useState(false);
+
+  if (cards.length === 0) {
+    return <p className="text-sm text-muted-foreground py-4">Aucune flashcard disponible.</p>;
+  }
+
+  if (completed) {
+    return (
+      <div className="text-center p-8 rounded-2xl border-2 bg-gradient-to-br from-violet-50 to-pink-50 border-violet-300 dark:from-violet-900/20 dark:to-pink-900/20 dark:border-violet-700">
+        <Award className="w-14 h-14 mx-auto text-violet-500 mb-3" />
+        <p className="text-xl font-bold mb-1">Flashcards terminées !</p>
+        <p className="text-sm text-muted-foreground">
+          {knownCards.size}/{cards.length} cartes maîtrisées
+        </p>
+        <Button variant="outline" className="mt-4" onClick={() => {
+          setCurrentIdx(0);
+          setFlipped(false);
+          setKnownCards(new Set());
+          setCompleted(false);
+        }}>
+          <RotateCcw className="w-4 h-4 mr-2" /> Recommencer
+        </Button>
+      </div>
+    );
+  }
+
+  const card = cards[currentIdx];
+
+  return (
+    <div className="space-y-5">
+      {/* Progress */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-bold text-primary">
+          Carte {currentIdx + 1}/{cards.length}
+        </span>
+        <Progress value={((currentIdx + 1) / cards.length) * 100} className="flex-1 h-2.5" />
+        <Badge variant="secondary" className="text-xs">
+          {knownCards.size} maîtrisée{knownCards.size > 1 ? "s" : ""}
+        </Badge>
+      </div>
+
+      {/* Card */}
+      <div
+        onClick={() => setFlipped(!flipped)}
+        className={`cursor-pointer rounded-2xl border-2 p-10 text-center min-h-[200px] flex items-center justify-center transition-all duration-300 transform hover:shadow-xl ${
+          flipped
+            ? "bg-gradient-to-br from-pink-50 to-purple-50 border-pink-300 dark:from-pink-900/20 dark:to-purple-900/20 dark:border-pink-700 scale-[1.01]"
+            : "bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 hover:border-pink-300"
+        }`}
+      >
+        <div className="max-w-md">
+          <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center justify-center gap-1">
+            <RotateCcw className="w-3 h-3" />
+            {flipped ? "Réponse" : "Question"} — Cliquez pour retourner
+          </p>
+          <p className="text-xl font-semibold leading-relaxed">{flipped ? card.back : card.front}</p>
+        </div>
+      </div>
+
+      {/* Navigation buttons */}
+      <div className="flex items-center gap-3">
+        <Button
+          variant="outline"
+          className="flex-1"
+          disabled={currentIdx === 0}
+          onClick={() => { setCurrentIdx(currentIdx - 1); setFlipped(false); }}
+        >
+          <ChevronLeft className="w-4 h-4 mr-1" /> Précédente
+        </Button>
+
+        {flipped && (
+          <>
+            <Button
+              variant="outline"
+              className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
+              onClick={() => {
+                if (currentIdx < cards.length - 1) {
+                  setCurrentIdx(currentIdx + 1);
+                  setFlipped(false);
+                } else {
+                  setCompleted(true);
+                  onComplete();
+                }
+              }}
+            >
+              À revoir
+            </Button>
+            <Button
+              className="flex-1 bg-green-600 hover:bg-green-700"
+              onClick={() => {
+                setKnownCards((prev) => new Set(prev).add(currentIdx));
+                if (currentIdx < cards.length - 1) {
+                  setCurrentIdx(currentIdx + 1);
+                  setFlipped(false);
+                } else {
+                  setCompleted(true);
+                  onComplete();
+                }
+              }}
+            >
+              <CheckCircle className="w-4 h-4 mr-1" /> Maîtrisée
+            </Button>
+          </>
+        )}
+
+        {!flipped && (
+          <Button
+            variant="outline"
+            className="flex-1"
+            disabled={currentIdx === cards.length - 1}
+            onClick={() => { setCurrentIdx(currentIdx + 1); setFlipped(false); }}
+          >
+            Suivante <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// QUIZ LOADER — loads questions per block
+// ============================================================
+function PreviewQuizLoader({
+  blockId,
+  onComplete,
+}: {
+  blockId: string;
+  onComplete: (score: number, passed: boolean) => void;
+}) {
+  const { data: questions, isLoading } = useQuery<QuizQuestion[]>({
+    queryKey: ["/api/quiz-questions", `?blockId=${blockId}`],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8 gap-2">
+        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground">Chargement du quiz...</span>
+      </div>
+    );
+  }
+
+  if (!questions || questions.length === 0) {
+    return <p className="text-sm text-muted-foreground py-4">Aucune question disponible pour ce quiz.</p>;
+  }
+
+  return <PreviewQuizPlayer questions={questions} onComplete={onComplete} />;
+}
+
+// ============================================================
+// MODULE PREVIEW — Full immersive test mode
+// ============================================================
+function ModulePreview({ moduleId }: { moduleId: string }) {
+  const { data: blocks, isLoading } = useQuery<ElearningBlock[]>({
+    queryKey: ["/api/elearning-blocks", `?moduleId=${moduleId}`],
+  });
+
+  const { data: moduleData } = useQuery<ElearningModule>({
+    queryKey: [`/api/elearning-modules/${moduleId}`],
+  });
+
+  const [activeBlockIdx, setActiveBlockIdx] = useState(0);
+  const [completedBlocks, setCompletedBlocks] = useState<Set<number>>(new Set());
+  const [started, setStarted] = useState(false);
+
+  const sortedBlocks = useMemo(
+    () => (blocks || []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
+    [blocks]
+  );
+
+  const totalBlocks = sortedBlocks.length;
+  const progressPct = totalBlocks > 0 ? Math.round((completedBlocks.size / totalBlocks) * 100) : 0;
+  const allCompleted = completedBlocks.size === totalBlocks && totalBlocks > 0;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Chargement du module...</p>
+      </div>
+    );
+  }
+
+  if (totalBlocks === 0) {
+    return (
+      <div className="text-center py-12">
+        <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+        <p className="text-muted-foreground">Aucun bloc dans ce module.</p>
+      </div>
+    );
+  }
+
+  // Start screen
+  if (!started) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-8 px-4">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center mb-4">
+            <Play className="w-8 h-8 text-white" />
+          </div>
+          <h3 className="text-2xl font-bold mb-2">{moduleData?.title || "Module"}</h3>
+          {moduleData?.description && (
+            <p className="text-muted-foreground max-w-md mx-auto">{moduleData.description}</p>
+          )}
+        </div>
+
+        {/* Parcours overview */}
+        <div className="border rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold flex items-center gap-2">
+            <Target className="w-4 h-4 text-primary" />
+            Parcours : {totalBlocks} étape{totalBlocks > 1 ? "s" : ""}
+          </p>
+          <div className="space-y-2">
+            {sortedBlocks.map((block, idx) => {
+              const Icon = BLOCK_TYPE_ICONS[block.type] || FileText;
+              return (
+                <div key={block.id} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-muted/50">
+                  <span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">{idx + 1}</span>
+                  <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm flex-1">{block.title}</span>
+                  <Badge variant="outline" className="text-xs">{BLOCK_TYPE_LABELS[block.type] || block.type}</Badge>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <Button size="lg" className="w-full text-base h-12" onClick={() => setStarted(true)}>
+          <Play className="w-5 h-5 mr-2" /> Commencer le parcours
+        </Button>
+      </div>
+    );
+  }
+
+  // Completion screen
+  if (allCompleted) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-10 px-4">
+          <div className="relative inline-block mb-4">
+            <Trophy className="w-20 h-20 text-amber-500 animate-bounce" />
+            <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <h3 className="text-2xl font-bold mb-2">Module terminé !</h3>
+          <p className="text-muted-foreground">
+            Vous avez complété les {totalBlocks} étapes du parcours.
+          </p>
+        </div>
+
+        {/* Summary */}
+        <div className="border rounded-xl p-4 space-y-2">
+          {sortedBlocks.map((block, idx) => (
+            <div key={block.id} className="flex items-center gap-3 py-1.5">
+              <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+              <span className="text-sm flex-1">{block.title}</span>
+              <Badge variant="outline" className="text-xs">{BLOCK_TYPE_LABELS[block.type] || block.type}</Badge>
+            </div>
+          ))}
+        </div>
+
+        <Button variant="outline" className="w-full" onClick={() => {
+          setStarted(false);
+          setActiveBlockIdx(0);
+          setCompletedBlocks(new Set());
+        }}>
+          <RotateCcw className="w-4 h-4 mr-2" /> Recommencer le parcours
+        </Button>
+      </div>
+    );
+  }
+
+  // Active block view
+  const activeBlock = sortedBlocks[activeBlockIdx];
+  const isCurrentCompleted = completedBlocks.has(activeBlockIdx);
+  const BlockIcon = BLOCK_TYPE_ICONS[activeBlock.type] || FileText;
+
+  return (
+    <div className="space-y-4">
+      {/* Top progress bar */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium">Progression du module</span>
+          <span className="font-bold text-primary">{progressPct}%</span>
+        </div>
+        <Progress value={progressPct} className="h-3" />
+        <div className="flex gap-1.5">
+          {sortedBlocks.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                // Can go back to completed, or stay on current
+                if (completedBlocks.has(idx) || idx === activeBlockIdx || idx <= Math.max(...Array.from(completedBlocks), -1) + 1) {
+                  setActiveBlockIdx(idx);
+                }
+              }}
+              className={`flex-1 h-2 rounded-full transition-all ${
+                completedBlocks.has(idx)
+                  ? "bg-green-500"
+                  : idx === activeBlockIdx
+                    ? "bg-primary animate-pulse"
+                    : idx <= Math.max(...Array.from(completedBlocks), -1) + 1
+                      ? "bg-muted hover:bg-muted-foreground/30 cursor-pointer"
+                      : "bg-muted/50"
+              }`}
+              title={sortedBlocks[idx]?.title}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Block header */}
+      <div className="flex items-center gap-3 py-3 border-b">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <BlockIcon className="w-4 h-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm">{activeBlock.title}</p>
+          <p className="text-xs text-muted-foreground">
+            Étape {activeBlockIdx + 1}/{totalBlocks} — {BLOCK_TYPE_LABELS[activeBlock.type] || activeBlock.type}
+          </p>
+        </div>
+        {isCurrentCompleted && <CheckCircle className="w-5 h-5 text-green-500" />}
+      </div>
+
+      {/* Block content */}
+      <div className="py-2">
+        {/* TEXT block */}
+        {activeBlock.type === "text" && (
+          <div className="space-y-4">
+            <div
+              className="prose prose-sm max-w-none dark:prose-invert leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: (activeBlock.content || "").replace(/\n/g, "<br/>") }}
+            />
+            {!isCurrentCompleted && (
+              <Button className="w-full" onClick={() => {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 300);
+                }
+              }}>
+                <CheckCircle className="w-4 h-4 mr-2" /> J'ai lu ce contenu — Continuer
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* VIDEO block */}
+        {(activeBlock.type === "video" || activeBlock.type === "video_quiz") && (
+          <div className="space-y-4">
+            {activeBlock.videoUrl && (
+              <div className="aspect-video rounded-xl overflow-hidden bg-black border">
+                {activeBlock.videoUrl.match(/youtube|youtu\.be|vimeo/) ? (
+                  <iframe
+                    src={(() => {
+                      const url = activeBlock.videoUrl || "";
+                      const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+                      if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+                      const vm = url.match(/vimeo\.com\/(\d+)/);
+                      if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+                      return url;
+                    })()}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video src={activeBlock.videoUrl} controls className="w-full h-full" />
+                )}
+              </div>
+            )}
+            {activeBlock.type === "video_quiz" ? (
+              <PreviewQuizLoader
+                blockId={activeBlock.id}
+                onComplete={(score, passed) => {
+                  if (passed) {
+                    setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                    if (activeBlockIdx < totalBlocks - 1) {
+                      setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 1500);
+                    }
+                  }
+                }}
+              />
+            ) : !isCurrentCompleted ? (
+              <Button className="w-full" onClick={() => {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 300);
+                }
+              }}>
+                <CheckCircle className="w-4 h-4 mr-2" /> J'ai visionné la vidéo — Continuer
+              </Button>
+            ) : null}
+          </div>
+        )}
+
+        {/* QUIZ block */}
+        {activeBlock.type === "quiz" && (
+          <PreviewQuizLoader
+            blockId={activeBlock.id}
+            onComplete={(score, passed) => {
+              if (passed) {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 1500);
+                }
+              }
+            }}
+          />
+        )}
+
+        {/* FLASHCARD block */}
+        {activeBlock.type === "flashcard" && (
+          <PreviewFlashcardPlayer
+            cards={(Array.isArray((activeBlock as any).flashcards) ? (activeBlock as any).flashcards : []) as { front: string; back: string }[]}
+            onComplete={() => {
+              setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+              if (activeBlockIdx < totalBlocks - 1) {
+                setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 500);
+              }
+            }}
+          />
+        )}
+
+        {/* DOCUMENT block */}
+        {activeBlock.type === "document" && (
+          <div className="space-y-4">
+            <div className="border rounded-xl p-6 text-center">
+              <FileText className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+              <p className="font-medium">{activeBlock.title}</p>
+              {activeBlock.content && (
+                <p className="text-sm text-muted-foreground mt-2">{activeBlock.content}</p>
+              )}
+              {(activeBlock as any).documentUrl && (
+                <Button variant="outline" className="mt-3" onClick={() => window.open((activeBlock as any).documentUrl, "_blank")}>
+                  <Download className="w-4 h-4 mr-2" /> Télécharger le document
+                </Button>
+              )}
+            </div>
+            {!isCurrentCompleted && (
+              <Button className="w-full" onClick={() => {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 300);
+                }
+              }}>
+                <CheckCircle className="w-4 h-4 mr-2" /> Document consulté — Continuer
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* IMAGE block */}
+        {activeBlock.type === "image" && (
+          <div className="space-y-4">
+            {activeBlock.imageUrls && Array.isArray(activeBlock.imageUrls) && (
+              <div className="grid grid-cols-2 gap-3">
+                {(activeBlock.imageUrls as string[]).map((url, i) => (
+                  <img key={i} src={url} alt={`Image ${i + 1}`} className="rounded-lg border w-full object-cover" />
+                ))}
+              </div>
+            )}
+            {activeBlock.content && <p className="text-sm text-muted-foreground">{activeBlock.content}</p>}
+            {!isCurrentCompleted && (
+              <Button className="w-full" onClick={() => {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 300);
+                }
+              }}>
+                <CheckCircle className="w-4 h-4 mr-2" /> Contenu visualisé — Continuer
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* SURVEY block */}
+        {activeBlock.type === "survey" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm text-violet-600 bg-violet-50 dark:bg-violet-900/20 rounded-lg p-3">
+              <ClipboardCheck className="w-4 h-4" />
+              <span>Sondage — Vos réponses ne sont pas notées</span>
+            </div>
+            <PreviewQuizLoader
+              blockId={activeBlock.id}
+              onComplete={() => {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 1000);
+                }
+              }}
+            />
+          </div>
+        )}
+
+        {/* ASSIGNMENT block */}
+        {activeBlock.type === "assignment" && (
+          <div className="space-y-4">
+            <div className="border rounded-xl p-6">
+              <ClipboardCheck className="w-10 h-10 text-primary/40 mb-3" />
+              <p className="font-medium mb-2">Évaluation formative</p>
+              {activeBlock.content && (
+                <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: (activeBlock.content || "").replace(/\n/g, "<br/>") }} />
+              )}
+            </div>
+            {!isCurrentCompleted && (
+              <Button className="w-full" onClick={() => {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 300);
+                }
+              }}>
+                <CheckCircle className="w-4 h-4 mr-2" /> Évaluation terminée — Continuer
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Generic fallback for other block types */}
+        {!["text", "video", "video_quiz", "quiz", "flashcard", "document", "image", "survey", "assignment"].includes(activeBlock.type) && (
+          <div className="space-y-4">
+            <div className="border rounded-xl p-6 text-center">
+              <BookOpen className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+              <p className="font-medium">{activeBlock.title}</p>
+              {activeBlock.content && (
+                <div className="prose prose-sm max-w-none dark:prose-invert mt-3" dangerouslySetInnerHTML={{ __html: (activeBlock.content || "").replace(/\n/g, "<br/>") }} />
+              )}
+            </div>
+            {!isCurrentCompleted && (
+              <Button className="w-full" onClick={() => {
+                setCompletedBlocks((prev) => new Set(prev).add(activeBlockIdx));
+                if (activeBlockIdx < totalBlocks - 1) {
+                  setTimeout(() => setActiveBlockIdx(activeBlockIdx + 1), 300);
+                }
+              }}>
+                <CheckCircle className="w-4 h-4 mr-2" /> Marquer comme terminé — Continuer
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      {isCurrentCompleted && (
+        <div className="flex gap-3 pt-2 border-t">
+          {activeBlockIdx > 0 && (
+            <Button variant="outline" className="flex-1" onClick={() => setActiveBlockIdx(activeBlockIdx - 1)}>
+              <ChevronLeft className="w-4 h-4 mr-1" /> Précédent
+            </Button>
+          )}
+          {activeBlockIdx < totalBlocks - 1 && (
+            <Button className="flex-1" onClick={() => setActiveBlockIdx(activeBlockIdx + 1)}>
+              Étape suivante <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Elearning() {
   const [search, setSearch] = useState("");
   const [sessionFilter, setSessionFilter] = useState("all");
   const [moduleDialogOpen, setModuleDialogOpen] = useState(false);
   const [editModule, setEditModule] = useState<ElearningModule | undefined>();
+  const [previewModuleId, setPreviewModuleId] = useState<string | null>(null);
+  const [immersiveModuleId, setImmersiveModuleId] = useState<string | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiTitle, setAiTitle] = useState("");
+  const [aiProgramId, setAiProgramId] = useState("");
+  const [aiSessionId, setAiSessionId] = useState("");
+  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPathType, setAiPathType] = useState("combined");
+  const [aiDuration, setAiDuration] = useState("moyen");
+  const [aiBlockTypes, setAiBlockTypes] = useState<string[]>(["text", "quiz", "flashcard"]);
+  const aiFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const { data: modules, isLoading } = useQuery<ElearningModule[]>({
@@ -1788,8 +3208,59 @@ export default function Elearning() {
       queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
       toast({ title: "Module supprimé" });
     },
-    onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
+    onError: (err: any) => toast({ title: "Erreur lors de la suppression", description: err?.message || "", variant: "destructive" }),
   });
+
+  const publishModuleMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiRequest("PATCH", `/api/elearning-modules/${id}`, { status }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
+      const labels: Record<string, string> = { published: "Module publié — visible par les apprenants", draft: "Module dépublié — masqué pour les apprenants", archived: "Module archivé" };
+      toast({ title: labels[vars.status] || "Statut mis à jour" });
+    },
+    onError: () => toast({ title: "Erreur lors du changement de statut", variant: "destructive" }),
+  });
+
+  const handleAiGenerate = async () => {
+    if (!aiFile) return;
+    setAiGenerating(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", aiFile);
+      if (aiTitle) formData.append("title", aiTitle);
+      if (aiProgramId && aiProgramId !== "none") formData.append("programId", aiProgramId);
+      if (aiSessionId && aiSessionId !== "none") formData.append("sessionId", aiSessionId);
+      formData.append("pathType", aiPathType);
+      formData.append("duration", aiDuration);
+      if (aiBlockTypes.length > 0) formData.append("blockTypes", aiBlockTypes.join(","));
+
+      const resp = await fetch("/api/elearning-modules/generate-from-document", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.message || "Erreur lors de la génération");
+      }
+      const result = await resp.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
+      setAiDialogOpen(false);
+      setAiFile(null);
+      setAiTitle("");
+      setAiProgramId("");
+      setAiSessionId("");
+      setAiPathType("combined");
+      setAiDuration("moyen");
+      setAiBlockTypes(["text", "quiz", "flashcard"]);
+      toast({ title: result.message || "Parcours généré avec succès" });
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Erreur", variant: "destructive" });
+    } finally {
+      setAiGenerating(false);
+    }
+  };
 
   const filtered = modules
     ?.filter((m) => {
@@ -1804,6 +3275,7 @@ export default function Elearning() {
     .sort((a, b) => a.orderIndex - b.orderIndex) || [];
 
   return (
+    <>
     <PageLayout>
       <PageHeader title="E-Learning" subtitle="Gérez vos modules de formation en ligne" />
 
@@ -1813,19 +3285,25 @@ export default function Elearning() {
           <TabsTrigger value="resources"><FileText className="w-4 h-4 mr-2" />Ressources</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="modules">
+        <TabsContent value="modules" className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div />
-        <Button onClick={() => { setEditModule(undefined); setModuleDialogOpen(true); }}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nouveau module
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setAiDialogOpen(true)}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Générer avec l'IA
+          </Button>
+          <Button onClick={() => { setEditModule(undefined); setModuleDialogOpen(true); }}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nouveau module
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <SearchInput value={search} onChange={setSearch} placeholder="Rechercher un module..." className="max-w-sm" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Rechercher un module..." className="sm:max-w-sm" />
         <Select value={sessionFilter} onValueChange={setSessionFilter}>
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger className="w-full sm:w-[220px]">
             <SelectValue placeholder="Filtrer par session" />
           </SelectTrigger>
           <SelectContent>
@@ -1856,23 +3334,33 @@ export default function Elearning() {
           ) : undefined}
         />
       ) : (
-        <Card>
-          <CardContent className="p-4">
+        <Card className="overflow-hidden">
+          <CardContent className="p-2 sm:p-4">
             <Accordion type="multiple" className="w-full">
               {filtered.map((mod) => {
                 const session = sessions?.find((s) => s.id === mod.sessionId);
                 const program = programs?.find((p) => p.id === mod.programId);
                 return (
                   <AccordionItem key={mod.id} value={mod.id}>
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
+                    <AccordionTrigger className="hover:no-underline overflow-hidden">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 pr-2 overflow-hidden">
                         <span className="text-xs font-mono text-muted-foreground w-6">
                           #{mod.orderIndex}
                         </span>
                         <div className="flex-1 min-w-0 text-left">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold truncate">{mod.title}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold truncate max-w-[200px] sm:max-w-none">{mod.title}</span>
                             <ModuleStatusBadge status={mod.status} />
+                            {(mod as any).pathType === "learning" && (
+                              <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 dark:bg-green-900/20 text-[10px] px-1.5 py-0">
+                                <BookOpen className="w-3 h-3 mr-1" />Apprentissage
+                              </Badge>
+                            )}
+                            {(mod as any).pathType === "assessment" && (
+                              <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-900/20 text-[10px] px-1.5 py-0">
+                                <Target className="w-3 h-3 mr-1" />Évaluation
+                              </Badge>
+                            )}
                           </div>
                           {mod.description && (
                             <p className="text-xs text-muted-foreground truncate mt-0.5">
@@ -1892,23 +3380,105 @@ export default function Elearning() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {mod.status === "draft" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50 hidden sm:inline-flex"
+                              title="Publier"
+                              onClick={() => publishModuleMutation.mutate({ id: mod.id, status: "published" })}
+                              disabled={publishModuleMutation.isPending}
+                            >
+                              <Send className="w-3.5 h-3.5 mr-1" />
+                              <span className="text-xs font-medium">Publier</span>
+                            </Button>
+                          )}
+                          {mod.status === "published" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 hidden sm:inline-flex"
+                              title="Depublier"
+                              onClick={() => publishModuleMutation.mutate({ id: mod.id, status: "draft" })}
+                              disabled={publishModuleMutation.isPending}
+                            >
+                              <EyeOffIcon className="w-3.5 h-3.5 mr-1" />
+                              <span className="text-xs font-medium">Depublier</span>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
-                            onClick={() => { setEditModule(mod); setModuleDialogOpen(true); }}
+                            className="h-7 w-7 hidden sm:inline-flex"
+                            title="Mode immersif"
+                            onClick={() => setImmersiveModuleId(mod.id)}
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Maximize2 className="w-3.5 h-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive"
-                            onClick={() => deleteModuleMutation.mutate(mod.id)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <MoreHorizontal className="w-3.5 h-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              {mod.status === "draft" && (
+                                <DropdownMenuItem
+                                  className="text-green-600"
+                                  onClick={() => publishModuleMutation.mutate({ id: mod.id, status: "published" })}
+                                >
+                                  <Send className="w-4 h-4 mr-2" />
+                                  Publier
+                                </DropdownMenuItem>
+                              )}
+                              {mod.status === "published" && (
+                                <DropdownMenuItem
+                                  className="text-amber-600"
+                                  onClick={() => publishModuleMutation.mutate({ id: mod.id, status: "draft" })}
+                                >
+                                  <EyeOffIcon className="w-4 h-4 mr-2" />
+                                  Depublier
+                                </DropdownMenuItem>
+                              )}
+                              {mod.status === "archived" && (
+                                <DropdownMenuItem
+                                  onClick={() => publishModuleMutation.mutate({ id: mod.id, status: "draft" })}
+                                >
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  Reactiver
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => setPreviewModuleId(mod.id)}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                Apercu rapide
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setImmersiveModuleId(mod.id)}>
+                                <Maximize2 className="w-4 h-4 mr-2" />
+                                Mode immersif
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { setEditModule(mod); setModuleDialogOpen(true); }}>
+                                <Pencil className="w-4 h-4 mr-2" />
+                                Modifier
+                              </DropdownMenuItem>
+                              {mod.status !== "archived" && (
+                                <DropdownMenuItem
+                                  className="text-muted-foreground"
+                                  onClick={() => publishModuleMutation.mutate({ id: mod.id, status: "archived" })}
+                                >
+                                  <Archive className="w-4 h-4 mr-2" />
+                                  Archiver
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => deleteModuleMutation.mutate(mod.id)}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Supprimer
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     </AccordionTrigger>
@@ -1946,6 +3516,221 @@ export default function Elearning() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* AI Generation Dialog */}
+      <Dialog open={aiDialogOpen} onOpenChange={(open) => { setAiDialogOpen(open); if (!open) { setAiFile(null); setAiTitle(""); setAiPathType("combined"); setAiDuration("moyen"); setAiBlockTypes(["text", "quiz", "flashcard"]); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-500" />
+              Générer un parcours avec l'IA
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Uploadez un cours (PDF ou Word) et l'IA créera automatiquement un parcours d'apprentissage interactif avec des blocs de texte, des quiz et des flashcards.
+            </p>
+            <div className="space-y-2">
+              <Label>Fichier du cours (PDF ou Word)</Label>
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${aiFile ? "border-green-400 bg-green-50 dark:bg-green-900/10" : "border-muted-foreground/25 hover:border-primary/50"}`}
+                onClick={() => aiFileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files[0];
+                  if (file && (file.type === "application/pdf" || file.name.endsWith(".docx") || file.name.endsWith(".doc"))) {
+                    setAiFile(file);
+                  }
+                }}
+              >
+                <input
+                  ref={aiFileRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setAiFile(file);
+                  }}
+                />
+                {aiFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <FileUp className="w-5 h-5 text-green-600" />
+                    <span className="text-sm font-medium">{aiFile.name}</span>
+                    <span className="text-xs text-muted-foreground">({(aiFile.size / 1024 / 1024).toFixed(1)} MB)</span>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">Cliquez ou glissez un fichier PDF / Word ici</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Titre du module (optionnel)</Label>
+              <Input
+                value={aiTitle}
+                onChange={(e) => setAiTitle(e.target.value)}
+                placeholder="Laissez vide pour un titre automatique"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Type de parcours</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: "combined", label: "Combiné", desc: "Textes + Quiz + Flashcards", icon: <Layers className="w-5 h-5" />, color: "blue" },
+                  { value: "learning", label: "Apprentissage", desc: "Textes + Flashcards uniquement", icon: <BookOpen className="w-5 h-5" />, color: "green" },
+                  { value: "assessment", label: "Évaluation", desc: "Quiz uniquement", icon: <Target className="w-5 h-5" />, color: "orange" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAiPathType(opt.value)}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center ${
+                      aiPathType === opt.value
+                        ? opt.color === "blue"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-sm"
+                          : opt.color === "green"
+                          ? "border-green-500 bg-green-50 dark:bg-green-900/20 shadow-sm"
+                          : "border-orange-500 bg-orange-50 dark:bg-orange-900/20 shadow-sm"
+                        : "border-muted hover:border-muted-foreground/30"
+                    }`}
+                  >
+                    <span className={aiPathType === opt.value ? (opt.color === "blue" ? "text-blue-600" : opt.color === "green" ? "text-green-600" : "text-orange-600") : "text-muted-foreground"}>{opt.icon}</span>
+                    <span className="text-xs font-semibold">{opt.label}</span>
+                    <span className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Duration selector */}
+            <div className="space-y-2">
+              <Label>Duree du parcours</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: "court", label: "Court", desc: "~15 min (3-5 blocs)", icon: <Zap className="w-5 h-5" /> },
+                  { value: "moyen", label: "Moyen", desc: "~30 min (5-8 blocs)", icon: <Timer className="w-5 h-5" /> },
+                  { value: "long", label: "Long", desc: "~1h (8-12 blocs)", icon: <Layers className="w-5 h-5" /> },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAiDuration(opt.value)}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center ${
+                      aiDuration === opt.value
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : "border-muted hover:border-muted-foreground/30"
+                    }`}
+                  >
+                    <span className={aiDuration === opt.value ? "text-primary" : "text-muted-foreground"}>{opt.icon}</span>
+                    <span className="text-xs font-semibold">{opt.label}</span>
+                    <span className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Block types selector */}
+            <div className="space-y-2">
+              <Label>Types de blocs souhaites</Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  { value: "text", label: "Texte", icon: <FileText className="w-4 h-4" />, color: "text-blue-500" },
+                  { value: "quiz", label: "Quiz QCM", icon: <HelpCircle className="w-4 h-4" />, color: "text-amber-500" },
+                  { value: "flashcard", label: "Flashcards", icon: <Layers className="w-4 h-4" />, color: "text-pink-500" },
+                  { value: "scenario", label: "Scenario", icon: <GitBranch className="w-4 h-4" />, color: "text-cyan-500" },
+                  { value: "simulation", label: "Exercice pratique", icon: <Gamepad2 className="w-4 h-4" />, color: "text-lime-500" },
+                ].map((opt) => {
+                  const isSelected = aiBlockTypes.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setAiBlockTypes(prev =>
+                          prev.includes(opt.value)
+                            ? prev.filter(t => t !== opt.value)
+                            : [...prev, opt.value]
+                        );
+                      }}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border-2 transition-all text-left ${
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-muted hover:border-muted-foreground/30 opacity-60"
+                      }`}
+                    >
+                      <span className={isSelected ? opt.color : "text-muted-foreground"}>{opt.icon}</span>
+                      <span className="text-xs font-medium">{opt.label}</span>
+                      {isSelected && <CheckCircle className="w-3.5 h-3.5 text-primary ml-auto" />}
+                    </button>
+                  );
+                })}
+              </div>
+              {aiBlockTypes.length === 0 && (
+                <p className="text-xs text-destructive">Selectionnez au moins un type de bloc</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Formation</Label>
+                <Select value={aiProgramId} onValueChange={setAiProgramId}>
+                  <SelectTrigger><SelectValue placeholder="Optionnel" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucune</SelectItem>
+                    {programs?.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Session</Label>
+                <Select value={aiSessionId} onValueChange={setAiSessionId}>
+                  <SelectTrigger><SelectValue placeholder="Optionnel" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucune</SelectItem>
+                    {sessions?.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleAiGenerate}
+              disabled={!aiFile || aiGenerating || aiBlockTypes.length === 0}
+            >
+              {aiGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Génération en cours... (peut prendre 30s)
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Générer le parcours
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog — Full immersive test mode */}
+      <Dialog open={!!previewModuleId} onOpenChange={(open) => { if (!open) setPreviewModuleId(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Play className="w-5 h-5 text-primary" />
+              Mode test — Expérience apprenant
+            </DialogTitle>
+          </DialogHeader>
+          {previewModuleId && <ModulePreview moduleId={previewModuleId} />}
+        </DialogContent>
+      </Dialog>
         </TabsContent>
 
         <TabsContent value="resources">
@@ -1953,5 +3738,23 @@ export default function Elearning() {
         </TabsContent>
       </Tabs>
     </PageLayout>
+
+    {/* Immersive full-screen preview */}
+    {immersiveModuleId && (() => {
+      const mod = modules?.find((m) => m.id === immersiveModuleId);
+      if (!mod) return null;
+      return createPortal(
+        <ImmersiveModuleViewer
+          initialModuleId={immersiveModuleId}
+          initialBlockIndex={0}
+          modules={[mod]}
+          progressData={[]}
+          previewMode={true}
+          onExit={() => setImmersiveModuleId(null)}
+        />,
+        document.body
+      );
+    })()}
+    </>
   );
 }

@@ -201,7 +201,7 @@ function ProgramForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Catégories</Label>
-              <Popover>
+              <Popover modal={true}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start font-normal" data-testid="select-program-category">
                     {selectedCategories.length === 0
@@ -209,7 +209,7 @@ function ProgramForm({
                       : `${selectedCategories.length} catégorie${selectedCategories.length > 1 ? "s" : ""}`}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-72 max-h-72 overflow-y-auto p-3" align="start">
+                <PopoverContent className="w-72 max-h-72 overflow-y-auto p-3 z-[100]" align="start">
                   <div className="space-y-3">
                     {PROGRAM_CATEGORY_GROUPS.map((group) => (
                       <div key={group.label}>
@@ -301,7 +301,7 @@ function ProgramForm({
           )}
           <div className="space-y-2">
             <Label>Financements possibles</Label>
-            <Popover>
+            <Popover modal={true}>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-full justify-start font-normal">
                   {selectedFunding.length === 0
@@ -309,7 +309,7 @@ function ProgramForm({
                     : `${selectedFunding.length} financement${selectedFunding.length > 1 ? "s" : ""}`}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-60 p-3" align="start">
+              <PopoverContent className="w-60 p-3 z-[100]" align="start">
                 <div className="space-y-1.5">
                   {FUNDING_TYPES.map((ft) => (
                     <label key={ft.value} className="flex items-center gap-2 cursor-pointer">

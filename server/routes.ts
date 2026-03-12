@@ -42,8 +42,9 @@ import {
   insertSsoTokenSchema, insertApiKeySchema, insertWidgetConfigurationSchema,
   insertAuditLogSchema, insertRgpdRequestSchema,
   insertDataImportSchema, insertDataArchiveSchema,
+  insertGamificationPointsSchema,
   loginSchema, registerSchema,
-  TEMPLATE_VARIABLES,
+  TEMPLATE_VARIABLES, GAMIFICATION_LEVELS, XP_REWARDS,
 } from "@shared/schema";
 
 export async function registerRoutes(
@@ -100,7 +101,8 @@ export async function registerRoutes(
       const results = [];
       for (const session of activeSessions) {
         const enrollmentCount = await storage.getEnrollmentCount(session.id);
-        if (enrollmentCount >= session.maxParticipants) continue;
+        const waitlistCount = await storage.getWaitlistCount(session.id);
+        const isFull = enrollmentCount >= session.maxParticipants;
 
         const program = await storage.getProgram(session.programId);
         const prerequisites = program ? await storage.getProgramPrerequisites(program.id) : [];
@@ -114,7 +116,9 @@ export async function registerRoutes(
           modality: session.modality,
           maxParticipants: session.maxParticipants,
           enrollmentCount,
-          remainingSpots: session.maxParticipants - enrollmentCount,
+          remainingSpots: Math.max(0, session.maxParticipants - enrollmentCount),
+          waitlistCount,
+          isFull,
           status: session.status,
           program: program ? {
             id: program.id,
@@ -270,9 +274,7 @@ export async function registerRoutes(
 
       // Check remaining spots
       const enrollmentCount = await storage.getEnrollmentCount(sessionId);
-      if (enrollmentCount >= session.maxParticipants) {
-        return res.status(400).json({ message: "Cette session est complète" });
-      }
+      const isFull = enrollmentCount >= session.maxParticipants;
 
       // Find or create trainee
       let trainee = await storage.getTraineeByEmail(email);
@@ -299,23 +301,34 @@ export async function registerRoutes(
         });
       }
 
-      // Validate prerequisites (Issue 1 — non-blocking warnings)
+      // Validate prerequisites
       const program = await storage.getProgram(session.programId);
       const prerequisites = program ? await storage.getProgramPrerequisites(program.id) : [];
       const prerequisitesWarnings: string[] = [];
+      const prerequisitesErrors: string[] = [];
 
       for (const prereq of prerequisites) {
+        // RPPS: required unless diploma is provided as alternative
         if (prereq.requiresRpps && !trainee.rppsNumber && !rppsNumber) {
-          prerequisitesWarnings.push("Numéro RPPS requis mais non renseigné");
+          if (prereq.requiresDiploma && documents && Array.isArray(documents) && documents.length > 0) {
+            // Diploma provided as alternative to RPPS — OK
+          } else {
+            prerequisitesErrors.push("Numéro RPPS requis mais non renseigné");
+          }
         }
         if (prereq.requiredProfessions && Array.isArray(prereq.requiredProfessions) && prereq.requiredProfessions.length > 0) {
           const traineeProfession = trainee.profession || profession;
           if (!traineeProfession || !(prereq.requiredProfessions as string[]).includes(traineeProfession)) {
-            prerequisitesWarnings.push(`Profession requise : ${(prereq.requiredProfessions as string[]).join(", ")}`);
+            prerequisitesErrors.push(`Profession requise : ${(prereq.requiredProfessions as string[]).join(", ")}`);
           }
         }
+        // Diploma: blocking — unless RPPS is provided as alternative
         if (prereq.requiresDiploma && (!documents || !Array.isArray(documents) || documents.length === 0)) {
-          prerequisitesWarnings.push("Un diplôme ou justificatif est requis mais aucun document n'a été fourni");
+          if (prereq.requiresRpps && (trainee.rppsNumber || rppsNumber)) {
+            // RPPS provided as alternative to diploma — OK
+          } else {
+            prerequisitesErrors.push("Un diplôme ou justificatif est requis pour cette formation");
+          }
         }
         if (prereq.requiredProgramId || prereq.requiredCategory) {
           const certifications = await storage.getTraineeCertifications(trainee.id);
@@ -330,30 +343,63 @@ export async function registerRoutes(
                 ? `Certification requise dans la catégorie "${prereq.requiredCategory}" non trouvée`
                 : "Certification prérequise non trouvée"
             );
-          } else if (prereq.maxMonthsSinceCompletion && matchingCert.obtainedAt) {
-            const obtainedDate = new Date(matchingCert.obtainedAt);
-            const expiryDate = new Date(obtainedDate);
-            expiryDate.setMonth(expiryDate.getMonth() + prereq.maxMonthsSinceCompletion);
-            if (new Date() > expiryDate) {
-              prerequisitesWarnings.push("La certification prérequise a expiré");
+          } else {
+            if (prereq.maxMonthsSinceCompletion && matchingCert.obtainedAt) {
+              const obtainedDate = new Date(matchingCert.obtainedAt);
+              const expiryDate = new Date(obtainedDate);
+              expiryDate.setMonth(expiryDate.getMonth() + prereq.maxMonthsSinceCompletion);
+              if (new Date() > expiryDate) {
+                prerequisitesWarnings.push("La certification prérequise a expiré (validité dépassée)");
+              }
+            }
+            if (prereq.minMonthsSinceCompletion && matchingCert.obtainedAt) {
+              const obtainedDate = new Date(matchingCert.obtainedAt);
+              const minDate = new Date(obtainedDate);
+              minDate.setMonth(minDate.getMonth() + prereq.minMonthsSinceCompletion);
+              if (new Date() < minDate) {
+                const minYears = Math.floor(prereq.minMonthsSinceCompletion / 12);
+                prerequisitesWarnings.push(`Le diplôme doit avoir été obtenu il y a au moins ${minYears} an${minYears > 1 ? "s" : ""}`);
+              }
             }
           }
         }
+      }
+
+      // Block enrollment if mandatory prerequisites are not met
+      if (prerequisitesErrors.length > 0) {
+        return res.status(400).json({
+          message: "Prérequis obligatoires non remplis",
+          errors: prerequisitesErrors,
+        });
       }
 
       // Check for duplicate enrollment
       const existingEnrollments = await storage.getEnrollments(sessionId);
       const alreadyEnrolled = existingEnrollments.some(e => e.traineeId === trainee!.id && e.status !== "cancelled");
       if (alreadyEnrolled) {
-        return res.status(409).json({ message: "Vous êtes déjà inscrit(e) à cette session" });
+        return res.status(409).json({ message: "Vous êtes déjà inscrit(e) ou en liste d'attente pour cette session" });
       }
 
-      // Create enrollment
-      const enrollment = await storage.createEnrollment({
-        sessionId,
-        traineeId: trainee.id,
-        status: "pending",
-      });
+      // Create enrollment (waitlisted if full, pending otherwise)
+      let enrollment;
+      let waitlistPosition: number | null = null;
+      if (isFull) {
+        const wlCount = await storage.getWaitlistCount(sessionId);
+        waitlistPosition = wlCount + 1;
+        enrollment = await storage.createEnrollment({
+          sessionId,
+          traineeId: trainee.id,
+          status: "waitlisted",
+          waitlistPosition,
+        });
+        await storage.updateEnrollment(enrollment.id, { waitlistedAt: new Date() } as any);
+      } else {
+        enrollment = await storage.createEnrollment({
+          sessionId,
+          traineeId: trainee.id,
+          status: "pending",
+        });
+      }
 
       // Create user documents if provided
       const documentIds: string[] = [];
@@ -384,7 +430,9 @@ export async function registerRoutes(
       }
 
       res.status(201).json({
-        message: "Inscription enregistrée avec succès",
+        message: isFull
+          ? "Vous avez été ajouté(e) à la liste d'attente"
+          : "Inscription enregistrée avec succès",
         enrollment: {
           id: enrollment.id,
           status: enrollment.status,
@@ -399,15 +447,21 @@ export async function registerRoutes(
         program: program ? { title: program.title } : null,
         documentIds,
         prerequisitesWarnings,
+        waitlistPosition,
       });
 
-      // Fire-and-forget: trigger cascade automations for new enrollment
-      triggerAutomation("enrollment_created", {
+      // Fire-and-forget: trigger cascade automations
+      const automationEvent = isFull ? "enrollment_waitlisted" : "enrollment_created";
+      triggerAutomation(automationEvent, {
         enrollmentId: enrollment.id,
         sessionId,
         traineeId: trainee.id,
         programId: session.programId,
-      }).catch(err => console.error("[automation] enrollment_created trigger error:", err));
+      }).catch(err => console.error(`[automation] ${automationEvent} trigger error:`, err));
+
+      // Notifier les admins de l'inscription publique
+      const progTitle = program?.title || "une formation";
+      notifyAdmins("enrollment", "Nouvelle inscription en ligne", `${firstName} ${lastName} s'est inscrit(e) à ${progTitle}`, "/enrollments", enrollment.id, "enrollment").catch(() => {});
     } catch (error) {
       console.error("Public enrollment error:", error);
       res.status(500).json({ message: "Erreur lors de l'inscription" });
@@ -671,10 +725,22 @@ export async function registerRoutes(
   app.use("/api/expense-notes", requireAuth);
 
   // Trainer routes: requireAuth for all, requirePermission only for CRUD (not portal sub-routes)
-  app.use("/api/trainers", requireAuth, (req, res, next) => {
-    // Portal sub-routes (/api/trainers/:id/sessions, /documents, etc.) skip permission check
+  app.use("/api/trainers", requireAuth, async (req, res, next) => {
     const parts = req.path.split("/").filter(Boolean);
-    if (parts.length > 1) return next();
+    // Portal sub-routes (/api/trainers/:id/sessions, /documents, etc.)
+    if (parts.length > 1 && req.session.userId) {
+      const user = await storage.getUser(req.session.userId);
+      // Admin or user with manage_trainers permission can access any trainer
+      if (user?.role === "admin" || user?.permissions?.includes("manage_trainers")) {
+        return next();
+      }
+      // Trainer can only access their own data
+      const requestedTrainerId = parts[0];
+      if (user?.trainerId && user.trainerId === requestedTrainerId) {
+        return next();
+      }
+      return res.status(403).json({ message: "Accès non autorisé à ces données formateur" });
+    }
     // Main CRUD routes need manage_trainers permission
     requirePermission("manage_trainers")(req, res, next);
   });
@@ -689,14 +755,56 @@ export async function registerRoutes(
         return next();
       }
     }
+    // Trainers can read enterprises (for trainee forms)
+    if (req.method === "GET" && req.session.userId) {
+      const user = await storage.getUser(req.session.userId);
+      if (user?.trainerId) return next();
+    }
     // Main CRUD routes need manage_enterprises permission
     requirePermission("manage_enterprises")(req, res, next);
   });
   app.use("/api/enterprise-contacts", requireAuth, requirePermission("manage_enterprises"));
-  app.use("/api/trainees", requireAuth, requirePermission("manage_trainees"));
-  app.use("/api/programs", requireAuth, requirePermission("manage_programs"));
-  app.use("/api/sessions", requireAuth, requirePermission("manage_sessions"));
-  app.use("/api/enrollments", requireAuth, requirePermission("manage_enrollments"));
+  app.use("/api/trainees", requireAuth, async (req: any, res, next) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    // Admin or users with manage_trainees permission
+    if (user?.role === "admin" || user?.permissions?.includes("manage_trainees")) {
+      return next();
+    }
+    // Trainers can read trainees (GET) and create trainees (POST) for their sessions
+    if ((user?.trainerId || user?.role === "trainer" || user?.role === "formateur") && (req.method === "GET" || req.method === "POST")) {
+      return next();
+    }
+    res.status(403).json({ message: "Permission insuffisante" });
+  });
+  app.use("/api/programs", requireAuth, async (req: any, res, next) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (user?.role === "admin" || user?.permissions?.includes("manage_programs")) {
+      return next();
+    }
+    // Trainers and other portal users can read programs
+    if (req.method === "GET") return next();
+    res.status(403).json({ message: "Permission insuffisante" });
+  });
+  app.use("/api/sessions", requireAuth, async (req: any, res, next) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (user?.role === "admin" || user?.permissions?.includes("manage_sessions")) {
+      return next();
+    }
+    // Trainers and other portal users can read sessions
+    if (req.method === "GET") return next();
+    res.status(403).json({ message: "Permission insuffisante" });
+  });
+  app.use("/api/enrollments", requireAuth, async (req: any, res, next) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (user?.role === "admin" || user?.permissions?.includes("manage_enrollments")) {
+      return next();
+    }
+    // Trainers can read/create enrollments for their sessions
+    if ((user?.trainerId || user?.role === "trainer") && (req.method === "GET" || req.method === "POST")) {
+      return next();
+    }
+    res.status(403).json({ message: "Permission insuffisante" });
+  });
   app.use("/api/email-templates", requireAuth, requirePermission("manage_templates"));
   app.use("/api/email-logs", requireAuth, requirePermission("manage_templates"));
   app.use("/api/document-templates", requireAuth, requirePermission("manage_documents"));
@@ -706,12 +814,23 @@ export async function registerRoutes(
   app.use("/api/quotes", requireAuth, requirePermission("manage_quotes"));
   app.use("/api/invoices", requireAuth, requirePermission("manage_invoices"));
   app.use("/api/payments", requireAuth, requirePermission("manage_invoices"));
-  app.use("/api/elearning-modules", requireAuth, requirePermission("manage_elearning"));
-  app.use("/api/elearning-blocks", requireAuth, requirePermission("manage_elearning"));
-  app.use("/api/quiz-questions", requireAuth, requirePermission("manage_elearning"));
-  app.use("/api/learner-progress", requireAuth, requirePermission("manage_elearning"));
-  app.use("/api/session-resources", requireAuth, requirePermission("manage_elearning"));
-  app.use("/api/scorm-packages", requireAuth, requirePermission("manage_elearning"));
+  // E-learning routes: trainers have full access to prepare their courses
+  const elearningAuth = async (req: any, res: any, next: any) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (user?.role === "admin" || user?.permissions?.includes("manage_elearning")) return next();
+    if (user?.trainerId || user?.role === "trainer" || user?.role === "formateur") return next();
+    // Learner portal also needs read access for progress
+    if (user?.traineeId || user?.role === "learner" || user?.role === "apprenant") {
+      if (req.method === "GET" || req.method === "POST") return next();
+    }
+    res.status(403).json({ message: "Permission insuffisante" });
+  };
+  app.use("/api/elearning-modules", requireAuth, elearningAuth);
+  app.use("/api/elearning-blocks", requireAuth, elearningAuth);
+  app.use("/api/quiz-questions", requireAuth, elearningAuth);
+  app.use("/api/learner-progress", requireAuth, elearningAuth);
+  app.use("/api/session-resources", requireAuth, elearningAuth);
+  app.use("/api/scorm-packages", requireAuth, elearningAuth);
   app.use("/api/formative-submissions", requireAuth);
   app.use("/api/survey-templates", requireAuth, requirePermission("manage_surveys"));
   app.use("/api/survey-responses", requireAuth, requirePermission("manage_surveys"));
@@ -720,6 +839,7 @@ export async function registerRoutes(
   app.use("/api/quality-actions", requireAuth, requirePermission("manage_quality_actions"));
   app.use("/api/analysis-comments", requireAuth, requirePermission("manage_surveys"));
   app.use("/api/analysis-stats", requireAuth, requirePermission("manage_surveys"));
+  app.use("/api/notifications", requireAuth);
   app.use("/api/conversations", requireAuth);
   app.use("/api/messages", requireAuth);
   app.use("/api/contact-tags", requireAuth, requirePermission("manage_prospects"));
@@ -825,6 +945,26 @@ export async function registerRoutes(
     if (existing) return res.status(409).json({ message: "Ce nom d'utilisateur existe déjà" });
 
     const hashedPassword = await hashPassword(parsed.data.password);
+
+    // Auto-create trainee profile for learner accounts
+    let traineeId: string | null = null;
+    if (parsed.data.role === "trainee") {
+      const email = parsed.data.email || parsed.data.username;
+      // Link to existing trainee profile if one exists with the same email
+      const existingTrainee = await storage.getTraineeByEmail(email);
+      if (existingTrainee) {
+        traineeId = existingTrainee.id;
+      } else {
+        const newTrainee = await storage.createTrainee({
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+          email,
+          status: "active",
+        });
+        traineeId = newTrainee.id;
+      }
+    }
+
     const user = await storage.createUser({
       username: parsed.data.username,
       password: hashedPassword,
@@ -833,12 +973,12 @@ export async function registerRoutes(
       lastName: parsed.data.lastName,
       email: parsed.data.email || null,
       trainerId: null,
-      traineeId: null,
+      traineeId,
       enterpriseId: null,
     });
 
     req.session.userId = user.id;
-    res.status(201).json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName });
+    res.status(201).json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, traineeId });
   });
 
   app.post("/api/auth/login", async (req, res) => {
@@ -854,8 +994,27 @@ export async function registerRoutes(
     const valid = await comparePasswords(parsed.data.password, user.password);
     if (!valid) return res.status(401).json({ message: "Identifiants incorrects" });
 
+    // Auto-create trainee profile for existing learner accounts missing one
+    let { traineeId } = user;
+    if (user.role === "trainee" && !traineeId) {
+      const email = user.email || user.username;
+      const existingTrainee = await storage.getTraineeByEmail(email);
+      if (existingTrainee) {
+        traineeId = existingTrainee.id;
+      } else {
+        const newTrainee = await storage.createTrainee({
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email,
+          status: "active",
+        });
+        traineeId = newTrainee.id;
+      }
+      await storage.updateUser(user.id, { traineeId });
+    }
+
     req.session.userId = user.id;
-    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions || [], trainerId: user.trainerId, traineeId: user.traineeId, enterpriseId: user.enterpriseId });
+    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions || [], trainerId: user.trainerId, traineeId, enterpriseId: user.enterpriseId });
   });
 
   app.post("/api/auth/logout", (req, res) => {
@@ -869,7 +1028,27 @@ export async function registerRoutes(
     if (!req.session.userId) return res.status(401).json({ message: "Non authentifié" });
     const user = await storage.getUser(req.session.userId);
     if (!user) return res.status(401).json({ message: "Utilisateur non trouvé" });
-    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions || [], trainerId: user.trainerId, traineeId: user.traineeId, enterpriseId: user.enterpriseId });
+
+    // Auto-create trainee profile for learner accounts missing one
+    let { traineeId } = user;
+    if (user.role === "trainee" && !traineeId) {
+      const email = user.email || user.username;
+      const existingTrainee = await storage.getTraineeByEmail(email);
+      if (existingTrainee) {
+        traineeId = existingTrainee.id;
+      } else {
+        const newTrainee = await storage.createTrainee({
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email,
+          status: "active",
+        });
+        traineeId = newTrainee.id;
+      }
+      await storage.updateUser(user.id, { traineeId });
+    }
+
+    res.json({ id: user.id, username: user.username, role: user.role, firstName: user.firstName, lastName: user.lastName, email: user.email, permissions: user.permissions || [], trainerId: user.trainerId, traineeId, enterpriseId: user.enterpriseId });
   });
 
   // ============================================================
@@ -1002,8 +1181,16 @@ export async function registerRoutes(
   app.post("/api/trainees", async (req, res) => {
     const parsed = insertTraineeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const trainee = await storage.createTrainee(parsed.data);
-    res.status(201).json(trainee);
+    try {
+      const trainee = await storage.createTrainee(parsed.data);
+      res.status(201).json(trainee);
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("unique") || msg.includes("duplicate")) {
+        return res.status(409).json({ message: "Un stagiaire avec cet email existe déjà" });
+      }
+      res.status(500).json({ message: msg || "Erreur lors de la création du stagiaire" });
+    }
   });
 
   app.patch("/api/trainees/:id", async (req, res) => {
@@ -1031,14 +1218,13 @@ export async function registerRoutes(
   app.get("/api/programs/catalog-pdf", async (req, res) => {
     try {
       const allPrograms = await storage.getPrograms();
-      const published = allPrograms.filter((p) => p.status === "published");
 
       // Optional category filter
       const categoriesParam = req.query.categories as string | undefined;
-      let filtered = published;
+      let filtered = allPrograms.filter((p) => p.status === "published");
       if (categoriesParam) {
         const cats = categoriesParam.split(",").map((c) => c.trim());
-        filtered = published.filter((p) =>
+        filtered = allPrograms.filter((p) =>
           p.categories?.some((c) => cats.includes(c)),
         );
       }
@@ -1091,8 +1277,13 @@ export async function registerRoutes(
   // SESSIONS
   // ============================================================
 
-  app.get("/api/sessions", async (_req, res) => {
-    const result = await storage.getSessions();
+  app.get("/api/sessions", async (req: any, res) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    let result = await storage.getSessions();
+    // Trainers only see sessions assigned to them
+    if (user && (user.role === "trainer" || user.role === "formateur")) {
+      result = result.filter((s: any) => s.trainerId === user.trainerId);
+    }
     res.json(result);
   });
 
@@ -1110,16 +1301,111 @@ export async function registerRoutes(
   app.post("/api/sessions", async (req, res) => {
     const parsed = insertSessionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    // Warn if distanciel/blended without virtualClassUrl
+    if ((parsed.data.modality === "distanciel" || parsed.data.modality === "blended") && !parsed.data.virtualClassUrl) {
+      return res.status(400).json({ message: "L'URL de classe virtuelle est requise pour les sessions à distance ou mixtes" });
+    }
     const session = await storage.createSession(parsed.data);
     res.status(201).json(session);
+
+    // Notify trainer when assigned to a new session
+    if (session.trainerId) {
+      (async () => {
+        try {
+          const trainer = await storage.getTrainer(session.trainerId!);
+          if (!trainer?.email) return;
+          const program = session.programId ? await storage.getProgram(session.programId) : null;
+          const orgSettings = await storage.getOrganizationSettings();
+          const orgMap: Record<string, string> = {};
+          orgSettings.forEach((s: any) => { orgMap[s.key] = s.value; });
+          const orgName = orgMap["org_name"] || "SO'SAFE Formation";
+          const startDate = new Date(session.startDate).toLocaleDateString("fr-FR");
+          const endDate = new Date(session.endDate).toLocaleDateString("fr-FR");
+
+          const emailLog = await storage.createEmailLog({
+            recipient: trainer.email,
+            subject: `Nouvelle session attribuée : ${session.title}`,
+            body: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+              <h2 style="color:#1e40af;">Nouvelle session de formation</h2>
+              <p>Bonjour ${trainer.firstName},</p>
+              <p>Une nouvelle session de formation vous a été attribuée :</p>
+              <table style="width:100%;border-collapse:collapse;margin:15px 0;">
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Formation</td><td style="padding:8px;border:1px solid #e2e8f0;">${program?.title || session.title}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Session</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.title}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Dates</td><td style="padding:8px;border:1px solid #e2e8f0;">Du ${startDate} au ${endDate}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Lieu</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.location || "À définir"}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Modalité</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.modality || "-"}</td></tr>
+              </table>
+              <p>Connectez-vous à votre espace formateur pour préparer cette session et créer les contenus e-learning associés.</p>
+              <p style="color:#666;font-size:12px;margin-top:30px;">${orgName}</p>
+            </div>`,
+            status: "pending",
+          });
+          const { sendEmailNow } = await import("./email-service");
+          await sendEmailNow(emailLog.id);
+          console.log(`[trainer-notify] Sent session assignment email to ${trainer.email} for session ${session.id}`);
+        } catch (err) {
+          console.error("[trainer-notify] Error sending assignment email:", err);
+        }
+      })();
+    }
   });
 
   app.patch("/api/sessions/:id", async (req, res) => {
     const parsed = insertSessionSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const oldSession = await storage.getSession(req.params.id);
+    // Warn if changing to distanciel/blended without virtualClassUrl
+    const effectiveModality = parsed.data.modality || oldSession?.modality;
+    const effectiveUrl = parsed.data.virtualClassUrl !== undefined ? parsed.data.virtualClassUrl : oldSession?.virtualClassUrl;
+    if ((effectiveModality === "distanciel" || effectiveModality === "blended") && !effectiveUrl) {
+      return res.status(400).json({ message: "L'URL de classe virtuelle est requise pour les sessions à distance ou mixtes" });
+    }
     const session = await storage.updateSession(req.params.id, parsed.data);
     if (!session) return res.status(404).json({ message: "Session non trouvée" });
     res.json(session);
+
+    // Notify trainer when newly assigned to this session
+    if (session.trainerId && session.trainerId !== oldSession?.trainerId) {
+      (async () => {
+        try {
+          const trainer = await storage.getTrainer(session.trainerId!);
+          if (!trainer?.email) return;
+          const program = session.programId ? await storage.getProgram(session.programId) : null;
+          const orgSettings = await storage.getOrganizationSettings();
+          const orgMap: Record<string, string> = {};
+          orgSettings.forEach((s: any) => { orgMap[s.key] = s.value; });
+          const orgName = orgMap["org_name"] || "SO'SAFE Formation";
+          const startDate = new Date(session.startDate).toLocaleDateString("fr-FR");
+          const endDate = new Date(session.endDate).toLocaleDateString("fr-FR");
+
+          const emailLog = await storage.createEmailLog({
+            recipient: trainer.email,
+            subject: `Session attribuée : ${session.title}`,
+            body: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+              <h2 style="color:#1e40af;">Session de formation attribuée</h2>
+              <p>Bonjour ${trainer.firstName},</p>
+              <p>Une session de formation vous a été attribuée :</p>
+              <table style="width:100%;border-collapse:collapse;margin:15px 0;">
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Formation</td><td style="padding:8px;border:1px solid #e2e8f0;">${program?.title || session.title}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Session</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.title}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Dates</td><td style="padding:8px;border:1px solid #e2e8f0;">Du ${startDate} au ${endDate}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Lieu</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.location || "À définir"}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Modalité</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.modality || "-"}</td></tr>
+              </table>
+              <p>Connectez-vous à votre espace formateur pour préparer cette session et créer les contenus e-learning associés.</p>
+              <p style="color:#666;font-size:12px;margin-top:30px;">${orgName}</p>
+            </div>`,
+            status: "pending",
+          });
+          const { sendEmailNow } = await import("./email-service");
+          await sendEmailNow(emailLog.id);
+          console.log(`[trainer-notify] Sent session assignment email to ${trainer.email} for session ${session.id}`);
+        } catch (err) {
+          console.error("[trainer-notify] Error sending assignment email:", err);
+        }
+      })();
+    }
 
     // Fire-and-forget: trigger cascade automations on session status change
     if (parsed.data.status) {
@@ -1131,6 +1417,15 @@ export async function registerRoutes(
       if (event) {
         triggerSessionAutomation(event, session.id)
           .catch(err => console.error(`[automation] ${event} trigger error:`, err));
+      }
+
+      // Notifications session
+      const prog = session.programId ? await storage.getProgram(session.programId) : null;
+      const sessionLabel = prog?.title || `Session ${session.id.substring(0, 8)}`;
+      if (parsed.data.status === "ongoing") {
+        notifyAdmins("session", "Session démarrée", `${sessionLabel} est maintenant en cours`, "/sessions", session.id, "session").catch(() => {});
+      } else if (parsed.data.status === "completed") {
+        notifyAdmins("session", "Session terminée", `${sessionLabel} est terminée`, "/sessions", session.id, "session").catch(() => {});
       }
 
       // Auto-generate and send attendance report on session completion (Section 8.2)
@@ -1252,6 +1547,34 @@ export async function registerRoutes(
   });
 
   // ============================================================
+  // SESSION DATES (jours d'intervention)
+  // ============================================================
+
+  app.get("/api/sessions/:id/dates", async (req, res) => {
+    const dates = await storage.getSessionDates(req.params.id);
+    res.json(dates);
+  });
+
+  app.put("/api/sessions/:id/dates", async (req, res) => {
+    const { dates } = req.body as { dates: string[] };
+    if (!Array.isArray(dates)) return res.status(400).json({ message: "dates must be an array" });
+
+    // Delete all existing dates for this session, then re-create
+    await storage.deleteSessionDatesBySessionId(req.params.id);
+    const created = [];
+    for (const d of dates) {
+      const record = await storage.createSessionDate({ sessionId: req.params.id, date: d });
+      created.push(record);
+    }
+    res.json(created);
+  });
+
+  app.get("/api/session-dates", async (_req, res) => {
+    const all = await storage.getAllSessionDates();
+    res.json(all);
+  });
+
+  // ============================================================
   // ENROLLMENTS
   // ============================================================
 
@@ -1320,6 +1643,12 @@ export async function registerRoutes(
       traineeId: parsed.data.traineeId,
       programId: _session?.programId,
     }).catch(err => console.error("[automation] enrollment_created trigger error:", err));
+
+    // Notification pour les admins
+    const _trainee = await storage.getTrainee(parsed.data.traineeId);
+    const _prog = _session?.programId ? await storage.getProgram(_session.programId) : null;
+    const traineeName = _trainee ? `${_trainee.firstName} ${_trainee.lastName}` : "Un stagiaire";
+    notifyAdmins("enrollment", `Nouvelle inscription`, `${traineeName} s'est inscrit(e) à ${_prog?.title || "une session"}`, "/enrollments", enrollment.id, "enrollment").catch(() => {});
   });
 
   app.patch("/api/enrollments/:id", async (req, res) => {
@@ -1394,12 +1723,150 @@ export async function registerRoutes(
           programId: _session?.programId,
         }).catch(err => console.error(`[automation] ${event} trigger error:`, err));
       }
+
+      // Auto-promote from waitlist when someone is cancelled or no_show
+      if (parsed.data.status === "cancelled" || parsed.data.status === "no_show") {
+        const promoted = await storage.promoteFromWaitlist(enrollment.sessionId);
+        if (promoted) {
+          console.log(`[waitlist] Auto-promoted enrollment ${promoted.id} for session ${enrollment.sessionId}`);
+          const _promoSession = await storage.getSession(promoted.sessionId);
+          triggerAutomation("enrollment_promoted_from_waitlist", {
+            enrollmentId: promoted.id,
+            sessionId: promoted.sessionId,
+            traineeId: promoted.traineeId,
+            programId: _promoSession?.programId,
+          }).catch(err => console.error("[automation] promotion trigger error:", err));
+        }
+      }
     }
   });
 
   app.delete("/api/enrollments/:id", async (req, res) => {
+    const enrollment = await storage.getEnrollment(req.params.id);
     await storage.deleteEnrollment(req.params.id);
     res.status(204).send();
+
+    // Auto-promote from waitlist if deleted enrollment was active
+    if (enrollment && !["cancelled", "no_show", "waitlisted"].includes(enrollment.status)) {
+      const promoted = await storage.promoteFromWaitlist(enrollment.sessionId);
+      if (promoted) {
+        console.log(`[waitlist] Auto-promoted enrollment ${promoted.id} for session ${enrollment.sessionId}`);
+        const _session = await storage.getSession(promoted.sessionId);
+        triggerAutomation("enrollment_promoted_from_waitlist", {
+          enrollmentId: promoted.id,
+          sessionId: promoted.sessionId,
+          traineeId: promoted.traineeId,
+          programId: _session?.programId,
+        }).catch(err => console.error("[automation] promotion trigger error:", err));
+      }
+    }
+  });
+
+  // Bulk update enrollment statuses (admin + trainer)
+  app.post("/api/enrollments/bulk-update", requireAuth, async (req: any, res) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || (user.role !== "admin" && user.role !== "trainer")) {
+      return res.status(403).json({ message: "Permission insuffisante" });
+    }
+    const { ids, status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0 || typeof status !== "string") {
+      return res.status(400).json({ message: "ids (array) et status (string) requis" });
+    }
+    const validStatuses = ["registered", "confirmed", "completed", "cancelled", "waitlisted"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: `Statut invalide. Valeurs acceptées : ${validStatuses.join(", ")}` });
+    }
+    const results = [];
+    for (const id of ids) {
+      const updated = await storage.updateEnrollment(id, { status });
+      if (updated) results.push(updated);
+    }
+    res.json({ updated: results.length });
+  });
+
+  // Bulk delete enrollments (admin only)
+  app.post("/api/enrollments/bulk-delete", requireAuth, async (req: any, res) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ message: "Permission insuffisante — admin requis" });
+    }
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "ids (array) requis" });
+    }
+    for (const id of ids) {
+      await storage.deleteEnrollment(id);
+    }
+    res.json({ deleted: ids.length });
+  });
+
+  // ============================================================
+  // WAITLIST MANAGEMENT
+  // ============================================================
+
+  app.get("/api/sessions/:id/waitlist", async (req, res) => {
+    const entries = await storage.getWaitlistEntries(req.params.id);
+    res.json(entries);
+  });
+
+  app.get("/api/sessions/:id/alternatives", async (req, res) => {
+    const session = await storage.getSession(req.params.id);
+    if (!session) return res.status(404).json({ message: "Session non trouvée" });
+
+    const allSessions = await storage.getSessions();
+    const alternatives = [];
+    for (const s of allSessions) {
+      if (s.id === session.id) continue;
+      if (s.programId !== session.programId) continue;
+      if (s.status !== "planned" && s.status !== "ongoing") continue;
+
+      const count = await storage.getEnrollmentCount(s.id);
+      const remaining = s.maxParticipants - count;
+      if (remaining <= 0) continue;
+
+      alternatives.push({
+        id: s.id,
+        title: s.title,
+        startDate: s.startDate,
+        endDate: s.endDate,
+        location: s.location,
+        modality: s.modality,
+        remainingSpots: remaining,
+      });
+    }
+    res.json(alternatives);
+  });
+
+  app.post("/api/enrollments/:id/move-to-session", async (req, res) => {
+    const { targetSessionId } = req.body;
+    if (!targetSessionId) return res.status(400).json({ message: "targetSessionId requis" });
+
+    const enrollment = await storage.getEnrollment(req.params.id);
+    if (!enrollment) return res.status(404).json({ message: "Inscription non trouvée" });
+
+    const targetSession = await storage.getSession(targetSessionId);
+    if (!targetSession) return res.status(404).json({ message: "Session cible non trouvée" });
+
+    const targetCount = await storage.getEnrollmentCount(targetSessionId);
+    if (targetCount >= targetSession.maxParticipants) {
+      return res.status(400).json({ message: "La session cible est également complète" });
+    }
+
+    const oldSessionId = enrollment.sessionId;
+    const oldPosition = enrollment.waitlistPosition;
+
+    const updated = await storage.updateEnrollment(enrollment.id, {
+      sessionId: targetSessionId,
+      status: "registered",
+      waitlistPosition: null,
+    });
+
+    // Reorder old session waitlist if the moved person was waitlisted
+    if (enrollment.status === "waitlisted" && oldPosition) {
+      await storage.reorderWaitlistAfterRemoval(oldSessionId, oldPosition);
+    }
+
+    res.json(updated);
   });
 
   // ============================================================
@@ -1558,6 +2025,135 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // AI-generate a document template
+  app.post("/api/document-templates/generate-ai", async (req, res) => {
+    const { type, description, language } = req.body;
+    if (!type) return res.status(400).json({ message: "Le type de document est requis" });
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(500).json({ message: "OPENAI_API_KEY non configuree" });
+
+    try {
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({ apiKey });
+
+      const docTypeLabel = DOCUMENT_TYPES.find(d => d.value === type)?.label || type;
+
+      const prompt = `Tu es un expert en documents de formation professionnelle en France (Qualiopi, OPCO, CPF).
+Genere un modele HTML professionnel pour un document de type : "${docTypeLabel}".
+${description ? `Instructions supplementaires : ${description}` : ""}
+
+REGLES :
+- Le document doit etre en francais, professionnel et conforme a la reglementation formation
+- Utilise des variables dynamiques au format {nom_variable} pour les donnees qui changent. Variables disponibles :
+  {nom_organisme}, {adresse_organisme}, {siret_organisme}, {nda_organisme}, {email_organisme}, {telephone_organisme}
+  {nom_apprenant}, {prenom_apprenant}, {email_apprenant}, {civilite_apprenant}, {adresse_apprenant}
+  {nom_entreprise}, {siret_entreprise}, {adresse_entreprise}, {contact_entreprise}
+  {nom_formation}, {duree_formation}, {objectifs_formation}, {modalite_formation}, {prix_formation}
+  {date_debut_session}, {date_fin_session}, {lieu_session}, {horaires_session}, {nom_formateur}
+  {date_du_jour}, {signature_organisme}
+- Structure HTML avec des titres, paragraphes, listes si necessaire
+- Ajoute les mentions legales appropriees pour ce type de document
+- Le contenu doit etre substantiel et complet (pas de placeholder vide)
+
+Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 4096,
+      });
+
+      let html = (completion.choices[0]?.message?.content || "").trim();
+      // Strip markdown code blocks if present
+      const match = html.match(/```(?:html)?\s*([\s\S]*?)```/);
+      if (match) html = match[1].trim();
+
+      if (!html || html.length < 50) {
+        return res.status(500).json({ message: "L'IA n'a pas genere de contenu suffisant. Reessayez." });
+      }
+
+      res.json({ content: html, name: `${docTypeLabel} (IA)`, type });
+    } catch (err: any) {
+      console.error("[AI Template] Error:", err?.message);
+      res.status(500).json({ message: err?.message || "Erreur lors de la generation IA" });
+    }
+  });
+
+  // Import a document template from uploaded file (HTML or DOCX)
+  app.post("/api/document-templates/import", (req, res) => {
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return res.status(400).json({ message: "Content-Type doit etre multipart/form-data" });
+    }
+
+    let fileMeta: { originalName: string; mimeType: string; fullPath: string } | null = null;
+    let chunks: Buffer[] = [];
+    const fields: Record<string, string> = {};
+
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+
+    busboy.on("field", (name, val) => { fields[name] = val; });
+
+    busboy.on("file", (_fieldname, stream, info) => {
+      const { filename: originalName, mimeType } = info;
+      const uniqueSuffix = Date.now() + "-" + crypto.randomBytes(6).toString("hex");
+      const ext = path.extname(originalName);
+      const tmpPath = path.join(process.cwd(), "uploads", uniqueSuffix + ext);
+      fileMeta = { originalName, mimeType, fullPath: tmpPath };
+      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+    });
+
+    busboy.on("finish", async () => {
+      if (!fileMeta || chunks.length === 0) {
+        return res.status(400).json({ message: "Fichier manquant" });
+      }
+
+      const buffer = Buffer.concat(chunks);
+      chunks = [];
+
+      try {
+        let htmlContent = "";
+        const ext = path.extname(fileMeta.originalName).toLowerCase();
+
+        if (ext === ".html" || ext === ".htm") {
+          htmlContent = buffer.toString("utf-8");
+        } else if (ext === ".docx" || ext === ".doc") {
+          // Save temp file for mammoth
+          fs.writeFileSync(fileMeta.fullPath, buffer);
+          const mammoth = await import("mammoth");
+          const result = await mammoth.convertToHtml({ path: fileMeta.fullPath });
+          htmlContent = result.value;
+          try { fs.unlinkSync(fileMeta.fullPath); } catch {}
+        } else if (ext === ".txt") {
+          const text = buffer.toString("utf-8");
+          htmlContent = text.split("\n").map(line => `<p>${line}</p>`).join("\n");
+        } else {
+          return res.status(400).json({ message: `Format non supporte : ${ext}. Utilisez HTML, DOCX ou TXT.` });
+        }
+
+        if (!htmlContent || htmlContent.trim().length < 10) {
+          return res.status(400).json({ message: "Le fichier ne contient pas de contenu exploitable." });
+        }
+
+        const name = fields.name || fileMeta.originalName.replace(/\.[^.]+$/, "");
+        const type = fields.type || "convention";
+
+        res.json({ content: htmlContent, name, type });
+      } catch (err: any) {
+        console.error("[Template Import] Error:", err?.message);
+        res.status(500).json({ message: err?.message || "Erreur lors de l'import" });
+      }
+    });
+
+    busboy.on("error", (err: Error) => {
+      res.status(500).json({ message: err.message });
+    });
+
+    req.pipe(busboy);
+  });
+
   // ============================================================
   // GENERATED DOCUMENTS
   // ============================================================
@@ -1568,14 +2164,32 @@ export async function registerRoutes(
   });
 
   app.post("/api/documents/generate", async (req, res) => {
-    const { templateId, sessionId, traineeId, enterpriseId, quoteId, invoiceId, visibility } = req.body;
+    const { templateId, sessionId, traineeId, traineeIds, enterpriseId, quoteId, invoiceId, visibility } = req.body;
     if (!templateId) return res.status(400).json({ message: "templateId requis" });
 
     const template = await storage.getDocumentTemplate(templateId);
     if (!template) return res.status(404).json({ message: "Modèle non trouvé" });
 
+    // Support batch: traineeIds array or single traineeId
+    const idsToProcess: string[] = traineeIds && Array.isArray(traineeIds) && traineeIds.length > 0
+      ? traineeIds
+      : traineeId ? [traineeId] : [""]; // empty string = no trainee
+
+    const generatedDocs = [];
+    for (const currentTraineeId of idsToProcess) {
+
     let content = template.content;
     const replacements: Record<string, string> = {};
+
+    // Auto-detect enterprise from enrollment if not provided
+    let effectiveEnterpriseId = enterpriseId;
+    if (!effectiveEnterpriseId && currentTraineeId && sessionId) {
+      const allEnrollments = await storage.getEnrollments(sessionId);
+      const enrollment = allEnrollments.find(e => e.traineeId === currentTraineeId && e.status !== "cancelled");
+      if (enrollment?.enterpriseId) {
+        effectiveEnterpriseId = enrollment.enterpriseId;
+      }
+    }
 
     if (sessionId) {
       const session = await storage.getSession(sessionId);
@@ -1585,18 +2199,45 @@ export async function registerRoutes(
         replacements["{date_debut}"] = new Date(session.startDate).toLocaleDateString("fr-FR");
         replacements["{date_fin}"] = new Date(session.endDate).toLocaleDateString("fr-FR");
         replacements["{lieu}"] = session.location || "";
+        replacements["{adresse_lieu}"] = session.locationAddress || "";
+        replacements["{salle}"] = session.locationRoom || "";
         replacements["{modalite}"] = session.modality;
+        replacements["{url_classe_virtuelle}"] = session.virtualClassUrl || "";
+        replacements["{max_participants}"] = String(session.maxParticipants || "");
+        replacements["{modalite_presentiel}"] = session.modality === "presentiel" ? "true" : "";
+        replacements["{modalite_distanciel}"] = session.modality === "distanciel" ? "true" : "";
+        replacements["{modalite_mixte}"] = session.modality === "blended" || session.modality === "mixte" ? "true" : "";
+
+        // Formateur de la session
+        if (session.trainerId) {
+          const trainer = await storage.getTrainer(session.trainerId);
+          if (trainer) {
+            replacements["{nom_formateur}"] = `${trainer.firstName} ${trainer.lastName}`;
+            replacements["{prenom_formateur}"] = trainer.firstName;
+            replacements["{nom_famille_formateur}"] = trainer.lastName;
+            replacements["{email_formateur}"] = trainer.email;
+            replacements["{telephone_formateur}"] = trainer.phone || "";
+            replacements["{specialite_formateur}"] = trainer.specialty || "";
+          }
+        }
+
         if (program) {
           replacements["{titre_formation}"] = program.title;
           replacements["{duree_formation}"] = `${program.duration} heures`;
           replacements["{prix_formation}"] = `${program.price} EUR`;
           replacements["{objectifs_formation}"] = program.objectives || "";
+          replacements["{prerequis_formation}"] = program.prerequisites || "";
+          replacements["{niveau_formation}"] = program.level || "";
+          replacements["{public_cible}"] = program.targetAudience || "";
+          replacements["{methodes_pedagogiques}"] = program.teachingMethods || "";
+          replacements["{contenu_formation}"] = program.programContent || "";
+          replacements["{est_certifiante}"] = program.certifying ? "true" : "";
         }
       }
     }
 
-    if (traineeId) {
-      const trainee = await storage.getTrainee(traineeId);
+    if (currentTraineeId) {
+      const trainee = await storage.getTrainee(currentTraineeId);
       if (trainee) {
         replacements["{nom_apprenant}"] = `${trainee.firstName} ${trainee.lastName}`;
         replacements["{prenom_apprenant}"] = trainee.firstName;
@@ -1622,12 +2263,32 @@ export async function registerRoutes(
       }
     }
 
-    if (enterpriseId) {
-      const enterprise = await storage.getEnterprise(enterpriseId);
+    if (effectiveEnterpriseId) {
+      const enterprise = await storage.getEnterprise(effectiveEnterpriseId);
       if (enterprise) {
         replacements["{nom_entreprise}"] = enterprise.name;
+        replacements["{siret_entreprise}"] = enterprise.siret || "";
+        replacements["{tva_entreprise}"] = enterprise.tvaNumber || "";
+        replacements["{adresse_entreprise}"] = enterprise.address || "";
+        replacements["{ville_entreprise}"] = enterprise.city || "";
+        replacements["{code_postal_entreprise}"] = enterprise.postalCode || "";
+        replacements["{format_juridique_entreprise}"] = enterprise.formatJuridique || "";
+        replacements["{secteur_entreprise}"] = enterprise.sector || "";
+        replacements["{telephone_entreprise}"] = enterprise.phone || enterprise.contactPhone || "";
+        replacements["{email_entreprise}"] = enterprise.email || enterprise.contactEmail || "";
         replacements["{contact_entreprise}"] = enterprise.contactName || "";
-        replacements["{email_entreprise}"] = enterprise.contactEmail || "";
+        replacements["{email_contact_entreprise}"] = enterprise.contactEmail || "";
+        replacements["{telephone_contact_entreprise}"] = enterprise.contactPhone || "";
+        replacements["{representant_legal}"] = enterprise.legalRepName || "";
+        replacements["{email_representant_legal}"] = enterprise.legalRepEmail || "";
+        replacements["{telephone_representant_legal}"] = enterprise.legalRepPhone || "";
+        // Adresse complète entreprise
+        const entAddrParts = [
+          enterprise.name,
+          enterprise.address,
+          `${enterprise.postalCode || ""} ${enterprise.city || ""}`.trim(),
+        ].filter(Boolean);
+        replacements["{adresse_complete_entreprise}"] = entAddrParts.join("<br>");
       }
     }
 
@@ -1696,26 +2357,62 @@ export async function registerRoutes(
       }
     }
 
-    // Formation type conditionals
-    if (sessionId) {
-      const sessionForModality = await storage.getSession(sessionId);
-      if (sessionForModality) {
-        const mod = sessionForModality.modality?.toLowerCase() || "";
-        replacements["{est_blended}"] = mod === "blended" || mod === "mixte" ? "true" : "";
-        replacements["{est_standard}"] = mod === "presentiel" ? "true" : "";
-        replacements["{est_specifique}"] = mod !== "presentiel" && mod !== "distanciel" && mod !== "blended" && mod !== "mixte" ? "true" : "";
+    // Enrollment variables (if trainee + session)
+    if (currentTraineeId && sessionId) {
+      const allEnrollments = await storage.getEnrollments(sessionId);
+      const enrollment = allEnrollments.find(e => e.traineeId === currentTraineeId && e.status !== "cancelled");
+      if (enrollment) {
+        replacements["{date_inscription}"] = enrollment.enrolledAt
+          ? new Date(enrollment.enrolledAt).toLocaleDateString("fr-FR") : "";
+        replacements["{statut_inscription}"] = enrollment.status;
       }
     }
 
-    replacements["{date_du_jour}"] = new Date().toLocaleDateString("fr-FR");
-    replacements["{date_signature}"] = new Date().toLocaleDateString("fr-FR");
+    const today = new Date();
+    replacements["{date_du_jour}"] = today.toLocaleDateString("fr-FR");
+    replacements["{date_document}"] = today.toLocaleDateString("fr-FR");
+    replacements["{date_generation}"] = today.toLocaleDateString("fr-FR");
+    replacements["{date_signature}"] = today.toLocaleDateString("fr-FR");
     replacements["{delai_retractation}"] = "10 jours";
+
+    // Alias variables pour compatibilité des templates
+    if (replacements["{titre_formation}"]) {
+      replacements["{nom_formation}"] = replacements["{titre_formation}"];
+    }
+    if (replacements["{prix_formation}"]) {
+      replacements["{montant_formation}"] = replacements["{prix_formation}"];
+    }
+    // Aliases session
+    if (replacements["{date_debut}"]) {
+      replacements["{date_debut_session}"] = replacements["{date_debut}"];
+    }
+    if (replacements["{date_fin}"]) {
+      replacements["{date_fin_session}"] = replacements["{date_fin}"];
+    }
+    if (replacements["{lieu}"]) {
+      replacements["{lieu_session}"] = replacements["{lieu}"];
+    }
+    if (replacements["{modalite}"]) {
+      replacements["{modalite_formation}"] = replacements["{modalite}"];
+    }
+    if (replacements["{contenu_formation}"]) {
+      replacements["{programme_formation}"] = replacements["{contenu_formation}"];
+    }
+    // Date de délivrance = date du jour
+    replacements["{date_delivrance}"] = today.toLocaleDateString("fr-FR");
+
+    // Nombre de stagiaires inscrits à la session
+    if (sessionId) {
+      const enrollmentCount = await storage.getEnrollmentCount(sessionId);
+      replacements["{nombre_stagiaires}"] = String(enrollmentCount);
+    }
 
     const settings = await storage.getOrganizationSettings();
     const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
     replacements["{nom_organisme}"] = settingsMap["org_name"] || "SO'SAFE Formation";
     replacements["{adresse_organisme}"] = settingsMap["org_address"] || "";
     replacements["{siret_organisme}"] = settingsMap["org_siret"] || "";
+    replacements["{nda_organisme}"] = settingsMap["org_nda"] || "";
     replacements["{email_organisme}"] = settingsMap["org_email"] || "";
     replacements["{telephone_organisme}"] = settingsMap["org_phone"] || "";
 
@@ -1723,11 +2420,20 @@ export async function registerRoutes(
       content = content.replaceAll(key, value);
     }
 
+    // Process conditional blocks: {{#if var_name}}content{{/if}}
+    content = content.replace(/\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_match, varName, inner) => {
+      const val = replacements[`{${varName}}`];
+      return val && val !== "" && val !== "false" ? inner : "";
+    });
+
+    // Strip any remaining unreplaced {variable} placeholders
+    content = content.replace(/\{[a-z_]+\}/g, "");
+
     // Habillage branded du document généré
     content = wrapWithBranding(content, {
       brandColor: template.brandColor,
       fontFamily: template.fontFamily,
-      logoUrl: template.logoUrl,
+      logoUrl: template.logoUrl || settingsMap["org_logo_url"] || null,
       headerHtml: template.headerHtml,
       footerHtml: template.footerHtml,
       orgName: settingsMap["org_name"] || "SO'SAFE",
@@ -1741,8 +2447,8 @@ export async function registerRoutes(
     const doc = await storage.createGeneratedDocument({
       templateId,
       sessionId: sessionId || null,
-      traineeId: traineeId || null,
-      enterpriseId: enterpriseId || null,
+      traineeId: currentTraineeId || null,
+      enterpriseId: effectiveEnterpriseId || null,
       quoteId: quoteId || null,
       title: template.name,
       type: template.type,
@@ -1751,8 +2457,14 @@ export async function registerRoutes(
       visibility: effectiveVisibility,
       sharedAt: effectiveVisibility !== "admin_only" ? new Date() : null,
     });
+    generatedDocs.push(doc);
+    } // end for loop
 
-    res.status(201).json(doc);
+    if (generatedDocs.length === 1) {
+      res.status(201).json(generatedDocs[0]);
+    } else {
+      res.status(201).json(generatedDocs);
+    }
   });
 
   app.patch("/api/generated-documents/:id", async (req, res) => {
@@ -1807,6 +2519,16 @@ export async function registerRoutes(
       visibility: "all",
       sharedAt: (doc as any).sharedAt || new Date(),
     } as any);
+
+    // Notifier les signataires qui ont un compte utilisateur
+    for (const s of signers) {
+      const signerUsers = (await storage.getUsers()).filter(u =>
+        u.traineeId === s.signerId || u.trainerId === s.signerId || u.enterpriseId === s.signerId || u.id === s.signerId
+      );
+      for (const su of signerUsers) {
+        await createNotification(su.id, "signature", "Signature requise", `Document "${doc.title}" à signer`, "/learner-portal", doc.id, "document");
+      }
+    }
 
     res.json(updated);
   });
@@ -1871,6 +2593,34 @@ export async function registerRoutes(
     const lineHeight = 16;
     const maxWidth = pageWidth - margin * 2;
 
+    // Embed organization logo if available
+    const allSettings = await storage.getOrganizationSettings();
+    const settingsMap = Object.fromEntries(allSettings.map(s => [s.key, s.value]));
+    const orgLogoUrl = settingsMap["org_logo_url"];
+    let logoImage: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null;
+    let logoDims = { width: 0, height: 0 };
+    if (orgLogoUrl) {
+      try {
+        let logoBytes: Buffer;
+        if (orgLogoUrl.startsWith("/")) {
+          const fs = await import("fs");
+          const path = await import("path");
+          const pubPath = path.resolve(process.cwd(), "client/public", orgLogoUrl.replace(/^\//, ""));
+          const rootPath = path.resolve(process.cwd(), orgLogoUrl.replace(/^\//, ""));
+          logoBytes = fs.existsSync(pubPath) ? fs.readFileSync(pubPath) : fs.readFileSync(rootPath);
+        } else {
+          const resp = await fetch(orgLogoUrl);
+          logoBytes = Buffer.from(await resp.arrayBuffer());
+        }
+        if (orgLogoUrl.toLowerCase().endsWith(".png")) {
+          logoImage = await pdfDoc.embedPng(logoBytes);
+        } else {
+          logoImage = await pdfDoc.embedJpg(logoBytes);
+        }
+        logoDims = logoImage.scale(Math.min(1, 150 / logoImage.width, 50 / logoImage.height));
+      } catch { /* logo embedding failed, continue without */ }
+    }
+
     // Strip HTML tags for plain-text PDF export
     const plainText = doc.content
       .replace(/<br\s*\/?>/gi, "\n")
@@ -1893,6 +2643,12 @@ export async function registerRoutes(
 
     let page = pdfDoc.addPage([pageWidth, pageHeight]);
     let y = pageHeight - margin;
+
+    // Logo at top of first page
+    if (logoImage) {
+      page.drawImage(logoImage, { x: margin, y: y - logoDims.height, width: logoDims.width, height: logoDims.height });
+      y -= logoDims.height + 16;
+    }
 
     // Title
     const titleSize = 16;
@@ -1963,6 +2719,35 @@ export async function registerRoutes(
 
     let y = pageHeight - margin;
 
+    // --- Org settings ---
+    const settings = await storage.getOrganizationSettings();
+    const m = Object.fromEntries(settings.map(s => [s.key, s.value]));
+    const orgName = m["org_name"] || "SO'SAFE";
+
+    // Embed organization logo at top
+    const fillLogoUrl = m["org_logo_url"];
+    if (fillLogoUrl) {
+      try {
+        let logoBytes: Buffer;
+        if (fillLogoUrl.startsWith("/")) {
+          const fsm = await import("fs");
+          const pathm = await import("path");
+          const pubPath = pathm.resolve(process.cwd(), "client/public", fillLogoUrl.replace(/^\//, ""));
+          const rootPath = pathm.resolve(process.cwd(), fillLogoUrl.replace(/^\//, ""));
+          logoBytes = fsm.existsSync(pubPath) ? fsm.readFileSync(pubPath) : fsm.readFileSync(rootPath);
+        } else {
+          const resp = await fetch(fillLogoUrl);
+          logoBytes = Buffer.from(await resp.arrayBuffer());
+        }
+        const logoImg = fillLogoUrl.toLowerCase().endsWith(".png")
+          ? await pdfDoc.embedPng(logoBytes)
+          : await pdfDoc.embedJpg(logoBytes);
+        const dims = logoImg.scale(Math.min(1, 150 / logoImg.width, 50 / logoImg.height));
+        page.drawImage(logoImg, { x: margin, y: y - dims.height, width: dims.width, height: dims.height });
+        y -= dims.height + 16;
+      } catch { /* continue without logo */ }
+    }
+
     // Helper to draw label + form field
     const drawField = (label: string, fieldName: string, defaultValue: string, width = 250) => {
       if (y < margin + 40) return; // safety
@@ -1973,11 +2758,6 @@ export async function registerRoutes(
       textField.addToPage(page, { x: margin, y: y - 4, width, height: 20 });
       y -= 30;
     };
-
-    // --- Org settings ---
-    const settings = await storage.getOrganizationSettings();
-    const m = Object.fromEntries(settings.map(s => [s.key, s.value]));
-    const orgName = m["org_name"] || "SO'SAFE";
 
     // --- Resolve trainee & session for pre-fill ---
     let traineeName = "";
@@ -2664,6 +3444,11 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  app.delete("/api/bank-transactions/:id", async (req, res) => {
+    await storage.deleteBankTransaction(req.params.id as string);
+    res.status(204).send();
+  });
+
   // ============================================================
   // E-LEARNING MODULES
   // ============================================================
@@ -2696,8 +3481,153 @@ export async function registerRoutes(
   });
 
   app.delete("/api/elearning-modules/:id", async (req, res) => {
-    await storage.deleteElearningModule(req.params.id);
-    res.status(204).send();
+    try {
+      await storage.deleteElearningModule(req.params.id);
+      res.status(204).send();
+    } catch (err: any) {
+      console.error("Error deleting elearning module:", err);
+      res.status(500).json({ message: err?.message || "Erreur lors de la suppression du module" });
+    }
+  });
+
+  // POST /api/elearning-modules/generate-from-document — AI course generation
+  app.post("/api/elearning-modules/generate-from-document", (req, res) => {
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return res.status(400).json({ message: "Content-Type doit être multipart/form-data" });
+    }
+
+    let fileMeta: { originalName: string; mimeType: string; savedName: string; fullPath: string } | null = null;
+    let chunks: Buffer[] = [];
+    let limitExceeded = false;
+    const fields: Record<string, string> = {};
+
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 50 * 1024 * 1024, files: 1 } });
+
+    busboy.on("field", (name, val) => {
+      fields[name] = val;
+    });
+
+    busboy.on("file", (_fieldname, stream, info) => {
+      const { filename: originalName, mimeType } = info;
+      const allowedTypes = [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+      ];
+      if (!allowedTypes.includes(mimeType)) {
+        stream.resume();
+        return;
+      }
+
+      const uniqueSuffix = Date.now() + "-" + crypto.randomBytes(6).toString("hex");
+      const ext = path.extname(originalName);
+      const savedName = uniqueSuffix + ext;
+      const coursesDir = path.resolve(process.cwd(), "uploads", "courses");
+      if (!fs.existsSync(coursesDir)) fs.mkdirSync(coursesDir, { recursive: true });
+
+      fileMeta = { originalName, mimeType, savedName, fullPath: path.join(coursesDir, savedName) };
+
+      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      stream.on("limit", () => { limitExceeded = true; chunks = []; fileMeta = null; });
+    });
+
+    busboy.on("finish", async () => {
+      if (!fileMeta || limitExceeded) {
+        return res.status(400).json({ message: "Fichier manquant, type non supporté (PDF/Word), ou trop volumineux (max 50MB)" });
+      }
+
+      // Save file
+      const buffer = Buffer.concat(chunks);
+      chunks = [];
+      fs.writeFileSync(fileMeta.fullPath, buffer);
+
+      try {
+        const { generateCourseFromDocument } = await import("./ai-course-generator");
+        console.log("[AI Generate] Starting course generation from:", fileMeta.originalName);
+        const pathType = (fields.pathType === "learning" || fields.pathType === "assessment") ? fields.pathType : "combined";
+        const duration = (fields.duration === "court" || fields.duration === "moyen" || fields.duration === "long") ? fields.duration : "moyen";
+        const blockTypes = fields.blockTypes ? fields.blockTypes.split(",").filter(Boolean) : undefined;
+        const course = await generateCourseFromDocument(fileMeta.fullPath, fields.title || undefined, pathType as any, duration as any, blockTypes);
+        console.log("[AI Generate] Course generated:", course.title, "with", course.blocks.length, "blocks (duration:", duration, "blockTypes:", blockTypes?.join(",") || "default", ")");
+
+        // Create module
+        const module = await storage.createElearningModule({
+          title: course.title,
+          description: course.description,
+          programId: (fields.programId && fields.programId !== "none") ? fields.programId : null,
+          sessionId: (fields.sessionId && fields.sessionId !== "none") ? fields.sessionId : null,
+          status: "draft",
+          orderIndex: 0,
+          requireSequential: true,
+          pathType,
+        });
+
+        // Create blocks and quiz questions
+        const createdBlocks = [];
+        for (let i = 0; i < course.blocks.length; i++) {
+          const b = course.blocks[i];
+          const blockData: any = {
+            moduleId: module.id,
+            type: b.type,
+            title: b.title,
+            orderIndex: i,
+          };
+
+          if (b.type === "text") {
+            blockData.content = b.content || "";
+          } else if (b.type === "quiz") {
+            blockData.quizConfig = {
+              passingScore: 70,
+              allowRetry: true,
+              showOneAtATime: true,
+            };
+          } else if (b.type === "flashcard") {
+            blockData.flashcards = b.flashcards || [];
+          } else if (b.type === "scenario" && (b as any).scenarioConfig) {
+            blockData.scenarioConfig = (b as any).scenarioConfig;
+          } else if (b.type === "simulation" && (b as any).simulationConfig) {
+            blockData.simulationConfig = (b as any).simulationConfig;
+          }
+
+          const block = await storage.createElearningBlock(blockData);
+          createdBlocks.push(block);
+
+          // Create quiz questions
+          if (b.type === "quiz" && b.quizQuestions) {
+            for (let q = 0; q < b.quizQuestions.length; q++) {
+              const qq = b.quizQuestions[q];
+              await storage.createQuizQuestion({
+                blockId: block.id,
+                question: qq.question,
+                type: "qcm",
+                options: qq.options,
+                correctAnswer: qq.correctAnswer,
+                orderIndex: q,
+              });
+            }
+          }
+        }
+
+        res.status(201).json({
+          module,
+          blocks: createdBlocks,
+          message: `Parcours généré avec succès : ${createdBlocks.length} blocs créés`,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erreur lors de la génération";
+        res.status(500).json({ message: msg });
+      } finally {
+        // Clean up uploaded file
+        try { if (fileMeta?.fullPath) fs.unlinkSync(fileMeta.fullPath); } catch {}
+      }
+    });
+
+    busboy.on("error", (err: Error) => {
+      res.status(500).json({ message: err.message || "Erreur lors de l'upload" });
+    });
+
+    req.pipe(busboy);
   });
 
   // ============================================================
@@ -2763,6 +3693,167 @@ export async function registerRoutes(
   });
 
   // ============================================================
+  // AI BLOCK EDITING
+  // ============================================================
+
+  app.post("/api/elearning-blocks/:id/ai-edit", async (req, res) => {
+    try {
+      const block = await storage.getElearningBlock(req.params.id);
+      if (!block) return res.status(404).json({ message: "Bloc non trouvé" });
+
+      const { action, instructions } = req.body;
+      // action: "enrich_text" | "add_questions" | "add_flashcards" | "rewrite"
+      // instructions: optional free-text instructions from user
+
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) return res.status(500).json({ message: "OPENAI_API_KEY non configurée" });
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({ apiKey });
+
+      let prompt = "";
+      let responseFormat = "";
+
+      if (action === "add_questions") {
+        // Get existing questions to avoid duplicates
+        const existingQuestions = await storage.getQuizQuestions(block.id);
+        const existingTexts = existingQuestions.map(q => q.question).join("\n- ");
+        const count = parseInt(req.body.count) || 5;
+
+        prompt = `Tu es un expert en ingénierie pédagogique. Génère ${count} nouvelles questions QCM pour un quiz e-learning.
+
+${block.content ? `CONTENU DU BLOC :\n${block.content}\n` : ""}
+${block.title ? `THÈME : ${block.title}` : ""}
+
+${existingTexts ? `QUESTIONS EXISTANTES (ne pas dupliquer) :\n- ${existingTexts}` : ""}
+
+${instructions ? `CONSIGNES SUPPLÉMENTAIRES : ${instructions}` : ""}
+
+Génère exactement ${count} nouvelles questions différentes des existantes.
+Réponds UNIQUEMENT avec un JSON valide (sans markdown) :
+{
+  "questions": [
+    {
+      "question": "La question ?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0
+    }
+  ]
+}
+
+RÈGLES :
+- Exactement 4 options par question
+- correctAnswer = index (0-3) de la bonne réponse
+- Questions en français, variées et pertinentes
+- Mélange de difficulté (facile, moyen, difficile)`;
+        responseFormat = "questions";
+
+      } else if (action === "add_flashcards") {
+        const existingCards = ((block as any).flashcards as Array<{front: string; back: string}>) || [];
+        const count = parseInt(req.body.count) || 5;
+
+        prompt = `Tu es un expert en ingénierie pédagogique. Génère ${count} nouvelles flashcards pour un module e-learning.
+
+${block.content ? `CONTENU :\n${block.content}\n` : ""}
+THÈME : ${block.title}
+
+${existingCards.length > 0 ? `FLASHCARDS EXISTANTES (ne pas dupliquer) :\n${existingCards.map(c => `- ${c.front} → ${c.back}`).join("\n")}` : ""}
+
+${instructions ? `CONSIGNES : ${instructions}` : ""}
+
+Réponds UNIQUEMENT avec un JSON valide :
+{
+  "flashcards": [
+    { "front": "Question/Concept", "back": "Réponse/Définition" }
+  ]
+}`;
+        responseFormat = "flashcards";
+
+      } else if (action === "enrich_text" || action === "rewrite") {
+        prompt = `Tu es un expert en ingénierie pédagogique. ${action === "rewrite" ? "Réécris" : "Enrichis et développe"} le contenu suivant pour un module e-learning.
+
+TITRE DU BLOC : ${block.title}
+
+CONTENU ACTUEL :
+${block.content || "(vide)"}
+
+${instructions ? `CONSIGNES : ${instructions}` : ""}
+
+${action === "enrich_text"
+  ? "Enrichis le contenu en ajoutant des explications, exemples concrets, listes à puces, et points clés. Garde le contenu actuel et ajoute autour."
+  : "Réécris le contenu de manière plus claire, structurée et pédagogique."}
+
+Réponds UNIQUEMENT avec un JSON valide :
+{
+  "content": "Le contenu enrichi/réécrit ici..."
+}
+
+Le contenu doit être en français, clair et bien structuré.`;
+        responseFormat = "content";
+
+      } else {
+        return res.status(400).json({ message: "Action non reconnue. Utilisez: add_questions, add_flashcards, enrich_text, rewrite" });
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 4096,
+      });
+
+      let responseText = (completion.choices[0]?.message?.content || "").trim();
+      // Strip markdown code blocks if present
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) responseText = jsonMatch[1].trim();
+
+      const parsed = JSON.parse(responseText);
+
+      if (responseFormat === "questions" && parsed.questions) {
+        // Add questions to the block
+        const existingQuestions = await storage.getQuizQuestions(block.id);
+        let maxOrder = existingQuestions.length > 0
+          ? Math.max(...existingQuestions.map(q => q.orderIndex)) + 1
+          : 0;
+
+        const created = [];
+        for (const qq of parsed.questions) {
+          const question = await storage.createQuizQuestion({
+            blockId: block.id,
+            question: qq.question,
+            type: "qcm",
+            options: qq.options?.slice(0, 4) || ["A", "B", "C", "D"],
+            correctAnswer: typeof qq.correctAnswer === "number" ? Math.min(qq.correctAnswer, 3) : 0,
+            orderIndex: maxOrder++,
+          });
+          created.push(question);
+        }
+        res.json({ message: `${created.length} questions ajoutées`, questions: created });
+
+      } else if (responseFormat === "flashcards" && parsed.flashcards) {
+        // Merge flashcards with existing
+        const existingCards = ((block as any).flashcards as Array<{front: string; back: string}>) || [];
+        const newCards = parsed.flashcards.map((f: any) => ({ front: f.front || "", back: f.back || "" }));
+        const mergedCards = [...existingCards, ...newCards];
+
+        const updated = await storage.updateElearningBlock(block.id, { flashcards: mergedCards } as any);
+        res.json({ message: `${newCards.length} flashcards ajoutées (total: ${mergedCards.length})`, block: updated });
+
+      } else if (responseFormat === "content" && parsed.content) {
+        const updated = await storage.updateElearningBlock(block.id, { content: parsed.content });
+        res.json({ message: "Contenu mis à jour", block: updated });
+
+      } else {
+        res.status(500).json({ message: "Réponse IA invalide" });
+      }
+
+    } catch (err: any) {
+      console.error("[ai-edit]", err?.message || err);
+      res.status(500).json({ message: err?.message || "Erreur lors de la modification IA" });
+    }
+  });
+
+  // ============================================================
   // LEARNER PROGRESS
   // ============================================================
 
@@ -2774,16 +3865,238 @@ export async function registerRoutes(
     res.json(result);
   });
 
-  app.post("/api/learner-progress", async (req, res) => {
+  app.post("/api/learner-progress", async (req: any, res) => {
     const parsed = insertLearnerProgressSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+
+    // Learners can only record progress if their enrollment is confirmed
+    const user = await storage.getUser(req.session.userId);
+    if (user?.role === "trainee" && user.traineeId) {
+      const enrollments = await storage.getEnrollmentsByTrainee(user.traineeId);
+      const confirmedStatuses = ["confirmed", "attended", "completed"];
+      const hasConfirmedEnrollment = enrollments.some(
+        (e) => confirmedStatuses.includes(e.status)
+      );
+      if (!hasConfirmedEnrollment) {
+        return res.status(403).json({ message: "Votre inscription n'a pas encore été validée par l'administrateur." });
+      }
+    }
+
     const progress = await storage.createLearnerProgress(parsed.data);
+
+    // Auto-award XP on block completion
+    if (parsed.data.completed && parsed.data.traineeId) {
+      try {
+        const block = parsed.data.blockId ? await storage.getElearningBlock(parsed.data.blockId) : null;
+        const mod = await storage.getElearningModule(parsed.data.moduleId);
+
+        // Base XP for completing a block
+        await storage.createGamificationPoint({
+          traineeId: parsed.data.traineeId,
+          moduleId: parsed.data.moduleId,
+          blockId: parsed.data.blockId || null,
+          sessionId: mod?.sessionId || null,
+          eventType: "block_complete",
+          points: XP_REWARDS.block_complete,
+          metadata: { blockType: block?.type },
+        });
+
+        // Bonus XP for quiz/scenario/simulation scores
+        if (parsed.data.score !== null && parsed.data.score !== undefined) {
+          if (parsed.data.score === 100) {
+            await storage.createGamificationPoint({
+              traineeId: parsed.data.traineeId,
+              moduleId: parsed.data.moduleId,
+              blockId: parsed.data.blockId || null,
+              sessionId: mod?.sessionId || null,
+              eventType: "quiz_perfect",
+              points: XP_REWARDS.quiz_perfect,
+              metadata: { score: parsed.data.score },
+            });
+          } else if (parsed.data.score >= 70) {
+            await storage.createGamificationPoint({
+              traineeId: parsed.data.traineeId,
+              moduleId: parsed.data.moduleId,
+              blockId: parsed.data.blockId || null,
+              sessionId: mod?.sessionId || null,
+              eventType: "quiz_pass",
+              points: XP_REWARDS.quiz_pass,
+              metadata: { score: parsed.data.score },
+            });
+          }
+
+          // First-try bonus
+          const existingProgress = await storage.getLearnerProgress(parsed.data.traineeId, parsed.data.moduleId);
+          const previousAttempts = existingProgress.filter(p => p.blockId === parsed.data.blockId && p.id !== progress.id);
+          if (previousAttempts.length === 0 && parsed.data.score >= 70) {
+            await storage.createGamificationPoint({
+              traineeId: parsed.data.traineeId,
+              moduleId: parsed.data.moduleId,
+              blockId: parsed.data.blockId || null,
+              sessionId: mod?.sessionId || null,
+              eventType: "first_try_bonus",
+              points: XP_REWARDS.first_try_bonus,
+              metadata: { score: parsed.data.score },
+            });
+          }
+        }
+
+        // Scenario/simulation specific bonus
+        if (block?.type === "scenario") {
+          await storage.createGamificationPoint({
+            traineeId: parsed.data.traineeId,
+            moduleId: parsed.data.moduleId,
+            blockId: parsed.data.blockId || null,
+            sessionId: mod?.sessionId || null,
+            eventType: "scenario_complete",
+            points: XP_REWARDS.scenario_complete,
+            metadata: {},
+          });
+        }
+        if (block?.type === "simulation") {
+          await storage.createGamificationPoint({
+            traineeId: parsed.data.traineeId,
+            moduleId: parsed.data.moduleId,
+            blockId: parsed.data.blockId || null,
+            sessionId: mod?.sessionId || null,
+            eventType: "simulation_complete",
+            points: XP_REWARDS.simulation_complete,
+            metadata: {},
+          });
+        }
+
+        // Check module completion bonus
+        if (mod) {
+          const blocks = await storage.getElearningBlocks(mod.id);
+          const allProgress = await storage.getLearnerProgress(parsed.data.traineeId, mod.id);
+          const completedBlockIds = new Set(allProgress.filter(p => p.completed).map(p => p.blockId));
+          if (blocks.every(b => completedBlockIds.has(b.id))) {
+            await storage.createGamificationPoint({
+              traineeId: parsed.data.traineeId,
+              moduleId: parsed.data.moduleId,
+              sessionId: mod.sessionId || null,
+              eventType: "module_complete",
+              points: XP_REWARDS.module_complete,
+              metadata: {},
+            });
+          }
+        }
+
+        // Auto-award badges check
+        try {
+          const allBadges = await storage.getDigitalBadges();
+          const autoAwardBadges = allBadges.filter(b => b.autoAward && b.isActive);
+          for (const badge of autoAwardBadges) {
+            // Check if already awarded
+            const existing = await storage.getBadgeAwards({ badgeId: badge.id, traineeId: parsed.data.traineeId });
+            if (existing.some(a => a.status === "active")) continue;
+
+            let shouldAward = false;
+            const condition = badge.autoAwardCondition;
+
+            if (condition === "completion_100" && mod) {
+              // All blocks of the module completed
+              const blocks = await storage.getElearningBlocks(mod.id);
+              const allProg = await storage.getLearnerProgress(parsed.data.traineeId, mod.id);
+              const doneIds = new Set(allProg.filter(p => p.completed).map(p => p.blockId));
+              if (blocks.length > 0 && blocks.every(b => doneIds.has(b.id))) {
+                // Check badge is linked to same program/session
+                if ((!badge.programId || badge.programId === mod.programId) && (!badge.sessionId || badge.sessionId === mod.sessionId)) {
+                  shouldAward = true;
+                }
+              }
+            } else if (condition === "score_above_80" && parsed.data.score !== null && parsed.data.score !== undefined) {
+              if (parsed.data.score >= 80) {
+                if ((!badge.programId || (mod && badge.programId === mod.programId)) && (!badge.sessionId || (mod && badge.sessionId === mod.sessionId))) {
+                  shouldAward = true;
+                }
+              }
+            } else if (condition === "quiz_passed" && parsed.data.score !== null && parsed.data.score !== undefined) {
+              if (parsed.data.score >= 70) {
+                if ((!badge.programId || (mod && badge.programId === mod.programId)) && (!badge.sessionId || (mod && badge.sessionId === mod.sessionId))) {
+                  shouldAward = true;
+                }
+              }
+            }
+
+            if (shouldAward) {
+              const trainee = await storage.getTrainee(parsed.data.traineeId);
+              await storage.createBadgeAward({
+                badgeId: badge.id,
+                traineeId: parsed.data.traineeId,
+                traineeName: trainee ? `${trainee.firstName} ${trainee.lastName}` : "Apprenant",
+                sessionId: mod?.sessionId || null,
+                awardedBy: "system",
+                awardMethod: "automatic",
+                status: "active",
+                verificationCode: `AUTO-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                notes: `Auto-attribué : ${condition}`,
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Erreur auto-award badge:", err);
+        }
+
+        // Auto-check task items with checkMethod "automatic"
+        try {
+          const traineeTaskLists = await storage.getTaskLists({ traineeId: parsed.data.traineeId, status: "in_progress" });
+          for (const taskList of traineeTaskLists) {
+            const items = await storage.getTaskItems(taskList.id);
+            const autoItems = items.filter(item => item.checkMethod === "automatic" && !item.checked);
+            let changed = false;
+            for (const item of autoItems) {
+              const cond = item.autoCondition || "";
+              // Format: "module_completed:moduleId" or "quiz_passed:blockId" or "block_completed:blockId" or "attendance_present"
+              const [condType, condTarget] = cond.split(":");
+              const matchBlock = condType === "block_completed" && condTarget === parsed.data.blockId;
+              const matchModule = condType === "module_completed" && condTarget === parsed.data.moduleId;
+              const matchQuiz = condType === "quiz_passed" && condTarget === parsed.data.blockId && parsed.data.score !== null && parsed.data.score !== undefined && parsed.data.score >= 70;
+              if (matchBlock || matchModule || matchQuiz) {
+                await storage.updateTaskItem(item.id, { checked: true, checkedAt: new Date(), checkedBy: "system", checkedByName: "Système automatique" });
+                changed = true;
+              }
+            }
+            if (changed) {
+              // Recalculate progress
+              const updatedItems = await storage.getTaskItems(taskList.id);
+              const total = updatedItems.length;
+              const checked = updatedItems.filter(i => i.checked).length;
+              const progress = total > 0 ? Math.round((checked / total) * 100) : 0;
+              await storage.updateTaskList(taskList.id, {
+                progress,
+                ...(progress === 100 ? { status: "completed", completedAt: new Date() } : {}),
+              } as any);
+            }
+          }
+        } catch (err) {
+          console.error("Erreur auto-check task items:", err);
+        }
+      } catch (err) {
+        console.error("Erreur gamification XP:", err);
+      }
+    }
+
     res.status(201).json(progress);
   });
 
-  app.patch("/api/learner-progress/:id", async (req, res) => {
+  app.patch("/api/learner-progress/:id", async (req: any, res) => {
     const parsed = insertLearnerProgressSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+
+    // Learners can only update progress if their enrollment is confirmed
+    const user = await storage.getUser(req.session.userId);
+    if (user?.role === "trainee" && user.traineeId) {
+      const enrollments = await storage.getEnrollmentsByTrainee(user.traineeId);
+      const confirmedStatuses = ["confirmed", "attended", "completed"];
+      const hasConfirmedEnrollment = enrollments.some(
+        (e) => confirmedStatuses.includes(e.status)
+      );
+      if (!hasConfirmedEnrollment) {
+        return res.status(403).json({ message: "Votre inscription n'a pas encore été validée par l'administrateur." });
+      }
+    }
+
     const progress = await storage.updateLearnerProgress(req.params.id, parsed.data);
     if (!progress) return res.status(404).json({ message: "Progression non trouvée" });
     res.json(progress);
@@ -2818,6 +4131,259 @@ export async function registerRoutes(
   app.delete("/api/session-resources/:id", async (req, res) => {
     await storage.deleteSessionResource(req.params.id);
     res.status(204).send();
+  });
+
+  // ============================================================
+  // TRAINER PORTAL ENDPOINTS
+  // ============================================================
+
+  // Trainer: learner progress for all sessions assigned to the trainer
+  app.get("/api/trainer/session-progress", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.trainerId) {
+      return res.status(403).json({ message: "Aucun profil formateur associé" });
+    }
+    const trainerSessions = await storage.getSessionsByTrainer(user.trainerId);
+    const result = await Promise.all(
+      trainerSessions.map(async (session) => {
+        const enrollments = await storage.getEnrollments(session.id);
+        const activeEnrollments = enrollments.filter((e: any) => e.status !== "cancelled");
+        const program = session.programId ? await storage.getProgram(session.programId) : null;
+        const allModules = await storage.getElearningModules();
+        const sessionModules = allModules.filter((m: any) =>
+          m.status === "published" &&
+          (m.sessionId === session.id || (m.programId === session.programId && !m.sessionId))
+        );
+
+        const trainees = await Promise.all(
+          activeEnrollments.map(async (enrollment) => {
+            const trainee = await storage.getTrainee(enrollment.traineeId);
+            if (!trainee) return null;
+            const progress = await storage.getLearnerProgress(enrollment.traineeId);
+            const moduleIds = new Set(sessionModules.map((m: any) => m.id));
+            const relevantProgress = progress.filter((p: any) => moduleIds.has(p.moduleId));
+            const completedBlocks = relevantProgress.filter((p: any) => p.completed).length;
+            const totalBlocks = relevantProgress.length || sessionModules.length;
+            const percent = totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0;
+            return {
+              traineeId: trainee.id,
+              firstName: trainee.firstName,
+              lastName: trainee.lastName,
+              email: trainee.email,
+              enrollmentStatus: enrollment.status,
+              completedBlocks,
+              totalBlocks,
+              progressPercent: percent,
+            };
+          })
+        );
+
+        return {
+          sessionId: session.id,
+          sessionTitle: session.title,
+          programTitle: program?.title || "",
+          startDate: session.startDate,
+          endDate: session.endDate,
+          moduleCount: sessionModules.length,
+          trainees: trainees.filter(Boolean),
+        };
+      })
+    );
+    res.json(result);
+  });
+
+  // Trainer: attendance sheets for the trainer's sessions
+  app.get("/api/trainer/attendance", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.trainerId) {
+      return res.status(403).json({ message: "Aucun profil formateur associé" });
+    }
+    const trainerSessions = await storage.getSessionsByTrainer(user.trainerId);
+    const sessionIds = new Set(trainerSessions.map((s: any) => s.id));
+    const allSheets = await storage.getAttendanceSheets();
+    const trainerSheets = allSheets.filter((sh: any) => sessionIds.has(sh.sessionId));
+    res.json(trainerSheets);
+  });
+
+  // Trainer: create attendance sheet for their session
+  app.post("/api/trainer/attendance", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.trainerId) {
+      return res.status(403).json({ message: "Aucun profil formateur associé" });
+    }
+    const trainerSessions = await storage.getSessionsByTrainer(user.trainerId);
+    const sessionIds = new Set(trainerSessions.map((s: any) => s.id));
+    if (!sessionIds.has(req.body.sessionId)) {
+      return res.status(403).json({ message: "Session non assignée à ce formateur" });
+    }
+    const sheet = await storage.createAttendanceSheet(req.body);
+    res.status(201).json(sheet);
+  });
+
+  // Trainer: get attendance records for a sheet
+  app.get("/api/trainer/attendance-records", requireAuth, async (req: any, res) => {
+    const sheetId = req.query.sheetId as string;
+    if (!sheetId) return res.status(400).json({ message: "sheetId requis" });
+    const records = await storage.getAttendanceRecords(sheetId);
+    res.json(records);
+  });
+
+  // Trainer: update attendance record (mark present/absent/late)
+  app.patch("/api/trainer/attendance-records/:id", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.trainerId) {
+      return res.status(403).json({ message: "Aucun profil formateur associé" });
+    }
+    if (req.body.signedAt && typeof req.body.signedAt === "string") {
+      req.body.signedAt = new Date(req.body.signedAt);
+    }
+    const record = await storage.updateAttendanceRecord(req.params.id, req.body);
+    if (!record) return res.status(404).json({ message: "Enregistrement non trouvé" });
+    res.json(record);
+  });
+
+  // Trainer: create attendance record
+  app.post("/api/trainer/attendance-records", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.trainerId) {
+      return res.status(403).json({ message: "Aucun profil formateur associé" });
+    }
+    if (req.body.signedAt && typeof req.body.signedAt === "string") {
+      req.body.signedAt = new Date(req.body.signedAt);
+    }
+    const record = await storage.createAttendanceRecord(req.body);
+    res.status(201).json(record);
+  });
+
+  // Trainer: evaluations for their sessions
+  app.get("/api/trainer/evaluations", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.trainerId) {
+      return res.status(403).json({ message: "Aucun profil formateur associé" });
+    }
+    const trainerSessions = await storage.getSessionsByTrainer(user.trainerId);
+    const result = await Promise.all(
+      trainerSessions.map(async (session) => {
+        const assignments = await storage.getEvaluationAssignments(session.id);
+        const program = session.programId ? await storage.getProgram(session.programId) : null;
+        return {
+          sessionId: session.id,
+          sessionTitle: session.title,
+          programTitle: program?.title || "",
+          startDate: session.startDate,
+          assignments: assignments.map((a: any) => ({
+            id: a.id,
+            traineeId: a.traineeId,
+            respondentName: a.respondentName,
+            respondentType: a.respondentType,
+            status: a.status,
+            completedAt: a.completedAt,
+          })),
+        };
+      })
+    );
+    res.json(result.filter((r) => r.assignments.length > 0));
+  });
+
+  // Learner: only enrollments with validated status for the authenticated trainee
+  app.get("/api/learner/my-enrollments", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.traineeId) {
+      return res.status(403).json({ message: "Aucun profil apprenant associé" });
+    }
+    const result = await storage.getValidatedEnrollmentsByTrainee(user.traineeId);
+    res.json(result);
+  });
+
+  // Learner: sessions enriched with program & trainer info, only for validated enrollments
+  app.get("/api/learner/my-sessions", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.traineeId) {
+      return res.status(403).json({ message: "Aucun profil apprenant associé" });
+    }
+    const myEnrollments = await storage.getValidatedEnrollmentsByTrainee(user.traineeId);
+    const sessionIds = Array.from(new Set(myEnrollments.map((e) => e.sessionId)));
+    const result = await Promise.all(
+      sessionIds.map(async (sessionId) => {
+        const session = await storage.getSession(sessionId);
+        if (!session) return null;
+        const program = session.programId ? await storage.getProgram(session.programId) : null;
+        const trainer = session.trainerId ? await storage.getTrainer(session.trainerId) : null;
+        const enrollment = myEnrollments.find((e) => e.sessionId === sessionId);
+        return {
+          session,
+          program: program ? { id: program.id, title: program.title, description: program.description, duration: program.duration, modality: program.modality, level: program.level } : null,
+          trainer: trainer ? { firstName: trainer.firstName, lastName: trainer.lastName, email: trainer.email, specialty: trainer.specialty } : null,
+          enrollmentStatus: enrollment?.status,
+        };
+      })
+    );
+    res.json(result.filter(Boolean));
+  });
+
+  // Learner: aggregated stats for dashboard
+  app.get("/api/learner/my-stats", requireAuth, async (req: any, res) => {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.traineeId) {
+      return res.status(403).json({ message: "Aucun profil apprenant associé" });
+    }
+    const traineeId = user.traineeId;
+
+    // Get all learner progress
+    const progress = await storage.getLearnerProgress(traineeId);
+    const completedProgress = progress.filter(p => p.completed);
+
+    // Quiz average score
+    const quizScores = completedProgress.filter(p => p.score !== null && p.score !== undefined);
+    const quizAvg = quizScores.length > 0
+      ? Math.round(quizScores.reduce((sum, p) => sum + (p.score || 0), 0) / quizScores.length)
+      : null;
+
+    // Blocks completed count
+    const blocksCompleted = completedProgress.length;
+
+    // Total minutes from connection logs
+    const connectionLogs = await storage.getConnectionLogs({ userId: req.session.userId });
+    const totalMinutes = Math.round(
+      connectionLogs.reduce((sum, log) => sum + (log.duration || 0), 0) / 60
+    );
+
+    // Streak: consecutive days with at least one connection
+    let streak = 0;
+    if (connectionLogs.length > 0) {
+      const uniqueDays = new Set(
+        connectionLogs
+          .filter(l => l.connectedAt)
+          .map(l => new Date(l.connectedAt!).toISOString().split("T")[0])
+      );
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (let i = 0; i < 365; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const dayStr = d.toISOString().split("T")[0];
+        if (uniqueDays.has(dayStr)) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Gamification: compute XP and level
+    const xpPoints = await storage.getGamificationPoints({ traineeId });
+    const totalXP = xpPoints.reduce((sum, p) => sum + p.points, 0);
+    const currentLevel = [...GAMIFICATION_LEVELS].reverse().find(l => totalXP >= l.minXP) || GAMIFICATION_LEVELS[0];
+    const currentIdx = GAMIFICATION_LEVELS.findIndex(l => l.name === currentLevel.name);
+    const nextLevel = currentIdx < GAMIFICATION_LEVELS.length - 1 ? GAMIFICATION_LEVELS[currentIdx + 1] : null;
+
+    res.json({
+      quizAvg, blocksCompleted, totalMinutes, streak,
+      totalXP,
+      level: currentLevel.name,
+      nextLevelXP: nextLevel?.minXP || null,
+      nextLevelName: nextLevel?.name || null,
+    });
   });
 
   // Learner access to session resources (visible only)
@@ -2887,6 +4453,15 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const post = await storage.createForumPost(parsed.data);
     res.status(201).json(post);
+  });
+
+  app.patch("/api/learner/forum-posts/:id", requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "admin" && user.role !== "trainer") {
+      return res.status(403).json({ message: "Seuls les formateurs et admins peuvent modifier un post" });
+    }
+    const updated = await storage.updateForumPost(req.params.id as string, req.body);
+    res.json(updated);
   });
 
   app.delete("/api/learner/forum-posts/:id", requireAuth, async (req, res) => {
@@ -3225,6 +4800,14 @@ export async function registerRoutes(
         });
 
         created.push(assignment);
+
+        // Notifier le stagiaire
+        if (respondentType === "trainee") {
+          const evalUsers = (await storage.getUsers()).filter(u => u.traineeId === enrollment.traineeId || u.id === enrollment.traineeId);
+          for (const eu of evalUsers) {
+            await createNotification(eu.id, "evaluation", "Évaluation à compléter", `${tmpl!.title || "Enquête de satisfaction"}`, "/learner-portal", assignment.id, "evaluation");
+          }
+        }
       }
 
       res.json({ created: created.length, assignments: created });
@@ -3427,12 +5010,64 @@ export async function registerRoutes(
   });
 
   // ============================================================
+  // NOTIFICATIONS
+  // ============================================================
+
+  // Helper pour créer une notification
+  async function createNotification(userId: string, category: string, title: string, description?: string, href?: string, relatedId?: string, relatedType?: string) {
+    try {
+      await storage.createNotification({ userId, category, title, description: description || null, href: href || null, relatedId: relatedId || null, relatedType: relatedType || null, read: false });
+    } catch (e) { console.error("[notification] Error creating notification:", e); }
+  }
+
+  // Notifier tous les admins
+  async function notifyAdmins(category: string, title: string, description?: string, href?: string, relatedId?: string, relatedType?: string) {
+    const allUsers = await storage.getUsers();
+    const admins = allUsers.filter(u => u.role === "admin");
+    for (const a of admins) {
+      await createNotification(a.id, category, title, description, href, relatedId, relatedType);
+    }
+  }
+
+  app.get("/api/notifications", async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
+    const notifs = await storage.getNotifications(user.id);
+    res.json(notifs);
+  });
+
+  app.get("/api/notifications/unread-count", async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
+    const count = await storage.getUnreadNotificationCount(user.id);
+    res.json({ count });
+  });
+
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    await storage.markNotificationRead(req.params.id as string);
+    res.json({ success: true });
+  });
+
+  app.post("/api/notifications/mark-all-read", async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
+    await storage.markAllNotificationsRead(user.id);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/notifications/:id", async (req, res) => {
+    await storage.deleteNotification(req.params.id as string);
+    res.status(204).send();
+  });
+
+  // ============================================================
   // MESSAGING (messagerie intégrée)
   // ============================================================
 
   // Liste des conversations de l'utilisateur connecté
   app.get("/api/conversations", async (req, res) => {
-    const user = (req as any).user;
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
     const convs = await storage.getConversations(user.id);
     // Enrichir avec participants et dernier message
     const enriched = await Promise.all(convs.map(async (c) => {
@@ -3450,7 +5085,8 @@ export async function registerRoutes(
 
   // Créer une conversation (direct ou group)
   app.post("/api/conversations", async (req, res) => {
-    const user = (req as any).user;
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
     const { type, title, participantIds } = req.body;
 
     // Pour les conversations directes, vérifier si elle existe déjà
@@ -3507,7 +5143,8 @@ export async function registerRoutes(
   app.get("/api/messages", async (req, res) => {
     const conversationId = req.query.conversationId as string;
     if (!conversationId) return res.status(400).json({ message: "conversationId requis" });
-    const user = (req as any).user;
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
     // Marquer comme lu
     await storage.updateLastRead(conversationId, user.id);
     const msgs = await storage.getMessages(conversationId);
@@ -3516,7 +5153,8 @@ export async function registerRoutes(
 
   // Envoyer un message
   app.post("/api/messages", async (req, res) => {
-    const user = (req as any).user;
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
     const { conversationId, content } = req.body;
     if (!conversationId || !content) return res.status(400).json({ message: "conversationId et content requis" });
     const msg = await storage.createMessage({
@@ -3526,6 +5164,14 @@ export async function registerRoutes(
       senderRole: user.role,
       content,
     });
+    // Notifier les autres participants
+    const participants = await storage.getConversationParticipants(conversationId);
+    const senderName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username;
+    for (const p of participants) {
+      if (p.userId !== user.id) {
+        await createNotification(p.userId, "message", `Nouveau message de ${senderName}`, content.substring(0, 100), "/messaging", conversationId, "conversation");
+      }
+    }
     res.status(201).json(msg);
   });
 
@@ -3537,12 +5183,63 @@ export async function registerRoutes(
 
   // Liste des utilisateurs pour démarrer une conversation
   app.get("/api/conversations/available-users", async (req, res) => {
-    const user = (req as any).user;
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
+    const result: { id: string; name: string; role: string }[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. Utilisateurs avec compte
     const allUsers = await storage.getUsers();
-    const filtered = allUsers
-      .filter(u => u.id !== user.id)
-      .map(u => ({ id: u.id, name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.username, role: u.role }));
-    res.json(filtered);
+    for (const u of allUsers) {
+      if (u.id === user.id) continue;
+      seenIds.add(u.id);
+      if (u.trainerId) seenIds.add(u.trainerId);
+      if (u.traineeId) seenIds.add(u.traineeId);
+      if (u.enterpriseId) seenIds.add(u.enterpriseId);
+      result.push({
+        id: u.id,
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.username,
+        role: u.role,
+      });
+    }
+
+    // 2. Formateurs sans compte utilisateur
+    const trainers = await storage.getTrainers();
+    for (const t of trainers) {
+      if (seenIds.has(t.id)) continue;
+      seenIds.add(t.id);
+      result.push({
+        id: `trainer_${t.id}`,
+        name: `${t.firstName || ""} ${t.lastName || ""}`.trim(),
+        role: "trainer",
+      });
+    }
+
+    // 3. Stagiaires sans compte utilisateur
+    const trainees = await storage.getTrainees();
+    for (const t of trainees) {
+      if (seenIds.has(t.id)) continue;
+      seenIds.add(t.id);
+      result.push({
+        id: `trainee_${t.id}`,
+        name: `${t.firstName || ""} ${t.lastName || ""}`.trim(),
+        role: "trainee",
+      });
+    }
+
+    // 4. Contacts entreprise
+    const enterprises = await storage.getEnterprises();
+    for (const e of enterprises) {
+      if (seenIds.has(e.id)) continue;
+      seenIds.add(e.id);
+      result.push({
+        id: `enterprise_${e.id}`,
+        name: e.contactName || e.name,
+        role: "enterprise",
+      });
+    }
+
+    res.json(result);
   });
 
   // ============================================================
@@ -3670,12 +5367,32 @@ export async function registerRoutes(
       }
     };
 
-    const ct = campaign.targetContactType || "all";
-    if (ct === "all" || ct === "trainee") await addTrainees();
-    if (ct === "all" || ct === "enterprise") await addEnterprises();
-    if (ct === "all" || ct === "prospect") await addProspects();
+    if (campaign.targetType === "manual" && (campaign as any).manualEmails?.length > 0) {
+      // Manuel: résoudre les emails fournis
+      const manualEmails = (campaign as any).manualEmails as string[];
+      const allTrainees = await storage.getTrainees();
+      const allEnterprises = await storage.getEnterprises();
+      const allProspects = await storage.getProspects();
+      for (const email of manualEmails) {
+        const t = allTrainees.find(t => t.email === email);
+        if (t) { recipients.push({ email, name: `${t.firstName} ${t.lastName}`, contactType: "trainee", contactId: t.id }); continue; }
+        const e = allEnterprises.find(e => e.contactEmail === email);
+        if (e) { recipients.push({ email, name: e.name, contactType: "enterprise", contactId: e.id }); continue; }
+        const p = allProspects.find(p => p.contactEmail === email);
+        if (p) { recipients.push({ email, name: p.contactName, contactType: "prospect", contactId: p.id }); continue; }
+        recipients.push({ email, name: email, contactType: "other", contactId: "" });
+      }
+    } else {
+      const ct = campaign.targetContactType || "all";
+      if (ct === "all" || ct === "trainee") await addTrainees();
+      if (ct === "all" || ct === "enterprise") await addEnterprises();
+      if (ct === "all" || ct === "prospect") await addProspects();
+    }
 
-    // Ajouter les destinataires
+    // Ajouter les destinataires et envoyer les emails
+    const { sendEmailNow } = await import("./email-service");
+    let sentCount = 0;
+
     if (recipients.length > 0) {
       await storage.addCampaignRecipients(recipients.map(r => ({
         campaignId: campaign.id,
@@ -3683,19 +5400,39 @@ export async function registerRoutes(
         name: r.name,
         contactType: r.contactType,
         contactId: r.contactId,
-        status: "sent",
+        status: "pending",
         sentAt: new Date(),
       })));
+
+      // Envoyer les emails réels via le service SMTP
+      for (const r of recipients) {
+        try {
+          const personalizedBody = (campaign.body || "")
+            .replace(/\{nom\}/gi, r.name)
+            .replace(/\{email\}/gi, r.email);
+          const emailLog = await storage.createEmailLog({
+            templateId: null,
+            recipient: r.email,
+            subject: campaign.subject || campaign.title,
+            body: personalizedBody,
+            status: "pending",
+          });
+          await sendEmailNow(emailLog.id);
+          sentCount++;
+        } catch (err) {
+          console.error(`Erreur envoi campagne à ${r.email}:`, err);
+        }
+      }
     }
 
     await storage.updateMarketingCampaign(campaign.id, {
       status: "sent",
       sentAt: new Date(),
       totalRecipients: recipients.length,
-      sentCount: recipients.length,
+      sentCount,
     });
 
-    res.json({ sent: recipients.length });
+    res.json({ sent: sentCount, total: recipients.length });
   });
 
   // Prospect Activities
@@ -3827,6 +5564,10 @@ export async function registerRoutes(
   });
 
   app.post("/api/attendance-records", async (req, res) => {
+    // Convert signedAt ISO string to Date object for Zod validation
+    if (req.body.signedAt && typeof req.body.signedAt === "string") {
+      req.body.signedAt = new Date(req.body.signedAt);
+    }
     const parsed = insertAttendanceRecordSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const record = await storage.createAttendanceRecord(parsed.data);
@@ -3856,6 +5597,10 @@ export async function registerRoutes(
   });
 
   app.patch("/api/attendance-records/:id", async (req, res) => {
+    // Convert signedAt ISO string to Date object for Zod validation
+    if (req.body.signedAt && typeof req.body.signedAt === "string") {
+      req.body.signedAt = new Date(req.body.signedAt);
+    }
     const parsed = insertAttendanceRecordSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const record = await storage.updateAttendanceRecord(req.params.id, parsed.data);
@@ -3904,7 +5649,7 @@ export async function registerRoutes(
 
       const appUrl = process.env.APP_URL
         || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
-        || "http://localhost:5000";
+        || `http://localhost:${process.env.PORT || 3000}`;
 
       let sentCount = 0;
 
@@ -3990,7 +5735,7 @@ export async function registerRoutes(
 
       const appUrl = process.env.APP_URL
         || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
-        || "http://localhost:5000";
+        || `http://localhost:${process.env.PORT || 3000}`;
 
       const QRCode = (await import("qrcode")).default;
       const url = `${appUrl}/emargement/${token}`;
@@ -4361,6 +6106,20 @@ export async function registerRoutes(
     res.json(events);
   });
 
+  // Mark email as opened manually
+  app.post("/api/email-logs/:id/mark-opened", requireAuth, async (req, res) => {
+    const emailLog = await storage.getEmailLog(req.params.id);
+    if (!emailLog) return res.status(404).json({ message: "Email log introuvable" });
+    if (!emailLog.openedAt) {
+      await storage.updateEmailLog(req.params.id, {
+        openedAt: new Date(),
+        openCount: (emailLog.openCount || 0) + 1,
+      } as any);
+    }
+    const updated = await storage.getEmailLog(req.params.id);
+    res.json(updated);
+  });
+
   // Resend a failed email
   app.post("/api/email-logs/:id/resend", async (req, res) => {
     const emailLog = await storage.getEmailLog(req.params.id);
@@ -4671,7 +6430,7 @@ export async function registerRoutes(
     content = wrapWithBranding(content, {
       brandColor: template.brandColor,
       fontFamily: template.fontFamily,
-      logoUrl: template.logoUrl,
+      logoUrl: template.logoUrl || settingsMap["org_logo_url"] || null,
       headerHtml: template.headerHtml,
       footerHtml: template.footerHtml,
       orgName: settingsMap["org_name"] || "SO'SAFE",
@@ -4707,7 +6466,7 @@ export async function registerRoutes(
   // SURVEY RESPONSES - Admin override
   // ============================================================
 
-  app.patch("/api/survey-responses/:id", async (req, res) => {
+  app.patch("/api/survey-responses/:id", requirePermission("override_survey_responses"), async (req, res) => {
     const parsed = insertSurveyResponseSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const response = await storage.updateSurveyResponse(req.params.id, parsed.data);
@@ -4930,6 +6689,70 @@ export async function registerRoutes(
     res.json(results);
   });
 
+  // ── Mark document as signed on paper (admin only) ──
+  app.post("/api/generated-documents/:id/mark-paper-signed", async (req, res) => {
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).json({ message: "Réservé aux administrateurs" });
+    }
+
+    const doc = await storage.getGeneratedDocument(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Document non trouvé" });
+
+    const { signerName, notes } = req.body;
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || null;
+
+    // Create signature record for traceability (Qualiopi)
+    await storage.createSignature({
+      signerId: req.user.id,
+      signerType: "admin",
+      documentType: doc.type,
+      relatedId: doc.id,
+      signatureData: `PAPER_SIGNATURE — Marqué par ${req.user.firstName} ${req.user.lastName} — Signataire : ${signerName || "Non précisé"} — ${notes || ""}`,
+      ipAddress: ip,
+    });
+
+    // Mark all pending signers as signed
+    const requestedFor = ((doc as any).signatureRequestedFor as any[]) || [];
+    const updatedRequestedFor = requestedFor.map((r: any) => ({
+      ...r,
+      status: "signed",
+      signedAt: new Date().toISOString(),
+      paperSigned: true,
+      markedBy: `${req.user!.firstName} ${req.user!.lastName}`,
+    }));
+
+    await storage.updateGeneratedDocument(doc.id, {
+      signatureRequestedFor: updatedRequestedFor.length > 0 ? updatedRequestedFor : [
+        { signerId: "paper", signerType: "external", signerName: signerName || "Signature papier", status: "signed", signedAt: new Date().toISOString(), paperSigned: true, markedBy: `${req.user.firstName} ${req.user.lastName}` },
+      ],
+      signatureStatus: "signed",
+      status: "signed",
+    } as any);
+
+    // Trigger automation cascades (same as electronic signature)
+    try {
+      if (doc.type === "devis" || doc.type === "quote") {
+        triggerAutomation("quote_signed", {
+          quoteId: doc.quoteId || undefined,
+          traineeId: doc.traineeId || undefined,
+          enterpriseId: doc.enterpriseId || undefined,
+          sessionId: doc.sessionId || undefined,
+        }).catch(err => console.error("[automation] quote_signed (paper) error:", err));
+      } else if (doc.type === "convention") {
+        triggerAutomation("convention_signed", {
+          documentId: doc.id,
+          sessionId: doc.sessionId || undefined,
+          traineeId: doc.traineeId || undefined,
+          enterpriseId: doc.enterpriseId || undefined,
+        }).catch(err => console.error("[automation] convention_signed (paper) error:", err));
+      }
+    } catch (err) {
+      console.error("[automation] paper signature trigger error:", err);
+    }
+
+    res.json({ message: "Document marqué comme signé (version papier)", documentId: doc.id });
+  });
+
   // ============================================================
   // SIGNATURES (Phase 5)
   // ============================================================
@@ -5099,7 +6922,7 @@ export async function registerRoutes(
             content = wrapWithBranding(content, {
               brandColor:  docTemplate.brandColor,
               fontFamily:  docTemplate.fontFamily,
-              logoUrl:     docTemplate.logoUrl,
+              logoUrl:     docTemplate.logoUrl || settingsMap["org_logo_url"] || null,
               headerHtml:  docTemplate.headerHtml,
               footerHtml:  docTemplate.footerHtml,
               orgName:     settingsMap["org_name"]    || "SO'SAFE",
@@ -5425,6 +7248,32 @@ export async function registerRoutes(
   app.get("/api/enterprises/:id/generated-documents", async (req, res) => {
     const result = await storage.getGeneratedDocumentsByEnterprise(req.params.id);
     res.json(result);
+  });
+
+  // Payments for all invoices of this enterprise
+  app.get("/api/enterprises/:id/payments", async (req, res) => {
+    try {
+      const enterpriseInvoices = await storage.getInvoicesByEnterprise(req.params.id);
+      const allPayments: Array<Record<string, unknown>> = [];
+      for (const invoice of enterpriseInvoices) {
+        const invoicePayments = await storage.getPayments(invoice.id);
+        for (const payment of invoicePayments) {
+          allPayments.push({
+            ...payment,
+            invoiceNumber: invoice.number,
+            invoiceTitle: invoice.title,
+          });
+        }
+      }
+      allPayments.sort((a, b) => {
+        const da = a.paidAt ? new Date(a.paidAt as string).getTime() : 0;
+        const db = b.paidAt ? new Date(b.paidAt as string).getTime() : 0;
+        return db - da;
+      });
+      res.json(allPayments);
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors de la récupération des paiements" });
+    }
   });
 
   // ============================================================
@@ -5846,6 +7695,10 @@ export async function registerRoutes(
         ...data,
         createdBy: (req as any).user?.id,
       });
+      // Notifier les admins
+      const abTrainee = data.traineeId ? await storage.getTrainee(data.traineeId) : null;
+      const abName = abTrainee ? `${abTrainee.firstName} ${abTrainee.lastName}` : "Un stagiaire";
+      notifyAdmins("reminder", "Absence déclarée", `${abName} — ${data.type || "absence"}`, "/attendance", record.id, "absence").catch(() => {});
       res.json(record);
     } catch (error) {
       res.status(400).json({ message: "Données invalides" });
@@ -5871,7 +7724,7 @@ export async function registerRoutes(
     }
   });
 
-  // Notify Qualiopi for absence
+  // Notify Qualiopi for absence — flag + send email
   app.post("/api/absence-records/:id/notify-qualiopi", requireAuth, async (req, res) => {
     try {
       const record = await storage.updateAbsenceRecord(String(req.params.id), {
@@ -5879,6 +7732,37 @@ export async function registerRoutes(
         qualiopiNotificationDate: new Date(),
       } as any);
       if (!record) return res.status(404).json({ message: "Absence non trouvée" });
+
+      // Send notification email to admin/referent qualité
+      try {
+        const { sendEmailNow } = await import("./email-service");
+        const settings = await storage.getOrganizationSettings();
+        const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
+        const qualiopiEmail = settingsMap["qualiopi_referent_email"] || settingsMap["org_email"] || settingsMap["smtp_from_email"];
+        if (qualiopiEmail) {
+          const typeLabels: Record<string, string> = { absence: "Absence", retard: "Retard", depart_anticipe: "Départ anticipé", anomalie: "Anomalie" };
+          const emailLog = await storage.createEmailLog({
+            templateId: null,
+            recipient: qualiopiEmail,
+            subject: `[Qualiopi] Signalement ${typeLabels[(record as any).type] || "Anomalie"} — ${(record as any).traineeName || "Apprenant"}`,
+            body: `<h2>Signalement Qualiopi</h2>
+<p><strong>Type :</strong> ${typeLabels[(record as any).type] || (record as any).type}</p>
+<p><strong>Apprenant :</strong> ${(record as any).traineeName || "Non précisé"}</p>
+<p><strong>Session :</strong> ${(record as any).sessionTitle || "Non précisée"}</p>
+<p><strong>Date :</strong> ${(record as any).date ? new Date((record as any).date).toLocaleDateString("fr-FR") : "Non précisée"}</p>
+<p><strong>Motif :</strong> ${(record as any).reason || "Non précisé"}</p>
+<p><strong>Justifié :</strong> ${(record as any).justified ? "Oui" : "Non"}</p>
+<p><strong>Notes :</strong> ${(record as any).notes || "—"}</p>
+<hr>
+<p><em>Ce signalement a été marqué comme notifié Qualiopi le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")}.</em></p>`,
+            status: "pending",
+          });
+          await sendEmailNow(emailLog.id);
+        }
+      } catch (emailErr) {
+        console.error("Erreur envoi notification Qualiopi:", emailErr);
+      }
+
       res.json(record);
     } catch (error) {
       res.status(500).json({ message: "Erreur lors de la notification" });
@@ -5930,6 +7814,7 @@ export async function registerRoutes(
         reportedByName: user ? `${user.firstName} ${user.lastName}` : "Inconnu",
       });
       const incident = await storage.createQualityIncident(data);
+      notifyAdmins("system", `Incident qualité : ${reference}`, data.title, "/quality", incident.id, "quality_incident").catch(() => {});
       res.json(incident);
     } catch (error) {
       res.status(400).json({ message: "Données invalides" });
@@ -6142,6 +8027,13 @@ export async function registerRoutes(
         expiresAt,
       });
       const award = await storage.createBadgeAward(data);
+      // Notifier le stagiaire du badge
+      if (data.traineeId) {
+        const badgeTraineeUsers = (await storage.getUsers()).filter(u => u.traineeId === data.traineeId || u.id === data.traineeId);
+        for (const bu of badgeTraineeUsers) {
+          await createNotification(bu.id, "badge", `Badge obtenu : ${badge.title}`, badge.description || "Félicitations !", "/learner-portal", award.id, "badge_award");
+        }
+      }
       res.json(award);
     } catch (error) {
       res.status(400).json({ message: "Données invalides" });
@@ -6194,6 +8086,49 @@ export async function registerRoutes(
   });
 
   // =============================================
+  // GAMIFICATION POINTS & LEADERBOARD
+  // =============================================
+
+  app.get("/api/gamification-points", requireAuth, async (req, res) => {
+    try {
+      const { traineeId, moduleId, sessionId } = req.query;
+      const points = await storage.getGamificationPoints({
+        traineeId: traineeId as string,
+        moduleId: moduleId as string,
+        sessionId: sessionId as string,
+      });
+      res.json(points);
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors de la récupération des points" });
+    }
+  });
+
+  app.post("/api/gamification-points", requireAuth, async (req, res) => {
+    try {
+      const parsed = insertGamificationPointsSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      const point = await storage.createGamificationPoint(parsed.data);
+      res.status(201).json(point);
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors de la création des points" });
+    }
+  });
+
+  app.get("/api/leaderboard", requireAuth, async (req, res) => {
+    try {
+      const { sessionId, moduleId } = req.query;
+      const leaderboard = await storage.getLeaderboard({
+        sessionId: sessionId as string,
+        moduleId: moduleId as string,
+        limit: 50,
+      });
+      res.json(leaderboard);
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors de la récupération du classement" });
+    }
+  });
+
+  // =============================================
   // CERTIFICATIONS & BADGES - TASK LISTS
   // =============================================
 
@@ -6230,6 +8165,13 @@ export async function registerRoutes(
         assignedByName: user ? `${user.firstName} ${user.lastName}` : "Système",
       });
       const list = await storage.createTaskList(data);
+      // Notifier le stagiaire de la nouvelle mission
+      if (data.traineeId) {
+        const taskTraineeUsers = (await storage.getUsers()).filter(u => u.traineeId === data.traineeId || u.id === data.traineeId);
+        for (const tu of taskTraineeUsers) {
+          await createNotification(tu.id, "task", "Nouvelle mission assignée", `Mission : ${data.title}`, "/learner-portal", list.id, "task_list");
+        }
+      }
       res.json(list);
     } catch (error) {
       res.status(400).json({ message: "Données invalides" });
@@ -6984,6 +8926,24 @@ export async function registerRoutes(
   }
 
   // ---- Audit Logs ----
+
+  app.get("/api/audit-logs/recent", requireAuth, requireRole("admin"), async (_req, res) => {
+    try {
+      const logs = await storage.getAuditLogs({ limit: 10, offset: 0 });
+      const recentLogs = logs.map((log: any) => ({
+        action: log.action,
+        entityType: log.entityType,
+        entityLabel: log.entityLabel,
+        details: log.details,
+        createdAt: log.createdAt,
+        userId: log.userId,
+        userName: log.userName,
+      }));
+      res.json(recentLogs);
+    } catch (error) {
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
 
   app.get("/api/audit-logs", requireAuth, requireRole("admin"), async (req, res) => {
     try {

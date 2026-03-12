@@ -75,7 +75,7 @@ export async function applyBranding(
   return wrapWithBranding(content, {
     brandColor:  templateBranding?.brandColor,
     fontFamily:  templateBranding?.fontFamily,
-    logoUrl:     templateBranding?.logoUrl,
+    logoUrl:     templateBranding?.logoUrl || m["org_logo_url"] || null,
     headerHtml:  templateBranding?.headerHtml,
     footerHtml:  templateBranding?.footerHtml,
     orgName:     m["org_name"]    || "SO'SAFE",

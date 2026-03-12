@@ -59,6 +59,7 @@ import {
   Link2,
   Check,
   Copy,
+  Clock,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,12 +75,15 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import type { Session, InsertSession, Program, Trainer, Trainee, Enrollment, Enterprise } from "@shared/schema";
+import type { Session, InsertSession, Program, Trainer, Trainee, Enrollment, Enterprise, SessionDate } from "@shared/schema";
 import { SESSION_STATUSES, MODALITIES, TRAINEE_PROFILE_TYPES } from "@shared/schema";
+import { Calendar as DayPickerCalendar } from "@/components/ui/calendar";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { AdvancedFilters } from "@/components/shared/AdvancedFilters";
+import { ExportButton } from "@/components/shared/ExportButton";
 
 const statusLabels: Record<string, string> = {};
 SESSION_STATUSES.forEach((s) => { statusLabels[s.value] = s.label; });
@@ -173,24 +177,32 @@ function InlineTrainerSelect({
   );
 }
 
-function CapacityBadge({ enrolled, max }: { enrolled: number; max: number }) {
+function CapacityBadge({ enrolled, max, waitlisted }: { enrolled: number; max: number; waitlisted?: number }) {
   const remaining = max - enrolled;
   const isFull = remaining <= 0;
   return (
-    <Badge
-      variant="outline"
-      className={
-        isFull
-          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs gap-1"
-          : remaining <= 3
-            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs gap-1"
-            : "text-xs gap-1"
-      }
-      data-testid="badge-capacity"
-    >
-      <Users className="w-3 h-3" />
-      {isFull ? "Complet" : `${remaining} place${remaining > 1 ? "s" : ""} restante${remaining > 1 ? "s" : ""}`}
-    </Badge>
+    <div className="flex items-center gap-1">
+      <Badge
+        variant="outline"
+        className={
+          isFull
+            ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs gap-1"
+            : remaining <= 3
+              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs gap-1"
+              : "text-xs gap-1"
+        }
+        data-testid="badge-capacity"
+      >
+        <Users className="w-3 h-3" />
+        {isFull ? "Complet" : `${remaining} place${remaining > 1 ? "s" : ""} restante${remaining > 1 ? "s" : ""}`}
+      </Badge>
+      {isFull && waitlisted && waitlisted > 0 && (
+        <Badge variant="outline" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs gap-1">
+          <Clock className="w-3 h-3" />
+          {waitlisted} en attente
+        </Badge>
+      )}
+    </div>
   );
 }
 
@@ -217,12 +229,14 @@ function SessionForm({
   trainers,
   onSubmit,
   isPending,
+  existingDates,
 }: {
   session?: Session;
   programs: Program[];
   trainers: Trainer[];
-  onSubmit: (data: InsertSession) => void;
+  onSubmit: (data: InsertSession, interventionDates: string[]) => void;
   isPending: boolean;
+  existingDates?: string[];
 }) {
   const [title, setTitle] = useState(session?.title || "");
   const [programId, setProgramId] = useState(session?.programId || "");
@@ -237,8 +251,12 @@ function SessionForm({
   const [status, setStatus] = useState(session?.status || "planned");
   const [notes, setNotes] = useState(session?.notes || "");
   const [virtualClassUrl, setVirtualClassUrl] = useState(session?.virtualClassUrl || "");
+  const [interventionDates, setInterventionDates] = useState<Date[]>(
+    (existingDates || []).map((d) => parseISO(d))
+  );
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const dateStrings = interventionDates.map((d) => format(d, "yyyy-MM-dd")).sort();
     onSubmit({
       title,
       programId,
@@ -253,7 +271,7 @@ function SessionForm({
       status,
       notes: notes || null,
       virtualClassUrl: virtualClassUrl || null,
-    });
+    }, dateStrings);
   };
 
   return (
@@ -294,6 +312,48 @@ function SessionForm({
           <Input id="end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required data-testid="input-session-end" />
         </div>
       </div>
+      {/* Sélecteur de dates d'intervention */}
+      {startDate && endDate && (
+        <div className="space-y-2">
+          <Label>Jours d'intervention</Label>
+          <p className="text-xs text-muted-foreground">
+            Sélectionnez les jours précis de formation. Si aucun jour n'est sélectionné, la session apparaîtra sur tous les jours de la période.
+          </p>
+          <div className="border rounded-lg p-3 bg-muted/30">
+            <DayPickerCalendar
+              mode="multiple"
+              selected={interventionDates}
+              onSelect={(dates: Date[] | undefined) => setInterventionDates(dates || [])}
+              fromDate={parseISO(startDate)}
+              toDate={parseISO(endDate)}
+              defaultMonth={parseISO(startDate)}
+              locale={fr}
+            />
+          </div>
+          {interventionDates.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {interventionDates
+                .sort((a, b) => a.getTime() - b.getTime())
+                .map((d, i) => (
+                  <Badge key={i} variant="secondary" className="text-xs gap-1">
+                    {format(d, "dd/MM/yyyy")}
+                    <button
+                      type="button"
+                      className="ml-0.5 hover:text-destructive"
+                      onClick={() => setInterventionDates((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              <span className="text-xs text-muted-foreground self-center ml-1">
+                {interventionDates.length} jour(s) sélectionné(s)
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Modalité</Label>
@@ -474,7 +534,7 @@ function TrombinoscopeDialog({
               </Avatar>
               <div>
                 <p className="font-medium text-sm">{trainer.firstName} {trainer.lastName}</p>
-                <p className="text-xs text-muted-foreground">{trainer.specialty || trainer.email}</p>
+                <p className="text-xs text-muted-foreground">{trainer.specialty || <a href={`mailto:${trainer.email}`} className="text-primary hover:underline">{trainer.email}</a>}</p>
               </div>
             </div>
           </div>
@@ -558,13 +618,17 @@ function SessionCalendarView({
   programs,
   trainers,
   enrollmentCounts,
+  waitlistCounts,
   onSessionClick,
+  sessionDatesMap,
 }: {
   sessions: Session[];
   programs: Program[];
   trainers: Trainer[];
   enrollmentCounts: Record<string, number>;
+  waitlistCounts: Record<string, number>;
   onSessionClick: (session: Session) => void;
+  sessionDatesMap: Record<string, Set<string>>;
 }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
@@ -578,10 +642,19 @@ function SessionCalendarView({
   const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
   const getSessionsForDay = (day: Date) => {
+    const dayStr = format(day, "yyyy-MM-dd");
     return sessions.filter((s) => {
       const start = parseISO(s.startDate);
       const end = parseISO(s.endDate);
-      return isWithinInterval(day, { start, end }) || isSameDay(day, start) || isSameDay(day, end);
+      const inRange = isWithinInterval(day, { start, end }) || isSameDay(day, start) || isSameDay(day, end);
+      if (!inRange) return false;
+      // If specific intervention dates exist, only show on those days
+      const dates = sessionDatesMap[s.id];
+      if (dates && dates.size > 0) {
+        return dates.has(dayStr);
+      }
+      // Fallback: show on all days in range
+      return true;
     });
   };
 
@@ -724,7 +797,7 @@ function SessionCalendarView({
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <SessionStatusBadge status={s.status} />
-                        <CapacityBadge enrolled={enrolled} max={s.maxParticipants} />
+                        <CapacityBadge enrolled={enrolled} max={s.maxParticipants} waitlisted={waitlistCounts[s.id] || 0} />
                       </div>
                     </div>
                   );
@@ -746,6 +819,7 @@ export default function Sessions() {
   const [trombiSessionId, setTrombiSessionId] = useState<string | null>(null);
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
   const { toast } = useToast();
 
   const publicEnrollmentUrl = `${window.location.origin}/inscription`;
@@ -775,17 +849,25 @@ export default function Sessions() {
   const { data: enterprises } = useQuery<Enterprise[]>({
     queryKey: ["/api/enterprises"],
   });
+  const { data: allSessionDates } = useQuery<SessionDate[]>({
+    queryKey: ["/api/session-dates"],
+  });
 
   // Compute enrollment counts and per-session trainees from the enrollments + trainees data
-  const { enrollmentCounts, sessionTraineesMap } = useMemo(() => {
+  const { enrollmentCounts, waitlistCounts, sessionTraineesMap } = useMemo(() => {
     const counts: Record<string, number> = {};
+    const waitlist: Record<string, number> = {};
     const map: Record<string, Trainee[]> = {};
-    if (!allEnrollments || !allTrainees) return { enrollmentCounts: counts, sessionTraineesMap: map };
+    if (!allEnrollments || !allTrainees) return { enrollmentCounts: counts, waitlistCounts: waitlist, sessionTraineesMap: map };
 
     const traineeById = new Map(allTrainees.map((t) => [t.id, t]));
 
     for (const e of allEnrollments) {
-      if (e.status === "cancelled") continue;
+      if (e.status === "cancelled" || e.status === "no_show") continue;
+      if (e.status === "waitlisted") {
+        waitlist[e.sessionId] = (waitlist[e.sessionId] || 0) + 1;
+        continue;
+      }
       counts[e.sessionId] = (counts[e.sessionId] || 0) + 1;
       const trainee = traineeById.get(e.traineeId);
       if (trainee) {
@@ -793,11 +875,74 @@ export default function Sessions() {
         map[e.sessionId].push(trainee);
       }
     }
-    return { enrollmentCounts: counts, sessionTraineesMap: map };
+    return { enrollmentCounts: counts, waitlistCounts: waitlist, sessionTraineesMap: map };
   }, [allEnrollments, allTrainees]);
 
+  // Build a map of sessionId → Set of date strings for intervention dates
+  const sessionDatesMap = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    if (!allSessionDates) return map;
+    for (const sd of allSessionDates) {
+      if (!map[sd.sessionId]) map[sd.sessionId] = new Set();
+      map[sd.sessionId].add(sd.date);
+    }
+    return map;
+  }, [allSessionDates]);
+
+  const sessionFilters = useMemo(() => [
+    {
+      key: "programId",
+      label: "Formation",
+      type: "select" as const,
+      options: (programs || []).map((p) => ({ value: p.id, label: p.title })),
+    },
+    {
+      key: "status",
+      label: "Statut",
+      type: "select" as const,
+      options: [
+        { value: "planned", label: "Planifiée" },
+        { value: "ongoing", label: "En cours" },
+        { value: "completed", label: "Terminée" },
+        { value: "cancelled", label: "Annulée" },
+      ],
+    },
+    {
+      key: "modality",
+      label: "Modalité",
+      type: "select" as const,
+      options: [
+        { value: "presentiel", label: "Présentiel" },
+        { value: "distanciel", label: "Distanciel" },
+        { value: "blended", label: "Mixte" },
+      ],
+    },
+    {
+      key: "dateRange",
+      label: "Période",
+      type: "date-range" as const,
+    },
+  ], [programs]);
+
+  // Helper to save intervention dates for a session
+  const saveSessionDates = async (sessionId: string, dates: string[]) => {
+    if (dates.length > 0) {
+      await apiRequest("PUT", `/api/sessions/${sessionId}/dates`, { dates });
+    } else {
+      await apiRequest("PUT", `/api/sessions/${sessionId}/dates`, { dates: [] });
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/session-dates"] });
+  };
+
   const createMutation = useMutation({
-    mutationFn: (data: InsertSession) => apiRequest("POST", "/api/sessions", data),
+    mutationFn: async ({ data, interventionDates }: { data: InsertSession; interventionDates: string[] }) => {
+      const res = await apiRequest("POST", "/api/sessions", data);
+      const created = await res.json();
+      if (interventionDates.length > 0) {
+        await saveSessionDates(created.id, interventionDates);
+      }
+      return created;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       setDialogOpen(false);
@@ -807,10 +952,13 @@ export default function Sessions() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: InsertSession }) =>
-      apiRequest("PATCH", `/api/sessions/${id}`, data),
+    mutationFn: async ({ id, data, interventionDates }: { id: string; data: InsertSession; interventionDates: string[] }) => {
+      await apiRequest("PATCH", `/api/sessions/${id}`, data);
+      await saveSessionDates(id, interventionDates);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/session-dates"] });
       setDialogOpen(false);
       setEditSession(undefined);
       toast({ title: "Session modifiée avec succès" });
@@ -873,11 +1021,35 @@ export default function Sessions() {
     }
   };
 
-  const filtered = sessions?.filter(
-    (s) =>
-      s.title.toLowerCase().includes(search.toLowerCase()) ||
-      (s.location || "").toLowerCase().includes(search.toLowerCase())
-  ) || [];
+  const filtered = useMemo(() => {
+    let result = sessions || [];
+    // Text search
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          (s.location || "").toLowerCase().includes(q)
+      );
+    }
+    // Advanced filters
+    if (filterValues.programId) {
+      result = result.filter((s) => s.programId === filterValues.programId);
+    }
+    if (filterValues.status) {
+      result = result.filter((s) => s.status === filterValues.status);
+    }
+    if (filterValues.modality) {
+      result = result.filter((s) => s.modality === filterValues.modality);
+    }
+    if (filterValues.dateRange_start) {
+      result = result.filter((s) => s.startDate >= filterValues.dateRange_start);
+    }
+    if (filterValues.dateRange_end) {
+      result = result.filter((s) => s.endDate <= filterValues.dateRange_end);
+    }
+    return result;
+  }, [sessions, search, filterValues]);
 
   const deleteSession = sessions?.find((s) => s.id === deleteSessionId);
 
@@ -912,6 +1084,18 @@ export default function Sessions() {
                 <p className="text-xs">{publicEnrollmentUrl}</p>
               </TooltipContent>
             </Tooltip>
+            <ExportButton
+              data={filtered}
+              columns={[
+                { key: "title", label: "Titre" },
+                { key: "status", label: "Statut" },
+                { key: "startDate", label: "Début" },
+                { key: "endDate", label: "Fin" },
+                { key: "location", label: "Lieu" },
+                { key: "modality", label: "Modalité" },
+              ]}
+              filename="sessions"
+            />
             <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
               <Plus className="w-4 h-4 mr-2" />
               Nouvelle session
@@ -927,6 +1111,12 @@ export default function Sessions() {
         className="max-w-sm"
       />
 
+      <AdvancedFilters
+        filters={sessionFilters}
+        values={filterValues}
+        onChange={setFilterValues}
+      />
+
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
@@ -939,7 +1129,9 @@ export default function Sessions() {
           programs={programs || []}
           trainers={trainers || []}
           enrollmentCounts={enrollmentCounts}
+          waitlistCounts={waitlistCounts}
           onSessionClick={handleCardClick}
+          sessionDatesMap={sessionDatesMap}
         />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16">
@@ -1010,7 +1202,7 @@ export default function Sessions() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <InlineStatusBadge session={session} onStatusChange={handleInlineStatusChange} />
-                    <CapacityBadge enrolled={enrolledCount} max={session.maxParticipants} />
+                    <CapacityBadge enrolled={enrolledCount} max={session.maxParticipants} waitlisted={waitlistCounts[session.id] || 0} />
                   </div>
                   <div className="space-y-1.5 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
@@ -1067,10 +1259,11 @@ export default function Sessions() {
             session={editSession}
             programs={programs || []}
             trainers={trainers || []}
-            onSubmit={(data) =>
+            existingDates={editSession ? Array.from(sessionDatesMap[editSession.id] || []) : undefined}
+            onSubmit={(data, interventionDates) =>
               editSession
-                ? updateMutation.mutate({ id: editSession.id, data })
-                : createMutation.mutate(data)
+                ? updateMutation.mutate({ id: editSession.id, data, interventionDates })
+                : createMutation.mutate({ data, interventionDates })
             }
             isPending={createMutation.isPending || updateMutation.isPending}
           />

@@ -61,6 +61,8 @@ const defaultStatusMap: Record<string, BadgeVariant> = {
   "open": "info",
   "planned": "info",
   "scheduled": "purple",
+  "waitlisted": "warning",
+  "liste d'attente": "warning",
   "cancelled": "destructive",
   "rejected": "destructive",
   "overdue": "destructive",

@@ -63,6 +63,7 @@ import {
   type VeilleEntry, type InsertVeilleEntry,
   type DigitalBadge, type InsertDigitalBadge,
   type BadgeAward, type InsertBadgeAward,
+  type GamificationPoints, type InsertGamificationPoints,
   type TaskList, type InsertTaskList,
   type TaskItem, type InsertTaskItem,
   type AiDocumentAnalysis, type InsertAiDocumentAnalysis,
@@ -74,6 +75,8 @@ import {
   type RgpdRequest, type InsertRgpdRequest,
   type DataImport, type InsertDataImport,
   type DataArchive, type InsertDataArchive,
+  type SessionDate, type InsertSessionDate,
+  type Notification, type InsertNotification,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
   emailTemplates, emailLogs, emailTrackingEvents, documentTemplates, generatedDocuments,
   prospects, quotes, invoices, payments, paymentSchedules, bankTransactions, connectionLogs,
@@ -91,13 +94,15 @@ import {
   conversations, conversationParticipants, directMessages,
   contactTags, contactTagAssignments, marketingCampaigns, campaignRecipients, prospectActivities,
   absenceRecords, qualityIncidents, veilleEntries,
-  digitalBadges, badgeAwards, taskLists, taskItems,
+  digitalBadges, badgeAwards, gamificationPoints, taskLists, taskItems,
   aiDocumentAnalyses, cesuSubmissions,
   ssoTokens, apiKeys, widgetConfigurations,
   auditLogs, rgpdRequests,
   dataImports, dataArchives,
+  sessionDates,
+  notifications,
 } from "@shared/schema";
-import { eq, and, or, sql, desc, inArray, lte } from "drizzle-orm";
+import { eq, and, or, sql, desc, asc, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 
@@ -156,6 +161,11 @@ export interface IStorage {
   createEnrollment(enrollment: InsertEnrollment): Promise<Enrollment>;
   updateEnrollment(id: string, enrollment: Partial<InsertEnrollment>): Promise<Enrollment | undefined>;
   deleteEnrollment(id: string): Promise<void>;
+  getWaitlistEntries(sessionId: string): Promise<Enrollment[]>;
+  getWaitlistCount(sessionId: string): Promise<number>;
+  getNextWaitlistEntry(sessionId: string): Promise<Enrollment | undefined>;
+  promoteFromWaitlist(sessionId: string): Promise<Enrollment | undefined>;
+  reorderWaitlistAfterRemoval(sessionId: string, removedPosition: number): Promise<void>;
 
   // Email Templates
   getEmailTemplates(): Promise<EmailTemplate[]>;
@@ -284,6 +294,11 @@ export interface IStorage {
   updateBadgeAward(id: string, data: Partial<InsertBadgeAward>): Promise<BadgeAward | undefined>;
   deleteBadgeAward(id: string): Promise<void>;
 
+  // Gamification Points
+  getGamificationPoints(filters?: { traineeId?: string; moduleId?: string; sessionId?: string }): Promise<GamificationPoints[]>;
+  createGamificationPoint(point: InsertGamificationPoints): Promise<GamificationPoints>;
+  getLeaderboard(filters: { sessionId?: string; moduleId?: string; limit?: number }): Promise<Array<{ traineeId: string; traineeName: string; totalXP: number; badgeCount: number }>>;
+
   // Task Lists
   getTaskLists(filters?: { traineeId?: string; sessionId?: string; status?: string }): Promise<TaskList[]>;
   getTaskList(id: string): Promise<TaskList | undefined>;
@@ -394,6 +409,12 @@ export interface IStorage {
   getAttendanceRecordByToken(token: string): Promise<AttendanceRecord | undefined>;
   createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord>;
   updateAttendanceRecord(id: string, record: Partial<InsertAttendanceRecord>): Promise<AttendanceRecord | undefined>;
+
+  // Session Dates (jours d'intervention)
+  getSessionDates(sessionId: string): Promise<SessionDate[]>;
+  getAllSessionDates(): Promise<SessionDate[]>;
+  createSessionDate(data: InsertSessionDate): Promise<SessionDate>;
+  deleteSessionDatesBySessionId(sessionId: string): Promise<void>;
 
   // Automation Rules
   getAutomationRules(): Promise<AutomationRule[]>;
@@ -580,6 +601,14 @@ export interface IStorage {
   createDataArchive(data: InsertDataArchive): Promise<DataArchive>;
   updateDataArchive(id: string, data: Partial<InsertDataArchive>): Promise<DataArchive | undefined>;
   getDataArchiveCount(): Promise<number>;
+
+  // Notifications
+  getNotifications(userId: string): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  createNotification(data: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: string): Promise<void>;
+  markAllNotificationsRead(userId: string): Promise<void>;
+  deleteNotification(id: string): Promise<void>;
 }
 
 const pool = new pg.Pool({
@@ -781,11 +810,21 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(enrollments).where(eq(enrollments.traineeId, traineeId));
   }
 
+  async getValidatedEnrollmentsByTrainee(traineeId: string): Promise<Enrollment[]> {
+    const validStatuses = ["pending", "registered", "confirmed", "attended", "completed"];
+    return db.select().from(enrollments).where(
+      and(
+        eq(enrollments.traineeId, traineeId),
+        inArray(enrollments.status, validStatuses)
+      )
+    );
+  }
+
   async getEnrollmentCount(sessionId: string): Promise<number> {
     const result = await db.select({ count: sql<number>`count(*)::int` }).from(enrollments)
       .where(and(
         eq(enrollments.sessionId, sessionId),
-        sql`${enrollments.status} NOT IN ('cancelled', 'no_show')`
+        sql`${enrollments.status} NOT IN ('cancelled', 'no_show', 'waitlisted')`
       ));
     return result[0]?.count ?? 0;
   }
@@ -802,6 +841,66 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEnrollment(id: string): Promise<void> {
     await db.delete(enrollments).where(eq(enrollments.id, id));
+  }
+
+  async getWaitlistEntries(sessionId: string): Promise<Enrollment[]> {
+    return db.select().from(enrollments)
+      .where(and(
+        eq(enrollments.sessionId, sessionId),
+        eq(enrollments.status, "waitlisted")
+      ))
+      .orderBy(asc(enrollments.waitlistPosition));
+  }
+
+  async getWaitlistCount(sessionId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` }).from(enrollments)
+      .where(and(
+        eq(enrollments.sessionId, sessionId),
+        eq(enrollments.status, "waitlisted")
+      ));
+    return result[0]?.count ?? 0;
+  }
+
+  async getNextWaitlistEntry(sessionId: string): Promise<Enrollment | undefined> {
+    const [result] = await db.select().from(enrollments)
+      .where(and(
+        eq(enrollments.sessionId, sessionId),
+        eq(enrollments.status, "waitlisted")
+      ))
+      .orderBy(asc(enrollments.waitlistPosition))
+      .limit(1);
+    return result;
+  }
+
+  async promoteFromWaitlist(sessionId: string): Promise<Enrollment | undefined> {
+    const next = await this.getNextWaitlistEntry(sessionId);
+    if (!next) return undefined;
+
+    const [promoted] = await db.update(enrollments)
+      .set({ status: "confirmed", waitlistPosition: null, waitlistedAt: null })
+      .where(eq(enrollments.id, next.id))
+      .returning();
+
+    // Reorder remaining waitlist positions
+    await db.execute(sql`
+      UPDATE enrollments
+      SET waitlist_position = waitlist_position - 1
+      WHERE session_id = ${sessionId}
+        AND status = 'waitlisted'
+        AND waitlist_position > ${next.waitlistPosition}
+    `);
+
+    return promoted;
+  }
+
+  async reorderWaitlistAfterRemoval(sessionId: string, removedPosition: number): Promise<void> {
+    await db.execute(sql`
+      UPDATE enrollments
+      SET waitlist_position = waitlist_position - 1
+      WHERE session_id = ${sessionId}
+        AND status = 'waitlisted'
+        AND waitlist_position > ${removedPosition}
+    `);
   }
 
   // ---- Email Templates ----
@@ -1148,6 +1247,10 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async deleteBankTransaction(id: string): Promise<void> {
+    await db.delete(bankTransactions).where(eq(bankTransactions.id, id));
+  }
+
   // ---- Connection Logs ----
   async getConnectionLogs(filters?: { userId?: string; sessionId?: string; from?: string; to?: string }): Promise<ConnectionLog[]> {
     const conditions = [];
@@ -1310,6 +1413,52 @@ export class DatabaseStorage implements IStorage {
     await db.delete(badgeAwards).where(eq(badgeAwards.id, id));
   }
 
+  // ---- Gamification Points ----
+  async getGamificationPoints(filters?: { traineeId?: string; moduleId?: string; sessionId?: string }): Promise<GamificationPoints[]> {
+    const conditions = [];
+    if (filters?.traineeId) conditions.push(eq(gamificationPoints.traineeId, filters.traineeId));
+    if (filters?.moduleId) conditions.push(eq(gamificationPoints.moduleId, filters.moduleId));
+    if (filters?.sessionId) conditions.push(eq(gamificationPoints.sessionId, filters.sessionId));
+    if (conditions.length > 0) {
+      return db.select().from(gamificationPoints).where(and(...conditions)).orderBy(desc(gamificationPoints.createdAt));
+    }
+    return db.select().from(gamificationPoints).orderBy(desc(gamificationPoints.createdAt));
+  }
+
+  async createGamificationPoint(point: InsertGamificationPoints): Promise<GamificationPoints> {
+    const [result] = await db.insert(gamificationPoints).values(point).returning();
+    return result;
+  }
+
+  async getLeaderboard(filters: { sessionId?: string; moduleId?: string; limit?: number }): Promise<Array<{ traineeId: string; traineeName: string; totalXP: number; badgeCount: number }>> {
+    const conditions = [];
+    if (filters.sessionId) conditions.push(eq(gamificationPoints.sessionId, filters.sessionId));
+    if (filters.moduleId) conditions.push(eq(gamificationPoints.moduleId, filters.moduleId));
+
+    const rows = await db.select({
+      traineeId: gamificationPoints.traineeId,
+      totalXP: sql<number>`COALESCE(SUM(${gamificationPoints.points}), 0)`.as('total_xp'),
+    })
+    .from(gamificationPoints)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .groupBy(gamificationPoints.traineeId)
+    .orderBy(sql`total_xp DESC`)
+    .limit(filters.limit || 50);
+
+    const results = [];
+    for (const row of rows) {
+      const trainee = await this.getTrainee(row.traineeId);
+      const awards = await this.getBadgeAwards({ traineeId: row.traineeId });
+      results.push({
+        traineeId: row.traineeId,
+        traineeName: trainee ? `${trainee.firstName} ${trainee.lastName}` : "Apprenant",
+        totalXP: Number(row.totalXP),
+        badgeCount: awards.filter(a => a.status === "active").length,
+      });
+    }
+    return results;
+  }
+
   // ---- Task Lists ----
   async getTaskLists(filters?: { traineeId?: string; sessionId?: string; status?: string }): Promise<TaskList[]> {
     const conditions = [];
@@ -1450,6 +1599,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteElearningModule(id: string): Promise<void> {
+    // Delete in cascade: connection logs, gamification, progress, submissions, quiz questions (via blocks), blocks, then module
+    const blocks = await db.select().from(elearningBlocks).where(eq(elearningBlocks.moduleId, id));
+    const blockIds = blocks.map(b => b.id);
+    // Delete connection logs referencing this module
+    await db.delete(connectionLogs).where(eq(connectionLogs.moduleId, id));
+    // Delete gamification points for this module
+    await db.delete(gamificationPoints).where(eq(gamificationPoints.moduleId, id));
+    // Delete learner progress for this module
+    await db.delete(learnerProgress).where(eq(learnerProgress.moduleId, id));
+    // Delete formative submissions and quiz questions for all blocks of this module
+    if (blockIds.length > 0) {
+      for (const blockId of blockIds) {
+        await db.delete(quizQuestions).where(eq(quizQuestions.blockId, blockId));
+        await db.delete(formativeSubmissions).where(eq(formativeSubmissions.blockId, blockId));
+      }
+    }
+    // Delete all blocks of this module
+    await db.delete(elearningBlocks).where(eq(elearningBlocks.moduleId, id));
+    // Delete the module itself
     await db.delete(elearningModules).where(eq(elearningModules.id, id));
   }
 
@@ -1505,12 +1673,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLearnerProgress(progress: InsertLearnerProgress): Promise<LearnerProgress> {
-    const [result] = await db.insert(learnerProgress).values(progress).returning();
+    const [result] = await db.insert(learnerProgress).values(progress as any).returning();
     return result;
   }
 
   async updateLearnerProgress(id: string, data: Partial<InsertLearnerProgress>): Promise<LearnerProgress | undefined> {
-    const [result] = await db.update(learnerProgress).set(data).where(eq(learnerProgress.id, id)).returning();
+    const [result] = await db.update(learnerProgress).set(data as any).where(eq(learnerProgress.id, id)).returning();
     return result;
   }
 
@@ -1738,6 +1906,24 @@ export class DatabaseStorage implements IStorage {
   async updateAttendanceRecord(id: string, data: Partial<InsertAttendanceRecord>): Promise<AttendanceRecord | undefined> {
     const [result] = await db.update(attendanceRecords).set(data).where(eq(attendanceRecords.id, id)).returning();
     return result;
+  }
+
+  // ---- Session Dates (jours d'intervention) ----
+  async getSessionDates(sessionId: string): Promise<SessionDate[]> {
+    return db.select().from(sessionDates).where(eq(sessionDates.sessionId, sessionId)).orderBy(asc(sessionDates.date));
+  }
+
+  async getAllSessionDates(): Promise<SessionDate[]> {
+    return db.select().from(sessionDates).orderBy(asc(sessionDates.date));
+  }
+
+  async createSessionDate(data: InsertSessionDate): Promise<SessionDate> {
+    const [result] = await db.insert(sessionDates).values(data).returning();
+    return result;
+  }
+
+  async deleteSessionDatesBySessionId(sessionId: string): Promise<void> {
+    await db.delete(sessionDates).where(eq(sessionDates.sessionId, sessionId));
   }
 
   // ---- Automation Rules ----
@@ -2092,6 +2278,11 @@ export class DatabaseStorage implements IStorage {
 
   async createForumPost(post: InsertForumPost): Promise<ForumPost> {
     const [result] = await db.insert(forumPosts).values(post).returning();
+    return result;
+  }
+
+  async updateForumPost(id: string, data: Partial<InsertForumPost>): Promise<ForumPost> {
+    const [result] = await db.update(forumPosts).set({ ...data, updatedAt: new Date() }).where(eq(forumPosts.id, id)).returning();
     return result;
   }
 
@@ -2478,6 +2669,34 @@ export class DatabaseStorage implements IStorage {
   async getDataArchiveCount(): Promise<number> {
     const [result] = await db.select({ count: sql<number>`count(*)` }).from(dataArchives);
     return Number(result.count);
+  }
+
+  // ---- Notifications ----
+  async getNotifications(userId: string): Promise<Notification[]> {
+    return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt)).limit(100);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
+    return Number(result.count);
+  }
+
+  async createNotification(data: InsertNotification): Promise<Notification> {
+    const [result] = await db.insert(notifications).values(data as any).returning();
+    return result;
+  }
+
+  async markNotificationRead(id: string): Promise<void> {
+    await db.update(notifications).set({ read: true }).where(eq(notifications.id, id));
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db.update(notifications).set({ read: true }).where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
+  }
+
+  async deleteNotification(id: string): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.id, id));
   }
 }
 

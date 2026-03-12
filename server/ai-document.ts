@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
+import OpenAI from "openai";
 
 interface AIAnalysisResult {
   extractedDate: string | null;
@@ -12,10 +13,10 @@ interface AIAnalysisResult {
 }
 
 /**
- * Analyze a document using Google Gemini Vision to extract dates and document type.
+ * Analyze a document using OpenAI GPT-4o to extract dates and document type.
  */
 export async function analyzeDocument(fileUrl: string): Promise<AIAnalysisResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return {
       extractedDate: null,
@@ -23,7 +24,7 @@ export async function analyzeDocument(fileUrl: string): Promise<AIAnalysisResult
       documentType: null,
       isRelevantDocument: false,
       rawResponse: "",
-      error: "GEMINI_API_KEY non configurée",
+      error: "OPENAI_API_KEY non configurée",
     };
   }
 
@@ -55,12 +56,7 @@ export async function analyzeDocument(fileUrl: string): Promise<AIAnalysisResult
   };
   const mimeType = mimeMap[ext] || "application/octet-stream";
 
-  try {
-    const { GoogleGenerativeAI } = await import("@google/generative-ai");
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `Analyse ce document et détermine s'il s'agit d'un justificatif de formation légitime (attestation de formation, certificat, diplôme, titre professionnel, etc.).
+  const prompt = `Analyse ce document et détermine s'il s'agit d'un justificatif de formation légitime (attestation de formation, certificat, diplôme, titre professionnel, etc.).
 
 Réponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks) :
 {
@@ -81,17 +77,45 @@ Important :
 - Si isRelevantDocument est false, mets extractedDate à null et confidence à "low"
 - Le format de date DOIT être YYYY-MM-DD`;
 
-    const result = await model.generateContent([
-      { text: prompt },
-      {
-        inlineData: {
-          mimeType,
-          data: base64Data,
-        },
-      },
-    ]);
+  try {
+    const openai = new OpenAI({ apiKey });
 
-    const responseText = result.response.text().trim();
+    // Build content parts for the message
+    const contentParts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+      { type: "text", text: prompt },
+    ];
+
+    // For images, use image_url with base64
+    if (mimeType.startsWith("image/")) {
+      contentParts.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${mimeType};base64,${base64Data}`,
+        },
+      });
+    } else if (mimeType === "application/pdf") {
+      // For PDFs, send as a file input using the base64 data
+      contentParts.push({
+        type: "file",
+        file: {
+          filename: path.basename(filePath),
+          file_data: `data:application/pdf;base64,${base64Data}`,
+        },
+      } as any);
+    }
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: contentParts,
+        },
+      ],
+      max_tokens: 1000,
+    });
+
+    const responseText = (response.choices[0]?.message?.content || "").trim();
 
     // Try to parse JSON from the response, handling potential markdown wrapping
     let jsonText = responseText;
@@ -127,7 +151,7 @@ Important :
       documentType: null,
       isRelevantDocument: false,
       rawResponse: "",
-      error: `Erreur Gemini: ${errorMessage}`,
+      error: `Erreur OpenAI: ${errorMessage}`,
     };
   }
 }
@@ -212,30 +236,25 @@ export async function processDocumentValidation(
                   .map(p => p.maxMonthsSinceCompletion!)
               );
 
-              // Month-to-month: add maxMonths to the extracted date
               const expirationDate = new Date(extractedDate);
               expirationDate.setMonth(expirationDate.getMonth() + maxMonths);
 
               validationStatus = expirationDate > now ? "auto_valid" : "auto_invalid";
             } else if (hasMinConstraint) {
-              // Diploma must have been obtained at least X months ago (month-to-month)
               const minMonths = Math.max(
                 ...prerequisites
                   .filter(p => p.minMonthsSinceCompletion)
                   .map(p => p.minMonthsSinceCompletion!)
               );
 
-              // Month-to-month: add minMonths to extracted date, compare to now
               const minDate = new Date(extractedDate);
               minDate.setMonth(minDate.getMonth() + minMonths);
 
               validationStatus = now >= minDate ? "auto_valid" : "auto_invalid";
             } else {
-              // No time constraint, just having a date is enough
               validationStatus = "auto_valid";
             }
           } else if (program && program.recyclingMonths) {
-            // No prerequisites but program has a recycling period — validate against it
             const extractedDate = new Date(result.extractedDate);
             const now = new Date();
             const expiryDate = new Date(extractedDate);
@@ -243,16 +262,13 @@ export async function processDocumentValidation(
 
             validationStatus = expiryDate > now ? "auto_valid" : "auto_invalid";
           } else {
-            // No prerequisites defined, date extracted successfully
             validationStatus = result.extractedDate ? "auto_valid" : "pending";
           }
         }
       } catch {
-        // If prerequisite check fails, leave as pending
         validationStatus = "pending";
       }
     } else if (result.extractedDate) {
-      // Date extracted but no session to validate against
       validationStatus = "auto_valid";
     }
 
@@ -267,13 +283,12 @@ export async function processDocumentValidation(
       aiError: null,
     });
 
-    // Auto-create TraineeCertification if validated (Issue 4)
+    // Auto-create TraineeCertification if validated
     if (validationStatus === "auto_valid" && result.extractedDate && sessionId) {
       try {
         const sessionForCert = await storage.getSession(sessionId);
         const programForCert = sessionForCert ? await storage.getProgram(sessionForCert.programId) : null;
         if (programForCert) {
-          // Check for existing identical certification
           const existingCerts = await storage.getTraineeCertifications(traineeId);
           const alreadyExists = existingCerts.some(c =>
             c.programId === programForCert.id && c.obtainedAt === result.extractedDate

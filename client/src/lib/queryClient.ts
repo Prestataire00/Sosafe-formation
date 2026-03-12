@@ -4,15 +4,17 @@ async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
     let message = text;
+    let errors: string[] | undefined;
     try {
       const body = JSON.parse(text);
-      if (body.message) {
-        message = body.message;
-      }
+      if (body.message) message = body.message;
+      if (body.errors) errors = body.errors;
     } catch {
       // text is not JSON, use as-is
     }
-    throw new Error(message);
+    const err: any = new Error(message);
+    if (errors) err.errors = errors;
+    throw err;
   }
 }
 
@@ -68,8 +70,8 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
     },
     mutations: {
       retry: false,

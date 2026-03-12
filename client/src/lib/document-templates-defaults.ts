@@ -18,7 +18,7 @@ export const DOCUMENT_DEFAULTS: Record<string, string> = {
 
 <p><strong>L'organisme de formation :</strong><br/>
 SO'SAFE<br/>
-N° de déclaration d'activité : 11 75 XXXXX 75<br/>
+N° de déclaration d'activité : {nda_organisme}<br/>
 Représenté par sa direction</p>
 
 <p><strong>Et :</strong><br/>
@@ -84,7 +84,7 @@ Représenté(e) par : {contact_entreprise}</p>
 <br/>
 
 <p>Entre :</p>
-<p><strong>SO'SAFE</strong>, organisme de formation, déclaré sous le n° 11 75 XXXXX 75,<br/>
+<p><strong>SO'SAFE</strong>, organisme de formation, déclaré sous le n° {nda_organisme},<br/>
 ci-après dénommé « le prestataire »</p>
 
 <p>Et :</p>
@@ -229,7 +229,7 @@ ci-après dénommé « le stagiaire »</p>
 <p style="text-align:center"><em>Article L.6353-1 du Code du travail</em></p>
 <br/>
 
-<p>L'organisme de formation <strong>SO'SAFE</strong> (N° DA : 11 75 XXXXX 75) certifie avoir dispensé l'action de formation suivante :</p>
+<p>L'organisme de formation <strong>SO'SAFE</strong> (N° DA : {nda_organisme}) certifie avoir dispensé l'action de formation suivante :</p>
 
 <table>
   <tr><th>Intitulé</th><td><strong>{nom_formation}</strong></td></tr>
@@ -327,9 +327,9 @@ ci-après dénommé « le stagiaire »</p>
 
 <h2>Émetteur</h2>
 <p><strong>SO'SAFE</strong><br/>
-[Adresse de SO'SAFE]<br/>
-SIRET : [N° SIRET]<br/>
-N° DA : 11 75 XXXXX 75</p>
+{adresse_organisme}<br/>
+SIRET : {siret_organisme}<br/>
+N° DA : {nda_organisme}</p>
 
 <h2>Destinataire</h2>
 <p><strong>{nom_entreprise}</strong><br/>
@@ -384,9 +384,9 @@ SIRET : {siret_entreprise}<br/>
 
 <h2>Émetteur</h2>
 <p><strong>SO'SAFE</strong><br/>
-[Adresse de SO'SAFE]<br/>
-SIRET : [N° SIRET]<br/>
-N° DA : 11 75 XXXXX 75</p>
+{adresse_organisme}<br/>
+SIRET : {siret_organisme}<br/>
+N° DA : {nda_organisme}</p>
 
 <h2>Facturé à</h2>
 <p><strong>{nom_entreprise}</strong><br/>
@@ -810,7 +810,7 @@ Contact : {email_organisme}</p>
 
 <p>Entre :</p>
 <p><strong>SO'SAFE</strong>, organisme de formation,<br/>
-N° de déclaration d'activité : 11 75 XXXXX 75<br/>
+N° de déclaration d'activité : {nda_organisme}<br/>
 ci-après dénommé « le prestataire »</p>
 
 <p>Et :</p>
@@ -872,7 +872,7 @@ ci-après dénommé « le bénéficiaire »</p>
 <h1 style="text-align:center">ATTESTATION DE PRÉSENCE — FINANCEMENT FIFPL</h1>
 <br/>
 
-<p>L'organisme de formation <strong>SO'SAFE</strong> (N° DA : 11 75 XXXXX 75) atteste que :</p>
+<p>L'organisme de formation <strong>SO'SAFE</strong> (N° DA : {nda_organisme}) atteste que :</p>
 
 <p style="text-align:center"><strong>{nom_apprenant} {prenom_apprenant}</strong></p>
 
@@ -949,8 +949,8 @@ ci-après dénommé « le bénéficiaire »</p>
 
 <h2>Donneur d'ordre</h2>
 <p><strong>SO'SAFE</strong><br/>
-[Adresse de SO'SAFE]<br/>
-SIRET : [N° SIRET]</p>
+{adresse_organisme}<br/>
+SIRET : {siret_organisme}</p>
 
 <h2>Prestataire</h2>
 <p><strong>{nom_formateur} {prenom_formateur}</strong><br/>
@@ -1002,9 +1002,9 @@ Adresse : {adresse_formateur}</p>
 
 <h2>Émetteur</h2>
 <p><strong>SO'SAFE</strong><br/>
-[Adresse de SO'SAFE]<br/>
-SIRET : [N° SIRET]<br/>
-N° DA : 11 75 XXXXX 75</p>
+{adresse_organisme}<br/>
+SIRET : {siret_organisme}<br/>
+N° DA : {nda_organisme}</p>
 
 <h2>Facturé à</h2>
 <p><strong>{nom_entreprise}</strong><br/>
@@ -1046,9 +1046,9 @@ SIRET : {siret_entreprise}</p>
 
 <h2>Émetteur</h2>
 <p><strong>SO'SAFE</strong><br/>
-[Adresse de SO'SAFE]<br/>
-SIRET : [N° SIRET]<br/>
-N° DA : 11 75 XXXXX 75</p>
+{adresse_organisme}<br/>
+SIRET : {siret_organisme}<br/>
+N° DA : {nda_organisme}</p>
 
 <h2>Facturé à</h2>
 <p><strong>{nom_entreprise}</strong><br/>
@@ -1092,7 +1092,7 @@ SIRET : {siret_entreprise}</p>
 <h2>Organisme de formation</h2>
 <table>
   <tr><th>Nom</th><td>SO'SAFE</td></tr>
-  <tr><th>N° de déclaration d'activité</th><td>11 75 XXXXX 75</td></tr>
+  <tr><th>N° de déclaration d'activité</th><td>{nda_organisme}</td></tr>
   <tr><th>Adresse</th><td>{adresse_organisme}</td></tr>
   <tr><th>Contact</th><td>{email_organisme} — {telephone_organisme}</td></tr>
 </table>
@@ -1189,6 +1189,23 @@ SIRET : {siret_entreprise}</p>
     <td style="height:60px"></td>
   </tr>
 </table>
+`,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ÉTIQUETTE D'ENVOI POSTAL
+  // ─────────────────────────────────────────────────────────────────────────
+  etiquette_envoi: `
+<div style="width:100mm; height:60mm; border:1px dashed #ccc; padding:12mm 15mm; font-family:Arial,sans-serif; font-size:12pt; line-height:1.6;">
+
+<p style="margin:0"><strong>{prenom} {nom}</strong></p>
+<p style="margin:0">{adresse_apprenant}</p>
+<p style="margin:0">{code_postal_apprenant} {ville_apprenant}</p>
+
+</div>
+
+<p style="font-size:8pt; color:#999; margin-top:8mm;">
+Document généré le {date_document} — {nom_organisme}
+</p>
 `,
 
 };

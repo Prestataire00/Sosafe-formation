@@ -799,6 +799,55 @@ async function handleGenerateConvention(
   return `Convention "${doc.title}" générée (${doc.id})`;
 }
 
+async function handleGenerateConvocation(
+  _rule: AutomationRule,
+  ctx: AutomationContext,
+): Promise<string> {
+  const templates = await storage.getDocumentTemplates();
+  const convocationTemplate = templates.find(t => t.type === "convocation");
+  if (!convocationTemplate) throw new Error("Aucun modèle de convocation trouvé");
+
+  let content = await resolveVariables(convocationTemplate.content, ctx);
+  content = await applyBranding(content, convocationTemplate);
+
+  const doc = await storage.createGeneratedDocument({
+    templateId: convocationTemplate.id,
+    sessionId: ctx.sessionId || null,
+    traineeId: ctx.traineeId || null,
+    title: `Convocation à la formation`,
+    type: "convocation",
+    content,
+    status: "generated",
+    visibility: "trainee",
+    sharedAt: new Date(),
+  });
+
+  // Send email to trainee with the convocation
+  if (ctx.traineeId) {
+    try {
+      const trainee = await storage.getTrainee(ctx.traineeId);
+      if (trainee?.email) {
+        const session = ctx.sessionId ? await storage.getSession(ctx.sessionId) : null;
+        const settings = await storage.getOrganizationSettings();
+        const orgName = settings.find(s => s.key === "org_name")?.value || "Organisme de Formation";
+        await storage.createEmailLog({
+          templateId: null,
+          recipient: trainee.email,
+          subject: `Convocation — ${session?.title || "Formation"}`,
+          body: `<p>Bonjour ${trainee.firstName} ${trainee.lastName},</p>
+<p>Veuillez trouver ci-joint votre convocation pour la session de formation.</p>
+<p>Cordialement,<br/>${orgName}</p>`,
+          status: "pending",
+        });
+      }
+    } catch (err) {
+      console.error("[automation] convocation email error:", err);
+    }
+  }
+
+  return `Convocation "${doc.title}" générée et envoyée (${doc.id})`;
+}
+
 // ---------------------------------------------------------------------------
 // Core engine: execute a single rule
 // ---------------------------------------------------------------------------
@@ -849,6 +898,9 @@ async function executeRule(
           break;
         case "send_evaluation":
           message = await handleSendEvaluation(rule, ctx);
+          break;
+        case "generate_convocation":
+          message = await handleGenerateConvocation(rule, ctx);
           break;
         default:
           throw new Error(`Action inconnue: ${rule.action}`);

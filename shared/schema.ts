@@ -160,6 +160,8 @@ export const enrollments = pgTable("enrollments", {
   notes: text("notes"),
   vaeStatus: text("vae_status"),
   certificateBlocked: boolean("certificate_blocked").default(false),
+  waitlistPosition: integer("waitlist_position"),
+  waitlistedAt: timestamp("waitlisted_at"),
 });
 
 // ============================================================
@@ -560,6 +562,22 @@ export const badgeAwards = pgTable("badge_awards", {
   awardedAt: timestamp("awarded_at").defaultNow(),
 });
 
+// ============================================================
+// GAMIFICATION POINTS
+// ============================================================
+
+export const gamificationPoints = pgTable("gamification_points", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traineeId: varchar("trainee_id").notNull(),
+  moduleId: varchar("module_id"),
+  blockId: varchar("block_id"),
+  sessionId: varchar("session_id"),
+  eventType: text("event_type").notNull(),
+  points: integer("points").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const taskLists = pgTable("task_lists", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -690,6 +708,8 @@ export const elearningModules = pgTable("elearning_modules", {
   description: text("description"),
   orderIndex: integer("order_index").notNull().default(0),
   status: text("status").notNull().default("draft"),
+  requireSequential: boolean("require_sequential").default(true),
+  pathType: text("path_type").notNull().default("combined"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -734,6 +754,38 @@ export const elearningBlocks = pgTable("elearning_blocks", {
   completionCondition: text("completion_condition").default("finished"),
   minScore: integer("min_score"),
   minViewPercent: integer("min_view_percent"),
+  // Scenario (branching) config
+  scenarioConfig: jsonb("scenario_config").$type<{
+    startNodeId: string;
+    nodes: Array<{
+      id: string;
+      situation: string;
+      imageUrl?: string;
+      choices: Array<{
+        id: string;
+        text: string;
+        feedback: string;
+        points: number;
+        nextNodeId: string | null;
+      }>;
+    }>;
+  }>(),
+  // Simulation (practical exercise) config
+  simulationConfig: jsonb("simulation_config").$type<{
+    subType: "ordering" | "matching" | "fill_blank" | "hotspot";
+    instructions: string;
+    orderingItems?: Array<{ id: string; text: string; correctPosition: number }>;
+    matchingPairs?: Array<{ id: string; left: string; right: string }>;
+    fillBlankText?: string;
+    fillBlankAnswers?: Array<{ blankIndex: number; correctAnswer: string; alternatives?: string[] }>;
+    wordBank?: string[];
+    hotspotImageUrl?: string;
+    hotspotZones?: Array<{ id: string; x: number; y: number; width: number; height: number; label: string; isCorrect: boolean }>;
+    maxScore?: number;
+    passingScore?: number;
+    allowRetry?: boolean;
+    showHintsAfterFail?: boolean;
+  }>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -744,6 +796,7 @@ export const quizQuestions = pgTable("quiz_questions", {
   type: text("type").notNull().default("qcm"),
   options: jsonb("options").$type<string[]>().default([]),
   correctAnswer: integer("correct_answer").notNull().default(0),
+  explanation: text("explanation"),
   orderIndex: integer("order_index").notNull().default(0),
   timecode: integer("timecode"),
 });
@@ -755,6 +808,11 @@ export const learnerProgress = pgTable("learner_progress", {
   blockId: varchar("block_id"),
   completed: boolean("completed").default(false),
   score: integer("score"),
+  scenarioPath: jsonb("scenario_path").$type<Array<{
+    nodeId: string;
+    choiceId: string;
+    points: number;
+  }>>(),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -900,6 +958,20 @@ export const attendanceRecords = pgTable("attendance_records", {
   notes: text("notes"),
   signatureData: text("signature_data"),
   emargementToken: varchar("emargement_token"),
+});
+
+// ============================================================
+// NEW TABLES - SESSION INTERVENTION DATES
+// ============================================================
+
+export const sessionDates = pgTable("session_dates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  date: date("date").notNull(),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // ============================================================
@@ -1119,7 +1191,7 @@ export const insertTrainerSchema = createInsertSchema(trainers).omit({ id: true 
 export const insertTraineeSchema = createInsertSchema(trainees).omit({ id: true });
 export const insertProgramSchema = createInsertSchema(programs).omit({ id: true, updatedAt: true });
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true });
-export const insertEnrollmentSchema = createInsertSchema(enrollments).omit({ id: true, enrolledAt: true, completedAt: true });
+export const insertEnrollmentSchema = createInsertSchema(enrollments).omit({ id: true, enrolledAt: true, completedAt: true, waitlistedAt: true });
 export const insertProgramPrerequisiteSchema = createInsertSchema(programPrerequisites).omit({ id: true });
 export const insertTraineeCertificationSchema = createInsertSchema(traineeCertifications).omit({ id: true });
 
@@ -1144,6 +1216,7 @@ export const insertLearnerProgressSchema = createInsertSchema(learnerProgress).o
 export const insertSessionResourceSchema = createInsertSchema(sessionResources).omit({ id: true, createdAt: true });
 export const insertScormPackageSchema = createInsertSchema(scormPackages).omit({ id: true, createdAt: true });
 export const insertFormativeSubmissionSchema = createInsertSchema(formativeSubmissions).omit({ id: true, submittedAt: true, updatedAt: true });
+export const insertGamificationPointsSchema = createInsertSchema(gamificationPoints).omit({ id: true, createdAt: true });
 export const insertSurveyTemplateSchema = createInsertSchema(surveyTemplates).omit({ id: true, createdAt: true });
 export const insertSurveyResponseSchema = createInsertSchema(surveyResponses).omit({ id: true, createdAt: true });
 export const insertEvaluationAssignmentSchema = createInsertSchema(evaluationAssignments).omit({ id: true, createdAt: true });
@@ -1222,6 +1295,40 @@ export const insertConversationParticipantSchema = createInsertSchema(conversati
 export const insertDirectMessageSchema = createInsertSchema(directMessages).omit({ id: true, createdAt: true });
 
 // ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+export const NOTIFICATION_CATEGORIES = [
+  { value: "message", label: "Messages", icon: "MessageSquare" },
+  { value: "session", label: "Sessions", icon: "CalendarCheck" },
+  { value: "enrollment", label: "Inscriptions", icon: "UserPlus" },
+  { value: "document", label: "Documents", icon: "FileText" },
+  { value: "signature", label: "Signatures", icon: "PenTool" },
+  { value: "evaluation", label: "Évaluations", icon: "ClipboardList" },
+  { value: "task", label: "Missions", icon: "CheckSquare" },
+  { value: "badge", label: "Badges", icon: "Award" },
+  { value: "reminder", label: "Rappels", icon: "Bell" },
+  { value: "system", label: "Système", icon: "Info" },
+] as const;
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // destinataire
+  category: text("category").notNull().default("system"), // message | session | enrollment | document | signature | evaluation | task | badge | reminder | system
+  title: text("title").notNull(),
+  description: text("description"),
+  href: text("href"), // lien de redirection
+  read: boolean("read").notNull().default(false),
+  relatedId: varchar("related_id"), // ID de l'objet lié (message, session, etc.)
+  relatedType: text("related_type"), // type de l'objet lié
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
+// ============================================================
 // CRM & MARKETING
 // ============================================================
 
@@ -1250,6 +1357,7 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
   targetType: text("target_type").notNull().default("all"), // "all" | "tag" | "manual"
   targetTagIds: jsonb("target_tag_ids").$type<string[]>().default([]),
   targetContactType: text("target_contact_type").default("trainee"), // "trainee" | "enterprise" | "prospect" | "all"
+  manualEmails: jsonb("manual_emails").$type<string[]>().default([]),
   scheduledAt: timestamp("scheduled_at"),
   sentAt: timestamp("sent_at"),
   totalRecipients: integer("total_recipients").default(0),
@@ -1412,6 +1520,7 @@ export const dataArchives = pgTable("data_archives", {
 
 export const insertDataImportSchema = createInsertSchema(dataImports).omit({ id: true, createdAt: true });
 export const insertDataArchiveSchema = createInsertSchema(dataArchives).omit({ id: true, createdAt: true });
+export const insertSessionDateSchema = createInsertSchema(sessionDates).omit({ id: true, createdAt: true });
 
 // ============================================================
 // AUTH SCHEMAS
@@ -1496,6 +1605,8 @@ export type InsertScormPackage = z.infer<typeof insertScormPackageSchema>;
 export type ScormPackage = typeof scormPackages.$inferSelect;
 export type InsertFormativeSubmission = z.infer<typeof insertFormativeSubmissionSchema>;
 export type FormativeSubmission = typeof formativeSubmissions.$inferSelect;
+export type InsertGamificationPoints = z.infer<typeof insertGamificationPointsSchema>;
+export type GamificationPoints = typeof gamificationPoints.$inferSelect;
 export type InsertSurveyTemplate = z.infer<typeof insertSurveyTemplateSchema>;
 export type SurveyTemplate = typeof surveyTemplates.$inferSelect;
 export type InsertSurveyResponse = z.infer<typeof insertSurveyResponseSchema>;
@@ -1586,6 +1697,8 @@ export type InsertDataImport = z.infer<typeof insertDataImportSchema>;
 export type DataImport = typeof dataImports.$inferSelect;
 export type InsertDataArchive = z.infer<typeof insertDataArchiveSchema>;
 export type DataArchive = typeof dataArchives.$inferSelect;
+export type InsertSessionDate = z.infer<typeof insertSessionDateSchema>;
+export type SessionDate = typeof sessionDates.$inferSelect;
 
 // ============================================================
 // CONSTANTS
@@ -1852,7 +1965,28 @@ export const ELEARNING_BLOCK_TYPES = [
   { value: "document", label: "Document téléchargeable" },
   { value: "image", label: "Image / Galerie" },
   { value: "survey", label: "Sondage (non noté)" },
+  { value: "scenario", label: "Scénario à embranchements" },
+  { value: "simulation", label: "Mise en situation (exercice pratique)" },
 ] as const;
+
+export const GAMIFICATION_LEVELS = [
+  { name: "Débutant", minXP: 0, badge: "bronze" },
+  { name: "Apprenti", minXP: 200, badge: "bronze" },
+  { name: "Confirmé", minXP: 500, badge: "silver" },
+  { name: "Expert", minXP: 1000, badge: "gold" },
+  { name: "Maître", minXP: 2000, badge: "platinum" },
+] as const;
+
+export const XP_REWARDS = {
+  block_complete: 10,
+  quiz_pass: 20,
+  quiz_perfect: 50,
+  scenario_complete: 30,
+  module_complete: 50,
+  streak_bonus: 15,
+  first_try_bonus: 25,
+  simulation_complete: 25,
+} as const;
 
 export const AUTOMATION_EVENTS = [
   { value: "enrollment_created", label: "Nouvelle inscription" },
@@ -1892,6 +2026,7 @@ export const AUTOMATION_ACTIONS = [
   { value: "send_sms", label: "Envoyer un SMS" },
   { value: "send_sms_enterprise", label: "Envoyer un SMS à l'entreprise" },
   { value: "send_evaluation", label: "Envoyer une évaluation" },
+  { value: "generate_convocation", label: "Générer et envoyer une convocation" },
 ] as const;
 
 export const EVALUATION_TYPES = [
@@ -2307,8 +2442,22 @@ export const TEMPLATE_VARIABLES = {
   ],
   entreprise: [
     { key: "{nom_entreprise}", label: "Nom de l'entreprise" },
-    { key: "{contact_entreprise}", label: "Contact entreprise" },
-    { key: "{email_entreprise}", label: "Email entreprise" },
+    { key: "{siret_entreprise}", label: "SIRET de l'entreprise" },
+    { key: "{tva_entreprise}", label: "N° TVA de l'entreprise" },
+    { key: "{adresse_entreprise}", label: "Adresse de l'entreprise" },
+    { key: "{ville_entreprise}", label: "Ville de l'entreprise" },
+    { key: "{code_postal_entreprise}", label: "Code postal de l'entreprise" },
+    { key: "{adresse_complete_entreprise}", label: "Adresse complète entreprise (bloc)" },
+    { key: "{format_juridique_entreprise}", label: "Forme juridique" },
+    { key: "{secteur_entreprise}", label: "Secteur d'activité" },
+    { key: "{telephone_entreprise}", label: "Téléphone de l'entreprise" },
+    { key: "{email_entreprise}", label: "Email de l'entreprise" },
+    { key: "{contact_entreprise}", label: "Nom du contact" },
+    { key: "{email_contact_entreprise}", label: "Email du contact" },
+    { key: "{telephone_contact_entreprise}", label: "Téléphone du contact" },
+    { key: "{representant_legal}", label: "Représentant légal" },
+    { key: "{email_representant_legal}", label: "Email du représentant légal" },
+    { key: "{telephone_representant_legal}", label: "Tél. du représentant légal" },
   ],
   session: [
     { key: "{titre_session}", label: "Titre de la session" },
@@ -2323,8 +2472,11 @@ export const TEMPLATE_VARIABLES = {
   ],
   formation: [
     { key: "{titre_formation}", label: "Titre de la formation" },
+    { key: "{nom_formation}", label: "Nom de la formation (alias)" },
     { key: "{duree_formation}", label: "Durée" },
     { key: "{prix_formation}", label: "Prix" },
+    { key: "{montant_formation}", label: "Montant de la formation (alias prix)" },
+    { key: "{nombre_stagiaires}", label: "Nombre de stagiaires inscrits" },
     { key: "{objectifs_formation}", label: "Objectifs" },
     { key: "{prerequis_formation}", label: "Prérequis" },
     { key: "{niveau_formation}", label: "Niveau" },
@@ -2333,8 +2485,12 @@ export const TEMPLATE_VARIABLES = {
     { key: "{contenu_formation}", label: "Contenu de la formation" },
   ],
   formateur: [
-    { key: "{nom_formateur}", label: "Nom du formateur" },
+    { key: "{nom_formateur}", label: "Nom complet du formateur" },
+    { key: "{prenom_formateur}", label: "Prénom du formateur" },
+    { key: "{nom_famille_formateur}", label: "Nom de famille du formateur" },
     { key: "{email_formateur}", label: "Email du formateur" },
+    { key: "{telephone_formateur}", label: "Téléphone du formateur" },
+    { key: "{specialite_formateur}", label: "Spécialité du formateur" },
   ],
   inscription: [
     { key: "{date_inscription}", label: "Date d'inscription" },
@@ -2348,6 +2504,8 @@ export const TEMPLATE_VARIABLES = {
     { key: "{montant_ttc}", label: "Montant TTC" },
     { key: "{date_signature}", label: "Date de signature" },
     { key: "{date_du_jour}", label: "Date du jour" },
+    { key: "{date_document}", label: "Date du document" },
+    { key: "{date_generation}", label: "Date de génération du document" },
     { key: "{date_validite_devis}", label: "Date de validité du devis" },
     { key: "{civilite_apprenant}", label: "Civilité de l'apprenant" },
     { key: "{date_naissance_apprenant}", label: "Date de naissance" },

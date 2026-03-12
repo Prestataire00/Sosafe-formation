@@ -428,7 +428,7 @@ export default function Prospects() {
                     {prospect.contactEmail && (
                       <div className="flex items-center gap-1.5">
                         <Mail className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{prospect.contactEmail}</span>
+                        <a href={`mailto:${prospect.contactEmail}`} className="truncate text-primary hover:underline">{prospect.contactEmail}</a>
                       </div>
                     )}
                     {prospect.contactPhone && (

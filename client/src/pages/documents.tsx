@@ -64,6 +64,11 @@ import {
   Clock,
   Check,
   Stamp,
+  Sparkles,
+  Upload,
+  FileUp,
+  Loader2,
+  Wand2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -570,19 +575,10 @@ function PaperSignatureDialog({
   const paperSignMutation = useMutation({
     mutationFn: async () => {
       if (!doc) return;
-      const paperRecord = {
-        signerId: "paper",
-        signerType: "paper" as const,
+      await apiRequest("POST", `/api/generated-documents/${doc.id}/mark-paper-signed`, {
         signerName: signerName || userName,
-        status: "signed",
-        signedAt: new Date(signedDate).toISOString(),
+        signedDate,
         notes,
-        markedBy: userName,
-      };
-      const existingSigners = ((doc as any).signatureRequestedFor || []) as any[];
-      await apiRequest("PATCH", `/api/generated-documents/${doc.id}`, {
-        signatureStatus: "signed",
-        signatureRequestedFor: [...existingSigners, paperRecord],
       });
     },
     onSuccess: () => {
@@ -877,18 +873,41 @@ function GenerateForm({
   templates,
   sessions,
   trainees,
+  enterprises,
   onSubmit,
   isPending,
 }: {
   templates: DocumentTemplate[];
   sessions: Session[];
   trainees: Trainee[];
-  onSubmit: (data: { templateId: string; sessionId: string; traineeIds: string[] }) => void;
+  enterprises: Enterprise[];
+  onSubmit: (data: { templateId: string; sessionId: string; traineeIds: string[]; enterpriseId?: string; quoteId?: string; invoiceId?: string }) => void;
   isPending: boolean;
 }) {
   const [templateId, setTemplateId] = useState("");
   const [sessionId, setSessionId] = useState("");
+  const [enterpriseId, setEnterpriseId] = useState("");
+  const [quoteId, setQuoteId] = useState("");
+  const [invoiceId, setInvoiceId] = useState("");
   const [selectedTrainees, setSelectedTrainees] = useState<string[]>([]);
+
+  // Detect template type for conditional fields
+  const selectedTemplate = templates.find(t => t.id === templateId);
+  const templateType = selectedTemplate?.type || "";
+  const needsEnterprise = ["devis", "convention", "contrat_particulier", "facture", "facture_blended", "facture_specifique", "cgv"].includes(templateType);
+  const needsQuote = ["devis", "devis_sous_traitance"].includes(templateType);
+  const needsInvoice = ["facture", "facture_blended", "facture_specifique"].includes(templateType);
+  const needsTrainees = !["programme", "reglement", "cgv", "bpf"].includes(templateType);
+
+  // Fetch quotes/invoices when needed
+  const { data: quotesData } = useQuery<any[]>({
+    queryKey: ["/api/quotes"],
+    enabled: needsQuote,
+  });
+  const { data: invoicesData } = useQuery<any[]>({
+    queryKey: ["/api/invoices"],
+    enabled: needsInvoice,
+  });
 
   const toggleTrainee = (id: string) => {
     setSelectedTrainees((prev) =>
@@ -898,16 +917,23 @@ function GenerateForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ templateId, sessionId, traineeIds: selectedTrainees });
+    onSubmit({
+      templateId,
+      sessionId,
+      traineeIds: selectedTrainees,
+      ...(enterpriseId && enterpriseId !== "_none" ? { enterpriseId } : {}),
+      ...(quoteId && quoteId !== "_none" ? { quoteId } : {}),
+      ...(invoiceId && invoiceId !== "_none" ? { invoiceId } : {}),
+    });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label>Modele de document</Label>
-        <Select value={templateId} onValueChange={setTemplateId} required>
+        <Select value={templateId} onValueChange={(v) => { setTemplateId(v); setQuoteId(""); setInvoiceId(""); }} required>
           <SelectTrigger data-testid="select-generate-template">
-            <SelectValue placeholder="Selectionner un modele" />
+            <SelectValue placeholder="Sélectionner un modèle" />
           </SelectTrigger>
           <SelectContent>
             {templates.map((t) => (
@@ -922,7 +948,7 @@ function GenerateForm({
         <Label>Session</Label>
         <Select value={sessionId} onValueChange={setSessionId} required>
           <SelectTrigger data-testid="select-generate-session">
-            <SelectValue placeholder="Selectionner une session" />
+            <SelectValue placeholder="Sélectionner une session" />
           </SelectTrigger>
           <SelectContent>
             {sessions.map((s) => (
@@ -933,46 +959,112 @@ function GenerateForm({
           </SelectContent>
         </Select>
       </div>
-      <div className="space-y-2">
-        <Label>Stagiaires</Label>
-        <div className="border rounded-md max-h-[200px] overflow-y-auto">
-          {trainees.length === 0 ? (
-            <p className="p-3 text-sm text-muted-foreground">Aucun stagiaire disponible</p>
-          ) : (
-            trainees.map((t) => (
-              <label
-                key={t.id}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-accent/50 cursor-pointer border-b last:border-b-0"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedTrainees.includes(t.id)}
-                  onChange={() => toggleTrainee(t.id)}
-                  className="rounded"
-                />
-                <span className="text-sm">
-                  {t.firstName} {t.lastName}
-                </span>
-                {t.company && (
-                  <span className="text-xs text-muted-foreground">({t.company})</span>
-                )}
-              </label>
-            ))
+
+      {/* Enterprise selector */}
+      {needsEnterprise && (
+        <div className="space-y-2">
+          <Label>Entreprise</Label>
+          <Select value={enterpriseId} onValueChange={setEnterpriseId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Auto-détection depuis l'inscription" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Auto-détection</SelectItem>
+              {enterprises.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.name} {e.siret ? `(${e.siret})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Si non sélectionnée, l'entreprise sera détectée depuis l'inscription du stagiaire.</p>
+        </div>
+      )}
+
+      {/* Quote selector for devis */}
+      {needsQuote && quotesData && quotesData.length > 0 && (
+        <div className="space-y-2">
+          <Label>Devis associé</Label>
+          <Select value={quoteId} onValueChange={setQuoteId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sélectionner un devis (optionnel)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Aucun</SelectItem>
+              {quotesData.map((q: any) => (
+                <SelectItem key={q.id} value={q.id}>
+                  {q.number} — {q.title} ({q.total?.toLocaleString("fr-FR")} €)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Invoice selector */}
+      {needsInvoice && invoicesData && invoicesData.length > 0 && (
+        <div className="space-y-2">
+          <Label>Facture associée</Label>
+          <Select value={invoiceId} onValueChange={setInvoiceId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sélectionner une facture (optionnel)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Aucune</SelectItem>
+              {invoicesData.map((inv: any) => (
+                <SelectItem key={inv.id} value={inv.id}>
+                  {inv.number} — {inv.title} ({inv.total?.toLocaleString("fr-FR")} €)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Trainees */}
+      {needsTrainees && (
+        <div className="space-y-2">
+          <Label>Stagiaires</Label>
+          <div className="border rounded-md max-h-[200px] overflow-y-auto">
+            {trainees.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">Aucun stagiaire disponible</p>
+            ) : (
+              trainees.map((t) => (
+                <label
+                  key={t.id}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-accent/50 cursor-pointer border-b last:border-b-0"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedTrainees.includes(t.id)}
+                    onChange={() => toggleTrainee(t.id)}
+                    className="rounded"
+                  />
+                  <span className="text-sm">
+                    {t.firstName} {t.lastName}
+                  </span>
+                  {t.company && (
+                    <span className="text-xs text-muted-foreground">({t.company})</span>
+                  )}
+                </label>
+              ))
+            )}
+          </div>
+          {selectedTrainees.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {selectedTrainees.length} stagiaire{selectedTrainees.length > 1 ? "s" : ""} sélectionné{selectedTrainees.length > 1 ? "s" : ""}
+            </p>
           )}
         </div>
-        {selectedTrainees.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {selectedTrainees.length} stagiaire{selectedTrainees.length > 1 ? "s" : ""} selectionne{selectedTrainees.length > 1 ? "s" : ""}
-          </p>
-        )}
-      </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-2">
         <Button
           type="submit"
-          disabled={isPending || !templateId || !sessionId || selectedTrainees.length === 0}
+          disabled={isPending || !templateId || !sessionId || (needsTrainees && selectedTrainees.length === 0)}
           data-testid="button-generate-submit"
         >
-          {isPending ? "Generation..." : "Generer les documents"}
+          {isPending ? "Génération..." : "Générer les documents"}
         </Button>
       </div>
     </form>
@@ -1041,21 +1133,72 @@ function PreviewDialog({
 }
 
 // ---------------------------------------------------------------------------
+// Edit Document Content
+// ---------------------------------------------------------------------------
+
+function EditDocumentContent({
+  document,
+  onSave,
+  isPending,
+}: {
+  document: GeneratedDocument;
+  onSave: (content: string) => void;
+  isPending: boolean;
+}) {
+  const [content, setContent] = useState(document.content);
+
+  return (
+    <div className="space-y-4">
+      <RichTextEditor
+        value={content}
+        onChange={setContent}
+        placeholder="Contenu du document..."
+      />
+      <div className="flex justify-end gap-2">
+        <Button onClick={() => onSave(content)} disabled={isPending}>
+          {isPending ? "Enregistrement..." : "Enregistrer les modifications"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
 export default function Documents() {
   const [searchTemplates, setSearchTemplates] = useState("");
   const [searchDocs, setSearchDocs] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterSession, setFilterSession] = useState("all");
+  const [filterVisibility, setFilterVisibility] = useState("all");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [dateFromText, setDateFromText] = useState("");
+  const [dateToText, setDateToText] = useState("");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<DocumentTemplate | undefined>();
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<GeneratedDocument | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [editDocState, setEditDocState] = useState<GeneratedDocument | null>(null);
+  const [editDocOpen, setEditDocOpen] = useState(false);
   const [signDoc, setSignDoc] = useState<GeneratedDocument | null>(null);
   const [signDialogOpen, setSignDialogOpen] = useState(false);
   const [paperSignDoc, setPaperSignDoc] = useState<GeneratedDocument | null>(null);
   const [paperSignDialogOpen, setPaperSignDialogOpen] = useState(false);
+  const [aiTemplateDialogOpen, setAiTemplateDialogOpen] = useState(false);
+  const [aiTemplateType, setAiTemplateType] = useState("convention");
+  const [aiTemplateDesc, setAiTemplateDesc] = useState("");
+  const [aiTemplateGenerating, setAiTemplateGenerating] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importType, setImportType] = useState("convention");
+  const [importName, setImportName] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -1122,7 +1265,7 @@ export default function Documents() {
   // --- Generate Mutations ---
 
   const generateMutation = useMutation({
-    mutationFn: (data: { templateId: string; sessionId: string; traineeIds: string[] }) =>
+    mutationFn: (data: { templateId: string; sessionId: string; traineeIds: string[]; enterpriseId?: string; quoteId?: string; invoiceId?: string }) =>
       apiRequest("POST", "/api/documents/generate", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/generated-documents"] });
@@ -1142,13 +1285,15 @@ export default function Documents() {
   });
 
   const updateDocMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { visibility?: string; status?: string } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { visibility?: string; status?: string; content?: string } }) =>
       apiRequest("PATCH", `/api/generated-documents/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/generated-documents"] });
-      toast({ title: "Document mis a jour" });
+      setEditDocOpen(false);
+      setEditDocState(null);
+      toast({ title: "Document mis à jour" });
     },
-    onError: () => toast({ title: "Erreur lors de la mise a jour", variant: "destructive" }),
+    onError: () => toast({ title: "Erreur lors de la mise à jour", variant: "destructive" }),
   });
 
   const generatePostalLabelMutation = useMutation({
@@ -1216,11 +1361,55 @@ export default function Documents() {
     ) || [];
 
   const filteredDocs =
-    generatedDocs?.filter(
-      (d) =>
-        d.title.toLowerCase().includes(searchDocs.toLowerCase()) ||
-        d.type.toLowerCase().includes(searchDocs.toLowerCase())
-    ) || [];
+    generatedDocs?.filter((d) => {
+      // Text search
+      if (searchDocs) {
+        const q = searchDocs.toLowerCase();
+        const matchText = d.title.toLowerCase().includes(q) || d.type.toLowerCase().includes(q);
+        const trainee = trainees?.find((t) => t.id === d.traineeId);
+        const matchTrainee = trainee ? `${trainee.firstName} ${trainee.lastName}`.toLowerCase().includes(q) : false;
+        const session = sessions?.find((s) => s.id === d.sessionId);
+        const matchSession = session ? session.title.toLowerCase().includes(q) : false;
+        if (!matchText && !matchTrainee && !matchSession) return false;
+      }
+      // Type filter
+      if (filterType !== "all" && d.type !== filterType) return false;
+      // Status filter
+      if (filterStatus !== "all" && d.status !== filterStatus) return false;
+      // Session filter
+      if (filterSession !== "all" && d.sessionId !== filterSession) return false;
+      // Visibility filter
+      if (filterVisibility !== "all" && (d as any).visibility !== filterVisibility) return false;
+      // Date range filter
+      if (filterDateFrom && d.createdAt) {
+        if (new Date(d.createdAt) < new Date(filterDateFrom)) return false;
+      }
+      if (filterDateTo && d.createdAt) {
+        const to = new Date(filterDateTo);
+        to.setHours(23, 59, 59, 999);
+        if (new Date(d.createdAt) > to) return false;
+      }
+      return true;
+    }) || [];
+
+  const hasActiveFilters = filterType !== "all" || filterStatus !== "all" || filterSession !== "all" || filterVisibility !== "all" || filterDateFrom || filterDateTo;
+
+  const clearFilters = () => {
+    setFilterType("all");
+    setFilterStatus("all");
+    setFilterSession("all");
+    setFilterVisibility("all");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setDateFromText("");
+    setDateToText("");
+  };
+
+  // Get unique doc types for filter
+  const docTypes = Array.from(new Set(generatedDocs?.map((d) => d.type) || []));
+  // Get sessions that have docs
+  const docSessionIds = Array.from(new Set(generatedDocs?.map((d) => d.sessionId).filter(Boolean) || []));
+  const docSessions = sessions?.filter((s) => docSessionIds.includes(s.id)) || [];
 
   // --- Render ---
 
@@ -1252,16 +1441,32 @@ export default function Documents() {
               placeholder="Rechercher un modele..."
               className="max-w-sm"
             />
-            <Button
-              onClick={() => {
-                setEditTemplate(undefined);
-                setTemplateDialogOpen(true);
-              }}
-              data-testid="button-create-template"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nouveau modele
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setImportDialogOpen(true)}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Importer
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setAiTemplateDialogOpen(true)}
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generer avec l'IA
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditTemplate(undefined);
+                  setTemplateDialogOpen(true);
+                }}
+                data-testid="button-create-template"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Nouveau modele
+              </Button>
+            </div>
           </div>
 
           {loadingTemplates ? (
@@ -1374,11 +1579,12 @@ export default function Documents() {
             TAB: Documents generes
            ================================================================ */}
         <TabsContent value="generated" className="space-y-4">
+          {/* Search + Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <SearchInput
               value={searchDocs}
               onChange={setSearchDocs}
-              placeholder="Rechercher un document..."
+              placeholder="Rechercher par titre, stagiaire, session..."
               className="max-w-sm"
             />
             <div className="flex items-center gap-2">
@@ -1413,6 +1619,155 @@ export default function Documents() {
               </Button>
             </div>
           </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Type</Label>
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="w-[180px] h-8 text-sm">
+                  <SelectValue placeholder="Tous les types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les types</SelectItem>
+                  {DOCUMENT_TYPES.map((dt) => (
+                    <SelectItem key={dt.value} value={dt.value}>{dt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Statut</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[150px] h-8 text-sm">
+                  <SelectValue placeholder="Tous" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous</SelectItem>
+                  <SelectItem value="generated">Généré</SelectItem>
+                  <SelectItem value="shared">Partagé</SelectItem>
+                  <SelectItem value="sent">Envoyé</SelectItem>
+                  <SelectItem value="signed">Signé</SelectItem>
+                  <SelectItem value="archived">Archivé</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Session</Label>
+              <Select value={filterSession} onValueChange={setFilterSession}>
+                <SelectTrigger className="w-[200px] h-8 text-sm">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les sessions</SelectItem>
+                  {docSessions.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Visibilité</Label>
+              <Select value={filterVisibility} onValueChange={setFilterVisibility}>
+                <SelectTrigger className="w-[150px] h-8 text-sm">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  <SelectItem value="admin_only">Admin</SelectItem>
+                  <SelectItem value="trainee">Stagiaire</SelectItem>
+                  <SelectItem value="enterprise">Entreprise</SelectItem>
+                  <SelectItem value="public">Public</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Du</Label>
+              <div className="flex gap-1.5 items-center">
+                <Input
+                  type="text"
+                  placeholder="JJ/MM/AAAA"
+                  className="w-[110px] h-8 text-sm"
+                  value={dateFromText}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setDateFromText(v);
+                    const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                    if (m) {
+                      const d = new Date(`${m[3]}-${m[2]}-${m[1]}`);
+                      if (!isNaN(d.getTime())) setFilterDateFrom(`${m[3]}-${m[2]}-${m[1]}`);
+                    }
+                    if (!v) setFilterDateFrom("");
+                  }}
+                />
+                <Input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={(e) => {
+                    setFilterDateFrom(e.target.value);
+                    if (e.target.value) {
+                      setDateFromText(new Date(e.target.value + "T00:00:00").toLocaleDateString("fr-FR"));
+                    } else {
+                      setDateFromText("");
+                    }
+                  }}
+                  className="w-[38px] h-8 text-sm px-1 [&::-webkit-calendar-picker-indicator]:mx-0"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Au</Label>
+              <div className="flex gap-1.5 items-center">
+                <Input
+                  type="text"
+                  placeholder="JJ/MM/AAAA"
+                  className="w-[110px] h-8 text-sm"
+                  value={dateToText}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setDateToText(v);
+                    const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                    if (m) {
+                      const d = new Date(`${m[3]}-${m[2]}-${m[1]}`);
+                      if (!isNaN(d.getTime())) setFilterDateTo(`${m[3]}-${m[2]}-${m[1]}`);
+                    }
+                    if (!v) setFilterDateTo("");
+                  }}
+                />
+                <Input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={(e) => {
+                    setFilterDateTo(e.target.value);
+                    if (e.target.value) {
+                      setDateToText(new Date(e.target.value + "T00:00:00").toLocaleDateString("fr-FR"));
+                    } else {
+                      setDateToText("");
+                    }
+                  }}
+                  className="w-[38px] h-8 text-sm px-1 [&::-webkit-calendar-picker-indicator]:mx-0"
+                />
+              </div>
+            </div>
+
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={clearFilters}>
+                Réinitialiser
+              </Button>
+            )}
+          </div>
+
+          {/* Active filter count */}
+          {hasActiveFilters && (
+            <p className="text-xs text-muted-foreground">
+              {filteredDocs.length} document{filteredDocs.length > 1 ? "s" : ""} trouvé{filteredDocs.length > 1 ? "s" : ""}
+            </p>
+          )}
 
           {loadingDocs ? (
             <div className="space-y-3">
@@ -1537,7 +1892,16 @@ export default function Documents() {
                                   data-testid={`button-preview-doc-${doc.id}`}
                                 >
                                   <Eye className="w-4 h-4 mr-2" />
-                                  Apercu
+                                  Aperçu
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setEditDocState(doc);
+                                    setEditDocOpen(true);
+                                  }}
+                                >
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  Modifier le contenu
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => printDocumentHtml(doc.content, doc.title)}
@@ -1714,6 +2078,7 @@ export default function Documents() {
             templates={templates || []}
             sessions={sessions || []}
             trainees={trainees || []}
+            enterprises={enterprisesData || []}
             onSubmit={(data) => generateMutation.mutate(data)}
             isPending={generateMutation.isPending}
           />
@@ -1731,6 +2096,28 @@ export default function Documents() {
           if (!open) setPreviewDoc(null);
         }}
       />
+
+      {/* =================================================================
+          Dialog: Edit Document Content
+         ================================================================= */}
+      {editDocState && (
+        <Dialog open={editDocOpen} onOpenChange={(open) => { setEditDocOpen(open); if (!open) setEditDocState(null); }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Modifier le document : {editDocState.title}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto">
+              <EditDocumentContent
+                document={editDocState}
+                onSave={(content) => {
+                  updateDocMutation.mutate({ id: editDocState.id, data: { content } });
+                }}
+                isPending={updateDocMutation.isPending}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* =================================================================
           Dialog: Request Signature
@@ -1775,6 +2162,243 @@ export default function Documents() {
         }}
         userName={user ? `${user.firstName} ${user.lastName}` : ""}
       />
+
+      {/* =================================================================
+          Dialog: AI Template Generation
+         ================================================================= */}
+      <Dialog open={aiTemplateDialogOpen} onOpenChange={(open) => { setAiTemplateDialogOpen(open); if (!open) { setAiTemplateDesc(""); setAiTemplateType("convention"); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-500" />
+              Generer un modele avec l'IA
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              L'IA va generer un modele de document professionnel conforme a la reglementation formation, avec les variables dynamiques deja integrees.
+            </p>
+            <div className="space-y-2">
+              <Label>Type de document</Label>
+              <Select value={aiTemplateType} onValueChange={setAiTemplateType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selectionner un type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Instructions supplementaires (optionnel)</Label>
+              <Textarea
+                value={aiTemplateDesc}
+                onChange={(e) => setAiTemplateDesc(e.target.value)}
+                placeholder="Ex: Ajouter une clause de confidentialite, mentionner les modalites de paiement en 3 fois..."
+                rows={3}
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={aiTemplateGenerating}
+              onClick={async () => {
+                setAiTemplateGenerating(true);
+                try {
+                  const resp = await fetch("/api/document-templates/generate-ai", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ type: aiTemplateType, description: aiTemplateDesc }),
+                  });
+                  if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.message || "Erreur");
+                  }
+                  const result = await resp.json();
+                  // Create the template directly
+                  const usedVars = Object.values(TEMPLATE_VARIABLES)
+                    .flat()
+                    .filter((v) => result.content.includes(v.key))
+                    .map((v) => v.key);
+                  createTemplateMutation.mutate({
+                    name: result.name,
+                    type: result.type,
+                    content: result.content,
+                    variables: usedVars,
+                    brandColor: "#1a56db",
+                    fontFamily: "Arial",
+                    logoUrl: null,
+                    headerHtml: null,
+                    footerHtml: null,
+                  });
+                  setAiTemplateDialogOpen(false);
+                  setAiTemplateDesc("");
+                  toast({ title: "Modele genere avec succes par l'IA" });
+                } catch (err) {
+                  toast({ title: err instanceof Error ? err.message : "Erreur", variant: "destructive" });
+                } finally {
+                  setAiTemplateGenerating(false);
+                }
+              }}
+            >
+              {aiTemplateGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generation en cours...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Generer le modele
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* =================================================================
+          Dialog: Import Template
+         ================================================================= */}
+      <Dialog open={importDialogOpen} onOpenChange={(open) => { setImportDialogOpen(open); if (!open) { setImportFile(null); setImportName(""); setImportType("convention"); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-blue-500" />
+              Importer un modele
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Importez un fichier HTML, Word (.docx) ou texte (.txt) pour creer un modele de document.
+            </p>
+            <div className="space-y-2">
+              <Label>Fichier</Label>
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${importFile ? "border-green-400 bg-green-50 dark:bg-green-900/10" : "border-muted-foreground/25 hover:border-primary/50"}`}
+                onClick={() => importFileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files[0];
+                  if (file) setImportFile(file);
+                }}
+              >
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".html,.htm,.docx,.doc,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setImportFile(file);
+                      if (!importName) setImportName(file.name.replace(/\.[^.]+$/, ""));
+                    }
+                  }}
+                />
+                {importFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <FileUp className="w-5 h-5 text-green-600" />
+                    <span className="text-sm font-medium">{importFile.name}</span>
+                    <span className="text-xs text-muted-foreground">({(importFile.size / 1024).toFixed(0)} Ko)</span>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">Cliquez ou glissez un fichier HTML, Word ou texte</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Nom du modele</Label>
+              <Input
+                value={importName}
+                onChange={(e) => setImportName(e.target.value)}
+                placeholder="Nom du modele..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Type de document</Label>
+              <Select value={importType} onValueChange={setImportType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              disabled={!importFile || importLoading}
+              onClick={async () => {
+                if (!importFile) return;
+                setImportLoading(true);
+                try {
+                  const formData = new FormData();
+                  formData.append("file", importFile);
+                  if (importName) formData.append("name", importName);
+                  formData.append("type", importType);
+
+                  const resp = await fetch("/api/document-templates/import", {
+                    method: "POST",
+                    body: formData,
+                    credentials: "include",
+                  });
+                  if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.message || "Erreur");
+                  }
+                  const result = await resp.json();
+                  // Create the template
+                  const usedVars = Object.values(TEMPLATE_VARIABLES)
+                    .flat()
+                    .filter((v) => result.content.includes(v.key))
+                    .map((v) => v.key);
+                  createTemplateMutation.mutate({
+                    name: result.name,
+                    type: result.type,
+                    content: result.content,
+                    variables: usedVars,
+                    brandColor: "#1a56db",
+                    fontFamily: "Arial",
+                    logoUrl: null,
+                    headerHtml: null,
+                    footerHtml: null,
+                  });
+                  setImportDialogOpen(false);
+                  setImportFile(null);
+                  setImportName("");
+                  toast({ title: "Modele importe avec succes" });
+                } catch (err) {
+                  toast({ title: err instanceof Error ? err.message : "Erreur", variant: "destructive" });
+                } finally {
+                  setImportLoading(false);
+                }
+              }}
+            >
+              {importLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Import en cours...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Importer le modele
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }

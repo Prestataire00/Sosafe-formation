@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,14 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TRAINEE_PROFESSIONS } from "@shared/schema";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
   ArrowLeft, CheckCircle2, Clock, Euro, Monitor, Building2,
@@ -36,6 +45,8 @@ type PublicSession = {
   maxParticipants: number;
   enrollmentCount: number;
   remainingSpots: number;
+  waitlistCount: number;
+  isFull: boolean;
   status: string;
   program: {
     id: string;
@@ -85,6 +96,7 @@ export default function PublicEnrollment() {
     lastName: "",
     phone: "",
     company: "",
+    profession: "",
   });
   const [knownTrainee, setKnownTrainee] = useState<string | null>(null);
   const [confirmationData, setConfirmationData] = useState<any>(null);
@@ -112,6 +124,17 @@ export default function PublicEnrollment() {
   } | null>(null);
   const { toast } = useToast();
 
+  // Pre-fill email from URL parameter (e.g. /inscription?email=john@example.com)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get("email");
+    if (emailParam) {
+      setFormData((prev) => ({ ...prev, email: emailParam }));
+      checkEmailMutation.mutate(emailParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const { data: sessions, isLoading } = useQuery<PublicSession[]>({
     queryKey: ["/api/public/sessions"],
   });
@@ -129,6 +152,7 @@ export default function PublicEnrollment() {
           lastName: data.trainee.lastName || prev.lastName,
           phone: data.trainee.phone || prev.phone,
           company: data.trainee.company || prev.company,
+          profession: data.trainee.profession || prev.profession,
         }));
         setKnownTrainee(data.trainee.firstName);
         if (data.trainee.rppsNumber) {
@@ -194,11 +218,16 @@ export default function PublicEnrollment() {
       setStep("confirmation");
     },
     onError: async (error: any) => {
-      let message = "Erreur lors de l'inscription";
+      let title = "Inscription impossible";
+      let description = "";
       try {
-        if (error.message) message = error.message;
+        if (error.errors && Array.isArray(error.errors)) {
+          description = error.errors.join("\n");
+        } else if (error.message) {
+          description = error.message;
+        }
       } catch {}
-      toast({ title: message, variant: "destructive" });
+      toast({ title, description: description || "Une erreur est survenue", variant: "destructive", duration: 10000 });
     },
   });
 
@@ -313,6 +342,7 @@ export default function PublicEnrollment() {
       phone: formData.phone.trim() || undefined,
       company: formData.company.trim() || undefined,
       rppsNumber: rppsNumber.trim() || undefined,
+      profession: formData.profession || undefined,
       documents: allDocs.length > 0 ? allDocs : undefined,
     });
   };
@@ -324,7 +354,7 @@ export default function PublicEnrollment() {
     }
     setStep("sessions");
     setSelectedSession(null);
-    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "" });
+    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "", profession: "" });
     setKnownTrainee(null);
     setUploadedDocs([]);
     setVerificationMode(null);
@@ -347,7 +377,7 @@ export default function PublicEnrollment() {
   const handleNewEnrollment = () => {
     setStep("sessions");
     setSelectedSession(null);
-    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "" });
+    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "", profession: "" });
     setKnownTrainee(null);
     setConfirmationData(null);
     setUploadedDocs([]);
@@ -495,7 +525,13 @@ export default function PublicEnrollment() {
                         <div className="flex items-center gap-2">
                           <Users className="w-4 h-4 shrink-0" />
                           <span>
-                            {session.remainingSpots} place{session.remainingSpots > 1 ? "s" : ""} restante{session.remainingSpots > 1 ? "s" : ""}
+                            {session.isFull ? (
+                              <span className="text-amber-600 dark:text-amber-400">
+                                Session complète — Liste d'attente ({session.waitlistCount} en attente)
+                              </span>
+                            ) : (
+                              `${session.remainingSpots} place${session.remainingSpots > 1 ? "s" : ""} restante${session.remainingSpots > 1 ? "s" : ""}`
+                            )}
                           </span>
                         </div>
                       </div>
@@ -935,6 +971,31 @@ export default function PublicEnrollment() {
                       </div>
                     </div>
 
+                    {/* Profession - shown when session has profession prerequisites */}
+                    {selectedSession?.prerequisites?.some(p => p.requiredProfessions && (p.requiredProfessions as string[]).length > 0) && (
+                      <div className="space-y-2">
+                        <Label htmlFor="profession">Profession *</Label>
+                        <Select
+                          value={formData.profession}
+                          onValueChange={(val) => setFormData({ ...formData, profession: val })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Sélectionnez votre profession" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TRAINEE_PROFESSIONS.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>
+                                {p.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Cette formation exige une profession spécifique pour l'inscription
+                        </p>
+                      </div>
+                    )}
+
                     {/* Documents justificatifs */}
                     <div className="space-y-3 pt-2">
                       <Label>Documents justificatifs (optionnel)</Label>
@@ -1001,7 +1062,11 @@ export default function PublicEnrollment() {
                       size="lg"
                       disabled={enrollMutation.isPending || uploading}
                     >
-                      {enrollMutation.isPending ? "Inscription en cours..." : "S'inscrire"}
+                      {enrollMutation.isPending
+                        ? "Inscription en cours..."
+                        : selectedSession?.isFull
+                          ? "S'inscrire sur la liste d'attente"
+                          : "S'inscrire"}
                     </Button>
                   </form>
                 </CardContent>
@@ -1041,7 +1106,11 @@ export default function PublicEnrollment() {
 
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Users className="w-4 h-4 shrink-0" />
-                    <span>{selectedSession.remainingSpots} place{selectedSession.remainingSpots > 1 ? "s" : ""} restante{selectedSession.remainingSpots > 1 ? "s" : ""}</span>
+                    <span>
+                      {selectedSession.isFull
+                        ? "Liste d'attente"
+                        : `${selectedSession.remainingSpots} place${selectedSession.remainingSpots > 1 ? "s" : ""} restante${selectedSession.remainingSpots > 1 ? "s" : ""}`}
+                    </span>
                   </div>
 
                   <div className="pt-3 border-t">
@@ -1070,14 +1139,30 @@ export default function PublicEnrollment() {
         {step === "confirmation" && confirmationData && (
           <Card className="max-w-2xl mx-auto">
             <CardContent className="py-12 text-center">
-              <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
-              </div>
-
-              <h2 className="text-2xl font-bold mb-2">Inscription enregistrée !</h2>
-              <p className="text-muted-foreground mb-8">
-                Votre inscription est en attente de validation. Vous recevrez une confirmation prochainement.
-              </p>
+              {confirmationData.enrollment?.status === "waitlisted" ? (
+                <>
+                  <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Clock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold mb-2">Inscription en liste d'attente</h2>
+                  <p className="text-muted-foreground mb-4">
+                    Cette session est complète. Vous êtes en position <strong>#{confirmationData.waitlistPosition}</strong> sur la liste d'attente.
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-8">
+                    Vous serez automatiquement inscrit(e) si une place se libère. Vous recevrez un email de confirmation.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold mb-2">Inscription enregistrée !</h2>
+                  <p className="text-muted-foreground mb-8">
+                    Votre inscription est en attente de validation. Vous recevrez une confirmation prochainement.
+                  </p>
+                </>
+              )}
 
               <Card className="text-left mb-8">
                 <CardContent className="p-6 space-y-3 text-sm">
@@ -1110,7 +1195,12 @@ export default function PublicEnrollment() {
                   </div>
 
                   <div className="pt-3 border-t flex items-center gap-2">
-                    <Badge variant="secondary">En attente de validation</Badge>
+                    <Badge variant={confirmationData.enrollment?.status === "waitlisted" ? "outline" : "secondary"}
+                      className={confirmationData.enrollment?.status === "waitlisted" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : ""}>
+                      {confirmationData.enrollment?.status === "waitlisted"
+                        ? `Liste d'attente — Position #${confirmationData.waitlistPosition}`
+                        : "En attente de validation"}
+                    </Badge>
                   </div>
                 </CardContent>
               </Card>

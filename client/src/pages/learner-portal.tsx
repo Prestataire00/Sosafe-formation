@@ -1,7 +1,10 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, uploadFile } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
+import confetti from "canvas-confetti";
+import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,10 +76,31 @@ import {
   Phone,
   Mail,
   VideoIcon,
+  Lock,
+  X,
+  ChevronLeft,
+  PanelLeftClose,
+  PanelLeft,
+  User,
+  Calendar,
+  Medal,
+  Shield,
+  Sparkles,
+  Share2,
+  Zap,
+  Star,
+  ArrowRight,
+  ArrowLeft,
+  Flame,
+  Target,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ScenarioPlayer } from "@/pages/learner/components/ScenarioPlayer";
+import { SimulationPlayer } from "@/pages/learner/components/SimulationPlayer";
 import type {
   Enrollment,
   Session,
@@ -85,18 +109,63 @@ import type {
   ElearningBlock,
   QuizQuestion,
   LearnerProgress,
-  Trainee,
   GeneratedDocument,
   AttendanceSheet,
   AttendanceRecord,
   SessionResource,
   ScormPackage,
   FormativeSubmission,
+  TraineeCertification,
+  DigitalBadge,
+  BadgeAward,
 } from "@shared/schema";
+
+// ============================================================
+// CONFETTI & CELEBRATION HELPERS
+// ============================================================
+
+function fireConfettiSmall() {
+  confetti({ particleCount: 30, spread: 50, origin: { y: 0.7 }, gravity: 1.2, scalar: 0.8 });
+}
+
+function fireConfettiMedium() {
+  confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+  setTimeout(() => confetti({ particleCount: 40, spread: 90, origin: { y: 0.7 } }), 200);
+}
+
+function fireConfettiBig() {
+  const end = Date.now() + 800;
+  const colors = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#a78bfa"];
+  (function frame() {
+    confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0 }, colors });
+    confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1 }, colors });
+    if (Date.now() < end) requestAnimationFrame(frame);
+  })();
+}
+
+function fireConfettiEpic() {
+  const end = Date.now() + 2000;
+  const colors = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#a78bfa", "#fb923c"];
+  (function frame() {
+    confetti({ particleCount: 6, angle: 60, spread: 80, origin: { x: 0, y: 0.5 }, colors, gravity: 0.8 });
+    confetti({ particleCount: 6, angle: 120, spread: 80, origin: { x: 1, y: 0.5 }, colors, gravity: 0.8 });
+    confetti({ particleCount: 3, angle: 90, spread: 120, origin: { x: 0.5, y: 0 }, colors, gravity: 0.6 });
+    if (Date.now() < end) requestAnimationFrame(frame);
+  })();
+}
 
 // ============================================================
 // HELPERS
 // ============================================================
+
+/** Extract YouTube/Vimeo embed URL, or return null for other video types */
+function getVideoEmbedUrl(url: string): string | null {
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  const vm = url.match(/vimeo\.com\/(\d+)/);
+  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+  return null;
+}
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -257,7 +326,8 @@ function QuizPlayer({
     setQuestionResults((prev) => ({ ...prev, [currentIndex]: isCorrect }));
     setShowFeedback(true);
 
-    // Advance after delay
+    // Advance after delay (longer if explanation exists)
+    const delay = q.explanation ? 3000 : 1500;
     setTimeout(() => {
       setShowFeedback(false);
       if (currentIndex < sortedQuestions.length - 1) {
@@ -268,7 +338,7 @@ function QuizPlayer({
         const finalResults = { ...questionResults, [currentIndex]: isCorrect };
         submitQuiz(finalAnswers, finalResults);
       }
-    }, 1500);
+    }, delay);
   };
 
   const submitQuiz = (allAnswers: Record<number, number>, allResults?: Record<number, boolean>) => {
@@ -283,6 +353,10 @@ function QuizPlayer({
     const computedScore = Math.round((correct / sortedQuestions.length) * 100);
     setScore(computedScore);
     setSubmitted(true);
+
+    // Fire confetti proportional to score
+    if (computedScore >= 90) fireConfettiBig();
+    else if (computedScore >= (config.passingScore ?? 70)) fireConfettiMedium();
 
     submitProgressMutation.mutate({
       traineeId,
@@ -440,6 +514,23 @@ function QuizPlayer({
             );
           })}
         </div>
+
+        {/* Explanation after answer */}
+        {showFeedback && q.explanation && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+          >
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">Explication</p>
+                <p className="text-sm text-blue-600 dark:text-blue-400">{q.explanation}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </div>
     );
   }
@@ -516,22 +607,14 @@ function VideoQuizPlayer({
   const videoUrl = block.videoUrl || "";
   const config = (block.quizConfig as any) || {};
 
-  const getEmbedUrl = (url: string) => {
-    const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
-    if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
-    const vm = url.match(/vimeo\.com\/(\d+)/);
-    if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
-    return url;
-  };
-
   if (!videoWatched) {
     return (
       <div className="space-y-4">
         {videoUrl && (
           <div className="aspect-video rounded-lg overflow-hidden bg-black">
-            {videoUrl.match(/youtube|youtu\.be|vimeo/) ? (
+            {getVideoEmbedUrl(videoUrl) ? (
               <iframe
-                src={getEmbedUrl(videoUrl)}
+                src={getVideoEmbedUrl(videoUrl)!}
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -860,12 +943,29 @@ function FlashcardPlayer({
   const cards = ((block as any).flashcards as Array<{ front: string; back: string }>) || [];
   const [currentIdx, setCurrentIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [knewIt, setKnewIt] = useState<Record<number, boolean>>({});
+  const totalReviewed = Object.keys(knewIt).length;
+  const knewCount = Object.values(knewIt).filter(Boolean).length;
 
   if (cards.length === 0) {
     return <p className="text-sm text-muted-foreground py-2">Aucune flashcard disponible.</p>;
   }
 
   const card = cards[currentIdx];
+  const allReviewed = totalReviewed === cards.length;
+
+  const handleKnew = (knew: boolean) => {
+    setKnewIt((prev) => ({ ...prev, [currentIdx]: knew }));
+    if (knew) fireConfettiSmall();
+    setTimeout(() => {
+      setFlipped(false);
+      if (currentIdx < cards.length - 1) {
+        setCurrentIdx(currentIdx + 1);
+      } else if (!isCompleted && Object.keys({ ...knewIt, [currentIdx]: knew }).length === cards.length) {
+        onMarkComplete();
+      }
+    }, 400);
+  };
 
   return (
     <div className="space-y-4">
@@ -873,29 +973,90 @@ function FlashcardPlayer({
         <span className="text-xs font-medium text-muted-foreground">
           Carte {currentIdx + 1}/{cards.length}
         </span>
-        <Progress value={((currentIdx + 1) / cards.length) * 100} className="flex-1 mx-3 h-2" />
-      </div>
-
-      <div
-        onClick={() => setFlipped(!flipped)}
-        className={`cursor-pointer rounded-xl border-2 p-8 text-center min-h-[160px] flex items-center justify-center transition-all ${
-          flipped
-            ? "bg-pink-50 border-pink-300 dark:bg-pink-900/20 dark:border-pink-700"
-            : "bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 hover:border-pink-300"
-        }`}
-      >
-        <div>
-          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
-            {flipped ? "Reponse" : "Question"}
-          </p>
-          <p className="text-lg font-medium">{flipped ? card.back : card.front}</p>
-          <p className="text-xs text-muted-foreground mt-3">
-            <RotateCcw className="w-3 h-3 inline mr-1" />
-            Cliquez pour {flipped ? "voir la question" : "reveler la reponse"}
-          </p>
+        <div className="flex items-center gap-2 flex-1 mx-3">
+          <Progress value={((totalReviewed) / cards.length) * 100} className="flex-1 h-2" />
+          {totalReviewed > 0 && (
+            <span className="text-xs text-green-600 font-medium">{knewCount}/{totalReviewed}</span>
+          )}
         </div>
       </div>
 
+      {/* 3D Flip Card */}
+      <div
+        onClick={() => setFlipped(!flipped)}
+        className="cursor-pointer"
+        style={{ perspective: "1000px" }}
+      >
+        <motion.div
+          animate={{ rotateY: flipped ? 180 : 0 }}
+          transition={{ duration: 0.5, type: "spring", stiffness: 200, damping: 25 }}
+          style={{ transformStyle: "preserve-3d" }}
+          className="relative min-h-[200px]"
+        >
+          {/* Front */}
+          <div
+            className={`absolute inset-0 rounded-xl border-2 p-8 text-center flex items-center justify-center backface-hidden transition-colors ${
+              knewIt[currentIdx] === true
+                ? "bg-green-50 border-green-300 dark:bg-green-900/20 dark:border-green-700"
+                : knewIt[currentIdx] === false
+                  ? "bg-red-50 border-red-300 dark:bg-red-900/20 dark:border-red-700"
+                  : "bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700 hover:border-pink-300"
+            }`}
+            style={{ backfaceVisibility: "hidden" }}
+          >
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Question</p>
+              <p className="text-lg font-medium">{card.front}</p>
+              <p className="text-xs text-muted-foreground mt-3">
+                <RotateCcw className="w-3 h-3 inline mr-1" />
+                Cliquez pour révéler la réponse
+              </p>
+            </div>
+          </div>
+          {/* Back */}
+          <div
+            className="absolute inset-0 rounded-xl border-2 p-8 text-center flex items-center justify-center bg-gradient-to-br from-pink-50 to-purple-50 border-pink-300 dark:from-pink-900/20 dark:to-purple-900/20 dark:border-pink-700"
+            style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+          >
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Réponse</p>
+              <p className="text-lg font-medium">{card.back}</p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Spaced repetition buttons — shown when flipped */}
+      <AnimatePresence>
+        {flipped && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex items-center gap-3 justify-center"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              onClick={(e) => { e.stopPropagation(); handleKnew(false); }}
+            >
+              <X className="w-4 h-4" />
+              Je ne savais pas
+            </Button>
+            <Button
+              size="sm"
+              className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+              onClick={(e) => { e.stopPropagation(); handleKnew(true); }}
+            >
+              <CheckCircle className="w-4 h-4" />
+              Je savais !
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Navigation */}
       <div className="flex items-center justify-between">
         <Button
           variant="outline"
@@ -903,7 +1064,8 @@ function FlashcardPlayer({
           disabled={currentIdx === 0}
           onClick={() => { setCurrentIdx(currentIdx - 1); setFlipped(false); }}
         >
-          Precedente
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          Précédente
         </Button>
         <Button
           variant="outline"
@@ -912,18 +1074,143 @@ function FlashcardPlayer({
           onClick={() => { setCurrentIdx(currentIdx + 1); setFlipped(false); }}
         >
           Suivante
+          <ArrowRight className="w-4 h-4 ml-1" />
         </Button>
       </div>
 
-      {!isCompleted && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onMarkComplete}
-          disabled={isPending}
+      {/* Summary when all reviewed */}
+      {allReviewed && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800"
         >
-          <CheckCircle className="w-3 h-3 mr-2" />
-          Marquer comme etudie
+          <p className="font-bold text-green-700 dark:text-green-300">
+            {knewCount}/{cards.length} cartes maîtrisées
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {knewCount === cards.length ? "Parfait ! Vous maîtrisez toutes les cartes." : "Révisez les cartes manquées pour consolider vos acquis."}
+          </p>
+          {knewCount < cards.length && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => {
+                const firstMissed = Object.entries(knewIt).find(([, v]) => !v);
+                if (firstMissed) { setCurrentIdx(Number(firstMissed[0])); setFlipped(false); }
+              }}
+            >
+              <RotateCcw className="w-3 h-3 mr-2" />
+              Revoir les cartes manquées
+            </Button>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// VIDEO BLOCK PLAYER — with auto-completion on watch progress
+// ============================================================
+
+function VideoBlockPlayer({
+  block,
+  isCompleted,
+  onMarkComplete,
+  isPending,
+}: {
+  block: ElearningBlock;
+  isCompleted: boolean;
+  onMarkComplete: () => void;
+  isPending: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [watchPercent, setWatchPercent] = useState(0);
+  const [autoCompleted, setAutoCompleted] = useState(false);
+  const minPercent = block.minViewPercent || 80;
+
+  const handleTimeUpdate = useCallback(() => {
+    const el = videoRef.current;
+    if (!el || !el.duration) return;
+    const percent = Math.round((el.currentTime / el.duration) * 100);
+    setWatchPercent(percent);
+    if (percent >= minPercent && !isCompleted && !autoCompleted) {
+      setAutoCompleted(true);
+      onMarkComplete();
+    }
+  }, [isCompleted, autoCompleted, minPercent, onMarkComplete]);
+
+  const handleEnded = useCallback(() => {
+    if (!isCompleted && !autoCompleted) {
+      setAutoCompleted(true);
+      onMarkComplete();
+    }
+  }, [isCompleted, autoCompleted, onMarkComplete]);
+
+  const isNativeVideo = block.videoUrl?.match(/\.(mp4|webm|ogg)/);
+  const embedUrl = block.videoUrl ? getVideoEmbedUrl(block.videoUrl) : null;
+
+  return (
+    <div className="space-y-4">
+      {block.videoUrl ? (
+        embedUrl ? (
+          <div className="aspect-video rounded-xl overflow-hidden bg-black border">
+            <iframe
+              src={embedUrl}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={block.title}
+            />
+          </div>
+        ) : isNativeVideo ? (
+          <div className="space-y-2">
+            <div className="aspect-video rounded-xl overflow-hidden bg-black">
+              <video
+                ref={videoRef}
+                src={block.videoUrl}
+                controls
+                className="w-full h-full"
+                onTimeUpdate={handleTimeUpdate}
+                onEnded={handleEnded}
+              />
+            </div>
+            {!isCompleted && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Progression de la vidéo</span>
+                  <span className={watchPercent >= minPercent ? "text-green-600 font-medium" : ""}>
+                    {watchPercent}% / {minPercent}% requis
+                  </span>
+                </div>
+                <Progress value={watchPercent} className="h-1.5" />
+              </div>
+            )}
+          </div>
+        ) : (
+          <a
+            href={block.videoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 transition-colors"
+          >
+            <Play className="w-5 h-5" />
+            Regarder la vidéo
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        )
+      ) : (
+        <p className="text-muted-foreground">Aucune vidéo disponible.</p>
+      )}
+      {block.content && (
+        <p className="text-muted-foreground">{block.content}</p>
+      )}
+      {!isCompleted && !isNativeVideo && (
+        <Button onClick={onMarkComplete} disabled={isPending}>
+          <CheckCircle className="w-4 h-4 mr-2" />
+          Marquer comme visionné
         </Button>
       )}
     </div>
@@ -938,10 +1225,12 @@ function ModuleContentViewer({
   moduleId,
   traineeId,
   progressData,
+  requireSequential = true,
 }: {
   moduleId: string;
   traineeId: string;
   progressData: LearnerProgress[];
+  requireSequential?: boolean;
 }) {
   const { toast } = useToast();
 
@@ -987,26 +1276,48 @@ function ModuleContentViewer({
 
   return (
     <Accordion type="multiple" className="w-full">
-      {sortedBlocks.map((block) => {
+      {sortedBlocks.map((block, blockIndex) => {
         const blockProgress = progressData.find(
           (p) => p.blockId === block.id
         );
         const isCompleted = blockProgress?.completed;
 
+        // Sequential locking: check if all previous blocks are completed
+        let isLocked = false;
+        if (requireSequential && blockIndex > 0) {
+          for (let i = 0; i < blockIndex; i++) {
+            const prevBlock = sortedBlocks[i];
+            const prevProgress = progressData.find((p) => p.blockId === prevBlock.id);
+            if (!prevProgress?.completed) {
+              isLocked = true;
+              break;
+            }
+          }
+        }
+
         return (
-          <AccordionItem key={block.id} value={block.id}>
-            <AccordionTrigger className="hover:no-underline">
+          <AccordionItem key={block.id} value={block.id} disabled={isLocked}>
+            <AccordionTrigger className={`hover:no-underline ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`} disabled={isLocked}>
               <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
-                <BlockTypeIcon type={block.type} />
+                {isLocked ? (
+                  <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+                ) : (
+                  <BlockTypeIcon type={block.type} />
+                )}
                 <span className="text-sm font-medium truncate flex-1 text-left">
                   {block.title}
                 </span>
-                <BlockTypeLabel type={block.type} />
+                {isLocked ? (
+                  <span className="text-xs text-muted-foreground shrink-0">Terminez le bloc précédent</span>
+                ) : (
+                  <BlockTypeLabel type={block.type} />
+                )}
                 {isCompleted && (
                   <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
                 )}
               </div>
             </AccordionTrigger>
+            {!isLocked && (
             <AccordionContent>
               <div className="pl-7 space-y-3">
                 {/* TEXT BLOCK */}
@@ -1043,15 +1354,32 @@ function ModuleContentViewer({
                 {block.type === "video" && (
                   <div className="space-y-3">
                     {block.videoUrl ? (
-                      <a
-                        href={block.videoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-sm"
-                      >
-                        <Play className="w-4 h-4" />
-                        Regarder la vidéo
-                      </a>
+                      getVideoEmbedUrl(block.videoUrl) ? (
+                        <div className="aspect-video rounded-lg overflow-hidden bg-black border">
+                          <iframe
+                            src={getVideoEmbedUrl(block.videoUrl)!}
+                            className="w-full h-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            title={block.title}
+                          />
+                        </div>
+                      ) : block.videoUrl.match(/\.(mp4|webm|ogg)/) ? (
+                        <div className="aspect-video rounded-lg overflow-hidden bg-black">
+                          <video src={block.videoUrl} controls className="w-full h-full" />
+                        </div>
+                      ) : (
+                        <a
+                          href={block.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-sm"
+                        >
+                          <Play className="w-4 h-4" />
+                          Regarder la vidéo
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )
                     ) : (
                       <p className="text-sm text-muted-foreground">
                         Aucune vidéo disponible.
@@ -1340,6 +1668,7 @@ function ModuleContentViewer({
                 )}
               </div>
             </AccordionContent>
+            )}
           </AccordionItem>
         );
       })}
@@ -1358,6 +1687,7 @@ function EnrollmentCard({
   modules,
   progressData,
   traineeId,
+  onEnterImmersive,
 }: {
   enrollment: Enrollment;
   session: Session;
@@ -1365,8 +1695,10 @@ function EnrollmentCard({
   modules: ElearningModule[];
   progressData: LearnerProgress[];
   traineeId: string;
+  onEnterImmersive: (moduleId: string, blockIndex?: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const isValidated = ["confirmed", "attended", "completed"].includes(enrollment.status);
 
   // Fetch session resources when expanded
   const { data: sessionResources = [] } = useQuery<SessionResource[]>({
@@ -1456,24 +1788,73 @@ function EnrollmentCard({
           </p>
         </div>
 
-        {/* Module count and expand button */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <BookOpen className="w-4 h-4" />
-            <span>
-              {modules.length} module{modules.length !== 1 ? "s" : ""}
-            </span>
+        {/* Module count and path type badges */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2 flex-wrap">
+          <BookOpen className="w-4 h-4" />
+          <span>
+            {modules.length} module{modules.length !== 1 ? "s" : ""}
+          </span>
+          {(() => {
+            const learningCount = modules.filter((m) => (m as any).pathType === "learning").length;
+            const assessmentCount = modules.filter((m) => (m as any).pathType === "assessment").length;
+            return (
+              <>
+                {learningCount > 0 && (
+                  <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 dark:bg-green-900/20 text-[10px] px-1.5 py-0">
+                    <BookOpen className="w-3 h-3 mr-1" />{learningCount} apprentissage
+                  </Badge>
+                )}
+                {assessmentCount > 0 && (
+                  <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-900/20 text-[10px] px-1.5 py-0">
+                    <Target className="w-3 h-3 mr-1" />{assessmentCount} évaluation
+                  </Badge>
+                )}
+              </>
+            );
+          })()}
+        </div>
+
+        {/* Pending validation banner */}
+        {!isValidated && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+            <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Votre inscription est en attente de validation par l'administrateur. Vous pourrez accéder au contenu une fois confirmée.
+            </p>
           </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          {modules.length > 0 && (
+            <Button
+              size="sm"
+              className="flex-1 gap-2"
+              disabled={!isValidated}
+              onClick={() => {
+                const sorted = modules.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+                const firstIncomplete = sorted.find((mod) => {
+                  const modProgress = progressData.filter((p) => p.moduleId === mod.id);
+                  return modProgress.length === 0 || modProgress.some((p) => !p.completed);
+                });
+                onEnterImmersive(firstIncomplete?.id || sorted[0]?.id || "");
+              }}
+            >
+              {isValidated ? <Play className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              {isValidated
+                ? (progressPercent > 0 ? "Continuer la formation" : "Commencer la formation")
+                : "En attente de validation"
+              }
+            </Button>
+          )}
           <Button
-            variant={expanded ? "secondary" : "outline"}
+            variant="ghost"
             size="sm"
             onClick={() => setExpanded(!expanded)}
+            className="shrink-0"
           >
-            {expanded ? "Masquer" : "Continuer"}
+            {expanded ? "Masquer" : "Détails"}
             <ChevronRight
-              className={`w-4 h-4 ml-1 transition-transform ${
-                expanded ? "rotate-90" : ""
-              }`}
+              className={`w-4 h-4 ml-1 transition-transform ${expanded ? "rotate-90" : ""}`}
             />
           </Button>
         </div>
@@ -1486,62 +1867,71 @@ function EnrollmentCard({
                 Aucun module disponible pour cette session.
               </p>
             ) : (
-              <Accordion type="multiple" className="w-full">
-                {modules
-                  .slice()
-                  .sort((a, b) => a.orderIndex - b.orderIndex)
-                  .map((mod) => {
-                    const moduleProgress = progressData.filter(
-                      (p) => p.moduleId === mod.id
-                    );
-                    const moduleCompletedCount = moduleProgress.filter(
-                      (p) => p.completed
-                    ).length;
-                    const moduleTotalCount = moduleProgress.length;
-                    const modulePercent =
-                      moduleTotalCount > 0
-                        ? Math.round(
-                            (moduleCompletedCount / moduleTotalCount) * 100
-                          )
-                        : 0;
+              (() => {
+                const sorted = modules.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+                const learningMods = sorted.filter((m) => (m as any).pathType === "learning");
+                const assessmentMods = sorted.filter((m) => (m as any).pathType === "assessment");
+                const combinedMods = sorted.filter((m) => !(m as any).pathType || (m as any).pathType === "combined");
+                const hasMultipleTypes = [learningMods.length > 0, assessmentMods.length > 0, combinedMods.length > 0].filter(Boolean).length > 1;
 
-                    return (
-                      <AccordionItem key={mod.id} value={mod.id}>
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
-                            <BookOpen className="w-4 h-4 text-primary shrink-0" />
-                            <div className="flex-1 min-w-0 text-left">
-                              <p className="text-sm font-medium truncate">
-                                {mod.title}
-                              </p>
-                              {mod.description && (
-                                <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                  {mod.description}
-                                </p>
+                const renderModuleGroup = (mods: typeof modules, groupLabel?: string, groupIcon?: React.ReactNode, groupColor?: string) => (
+                  <div key={groupLabel || "all"}>
+                    {groupLabel && hasMultipleTypes && (
+                      <div className={`flex items-center gap-2 mb-2 px-1 ${groupColor || ""}`}>
+                        {groupIcon}
+                        <span className="text-sm font-semibold">{groupLabel}</span>
+                        <span className="text-xs text-muted-foreground">({mods.length})</span>
+                      </div>
+                    )}
+                    <Accordion type="multiple" className="w-full">
+                      {mods.map((mod) => {
+                        const moduleProgress = progressData.filter((p) => p.moduleId === mod.id);
+                        const moduleCompletedCount = moduleProgress.filter((p) => p.completed).length;
+                        const moduleTotalCount = moduleProgress.length;
+                        const modulePercent = moduleTotalCount > 0 ? Math.round((moduleCompletedCount / moduleTotalCount) * 100) : 0;
+                        const pt = (mod as any).pathType || "combined";
+                        const ptIcon = pt === "learning" ? <BookOpen className="w-4 h-4 text-green-600 shrink-0" /> : pt === "assessment" ? <Target className="w-4 h-4 text-orange-600 shrink-0" /> : <BookOpen className="w-4 h-4 text-primary shrink-0" />;
+
+                        return (
+                          <AccordionItem key={mod.id} value={mod.id}>
+                            <AccordionTrigger className="hover:no-underline">
+                              <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
+                                {ptIcon}
+                                <div className="flex-1 min-w-0 text-left">
+                                  <p className="text-sm font-medium truncate">{mod.title}</p>
+                                  {mod.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{mod.description}</p>}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <Progress value={modulePercent} className="h-1.5 w-16" />
+                                  <span className="text-xs text-muted-foreground w-8 text-right">{modulePercent}%</span>
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              {isValidated ? (
+                                <ModuleContentViewer moduleId={mod.id} traineeId={traineeId} progressData={moduleProgress} requireSequential={(mod as any).requireSequential !== false} />
+                              ) : (
+                                <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                                  <Lock className="w-4 h-4" />
+                                  <span>Contenu verrouillé — en attente de validation par l'administrateur.</span>
+                                </div>
                               )}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Progress
-                                value={modulePercent}
-                                className="h-1.5 w-16"
-                              />
-                              <span className="text-xs text-muted-foreground w-8 text-right">
-                                {modulePercent}%
-                              </span>
-                            </div>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <ModuleContentViewer
-                            moduleId={mod.id}
-                            traineeId={traineeId}
-                            progressData={moduleProgress}
-                          />
-                        </AccordionContent>
-                      </AccordionItem>
-                    );
-                  })}
-              </Accordion>
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
+                  </div>
+                );
+
+                return (
+                  <div className="space-y-4">
+                    {learningMods.length > 0 && renderModuleGroup(learningMods, "Apprentissage", <BookOpen className="w-4 h-4 text-green-600" />, "text-green-700 dark:text-green-400")}
+                    {assessmentMods.length > 0 && renderModuleGroup(assessmentMods, "Évaluation", <Target className="w-4 h-4 text-orange-600" />, "text-orange-700 dark:text-orange-400")}
+                    {combinedMods.length > 0 && renderModuleGroup(combinedMods, "Combiné", <Layers className="w-4 h-4 text-blue-600" />, "text-blue-700 dark:text-blue-400")}
+                  </div>
+                );
+              })()
             )}
 
             {/* Informations pratiques */}
@@ -1572,17 +1962,21 @@ function EnrollmentCard({
                         <div className="flex items-center gap-3 flex-wrap">
                           {sessionInfo.trainer.email && (
                             <a href={`mailto:${sessionInfo.trainer.email}`} className="text-xs text-blue-500 hover:underline flex items-center gap-1">
-                              <ExternalLink className="w-3 h-3" />
+                              <Mail className="w-3 h-3" />
                               {sessionInfo.trainer.email}
                             </a>
                           )}
                           {sessionInfo.trainer.phone && (
                             <a href={`tel:${sessionInfo.trainer.phone}`} className="text-xs text-blue-500 hover:underline flex items-center gap-1">
-                              <ExternalLink className="w-3 h-3" />
+                              <Phone className="w-3 h-3" />
                               {sessionInfo.trainer.phone}
                             </a>
                           )}
                         </div>
+                        <a href="/messaging" className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium text-primary hover:underline">
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          Envoyer un message au formateur
+                        </a>
                       </div>
                     </div>
                   </div>
@@ -1822,6 +2216,204 @@ const PERIOD_LABELS: Record<string, string> = {
   "apres-midi": "Après-midi",
   journee: "Journée entière",
 };
+
+// ============================================================
+// SESSIONS TAB
+// ============================================================
+
+interface LearnerSessionData {
+  session: Session;
+  program: { id: string; title: string; description: string; duration: number; modality: string; level: string } | null;
+  trainer: { firstName: string; lastName: string; email: string; specialty: string } | null;
+  enrollmentStatus: string;
+}
+
+function LearnerSessionsTab({ traineeId }: { traineeId: string }) {
+  const { data: sessionData, isLoading } = useQuery<LearnerSessionData[]>({
+    queryKey: ["/api/learner/my-sessions"],
+    enabled: !!traineeId,
+  });
+
+  const modalityLabels: Record<string, string> = {
+    presentiel: "Présentiel",
+    distanciel: "Distanciel",
+    hybride: "Hybride",
+    elearning: "E-learning",
+  };
+
+  const levelLabels: Record<string, string> = {
+    beginner: "Débutant",
+    intermediate: "Intermédiaire",
+    advanced: "Avancé",
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!sessionData || sessionData.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <Calendar className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+        <h3 className="text-lg font-medium mb-1">Aucune session</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Vous n'avez aucune session de formation pour le moment.
+        </p>
+        <Button variant="outline" asChild>
+          <a href="/inscription">
+            <BookOpen className="w-4 h-4 mr-2" />
+            Découvrir les formations disponibles
+          </a>
+        </Button>
+      </div>
+    );
+  }
+
+  // Sort by start date (upcoming first)
+  const sorted = [...sessionData].sort(
+    (a, b) => new Date(a.session.startDate).getTime() - new Date(b.session.startDate).getTime()
+  );
+
+  const now = new Date();
+
+  return (
+    <div className="space-y-4">
+      {sorted.map(({ session, program, trainer, enrollmentStatus }) => {
+        const start = new Date(session.startDate);
+        const end = new Date(session.endDate);
+        const isPast = end < now;
+        const isOngoing = start <= now && end >= now;
+        const isSessionValidated = ["confirmed", "attended", "completed"].includes(enrollmentStatus);
+
+        return (
+          <Card key={session.id} className={cn(isPast && "opacity-70")}>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  {program && (
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">
+                      {program.title}
+                    </p>
+                  )}
+                  <CardTitle className="text-lg">{session.title}</CardTitle>
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
+                    <EnrollmentStatusBadge status={enrollmentStatus} />
+                    {isOngoing && (
+                      <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                        En cours
+                      </Badge>
+                    )}
+                    {isPast && (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Terminée
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Dates */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span>
+                    {formatDate(session.startDate)} &mdash; {formatDate(session.endDate)}
+                  </span>
+                </div>
+
+                {/* Location */}
+                {session.location && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span>{session.location}</span>
+                  </div>
+                )}
+
+                {/* Modality */}
+                <div className="flex items-center gap-2 text-sm">
+                  <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span>{modalityLabels[session.modality] || session.modality}</span>
+                </div>
+
+                {/* Room */}
+                {session.locationRoom && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Info className="w-4 h-4 shrink-0" />
+                    <span>Salle : {session.locationRoom}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Trainer */}
+              {trainer && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="p-2 rounded-full bg-primary/10">
+                    <User className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {trainer.firstName} {trainer.lastName}
+                    </p>
+                    {trainer.specialty && (
+                      <p className="text-xs text-muted-foreground">{trainer.specialty}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Program details */}
+              {program && (
+                <div className="border-t pt-3 space-y-2">
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                    {program.duration > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Timer className="w-3 h-3" />
+                        {program.duration}h de formation
+                      </span>
+                    )}
+                    {program.level && (
+                      <span>Niveau : {levelLabels[program.level] || program.level}</span>
+                    )}
+                  </div>
+                  {program.description && (
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {program.description}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Pending validation banner */}
+              {!isSessionValidated && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Inscription en attente de validation — l'accès au contenu sera débloqué après confirmation par l'administrateur.
+                  </p>
+                </div>
+              )}
+
+              {/* Virtual class link */}
+              {session.virtualClassUrl && !isPast && isSessionValidated && (
+                <Button asChild variant="outline" size="sm" className="gap-2">
+                  <a href={session.virtualClassUrl} target="_blank" rel="noopener noreferrer">
+                    <Video className="w-4 h-4" />
+                    Rejoindre la classe virtuelle
+                  </a>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
 
 function LearnerSignatureTab({
   traineeId,
@@ -2536,7 +3128,6 @@ function LearnerDocumentsTab({
 // LEARNER EVALUATIONS TAB
 // ============================================================
 
-import { Star } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { SurveyTemplate, EvaluationAssignment } from "@shared/schema";
 import { EVALUATION_TYPES } from "@shared/schema";
@@ -2781,7 +3372,7 @@ function LearnerCalendarTab({
   sessions: Session[];
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -2798,21 +3389,46 @@ function LearnerCalendarTab({
   const enrolledSessionIds = new Set(enrollments.map((e) => e.sessionId));
   const enrolledSessions = sessions.filter((s) => enrolledSessionIds.has(s.id));
 
-  // Get sessions for a specific date
-  const getSessionsForDate = (date: Date) => {
-    return enrolledSessions.filter((s) => {
+  // Fetch intervention dates for all enrolled sessions
+  const { data: allSessionDates } = useQuery<any[]>({
+    queryKey: ["/api/session-dates"],
+  });
+
+  // Filter intervention dates to only enrolled sessions
+  const interventionDates = useMemo(() => {
+    if (!allSessionDates) return [];
+    return allSessionDates.filter((sd: any) => enrolledSessionIds.has(sd.sessionId));
+  }, [allSessionDates, enrolledSessionIds]);
+
+  // Check if a date has intervention or session
+  const getEventsForDate = (date: Date) => {
+    const dateStr = date.toISOString().split("T")[0];
+
+    // Check intervention dates first (specific days)
+    const interventions = interventionDates.filter((sd: any) => sd.date === dateStr);
+
+    // Check general session ranges
+    const sessionMatches = enrolledSessions.filter((s) => {
       const start = new Date(s.startDate);
       const end = new Date(s.endDate);
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
       return date >= start && date <= end;
     });
+
+    return { interventions, sessions: sessionMatches };
   };
 
-  // Check if a date has sessions
-  const hasSession = (day: number) => {
+  const hasEvent = (day: number) => {
     const date = new Date(year, month, day);
-    return getSessionsForDate(date).length > 0;
+    const events = getEventsForDate(date);
+    return events.interventions.length > 0 || events.sessions.length > 0;
+  };
+
+  const hasIntervention = (day: number) => {
+    const date = new Date(year, month, day);
+    const dateStr = date.toISOString().split("T")[0];
+    return interventionDates.some((sd: any) => sd.date === dateStr);
   };
 
   const isToday = (day: number) => {
@@ -2820,12 +3436,12 @@ function LearnerCalendarTab({
     return day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
   };
 
-  const selectedSessions = selectedDay ? getSessionsForDate(selectedDay) : [];
+  const selectedEvents = selectedDay ? getEventsForDate(selectedDay) : { interventions: [], sessions: [] };
 
   const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
   const monthNames = [
-    "Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre",
+    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
   ];
 
   // Build calendar grid cells
@@ -2834,7 +3450,8 @@ function LearnerCalendarTab({
     cells.push(<div key={`empty-${i}`} />);
   }
   for (let day = 1; day <= daysInMonth; day++) {
-    const hasSess = hasSession(day);
+    const hasSess = hasEvent(day);
+    const hasInterv = hasIntervention(day);
     const today = isToday(day);
     const isSelected = selectedDay?.getDate() === day && selectedDay?.getMonth() === month && selectedDay?.getFullYear() === year;
 
@@ -2843,27 +3460,38 @@ function LearnerCalendarTab({
         key={day}
         type="button"
         onClick={() => setSelectedDay(new Date(year, month, day))}
-        className={`h-10 rounded-lg text-sm font-medium transition-colors relative
-          ${today ? "ring-2 ring-primary" : ""}
-          ${isSelected ? "bg-primary text-primary-foreground" : hasSess ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200" : "hover:bg-accent"}
-        `}
+        className={cn(
+          "h-10 rounded-lg text-sm font-medium transition-colors relative",
+          today && "ring-2 ring-primary",
+          isSelected
+            ? "bg-primary text-primary-foreground"
+            : hasInterv
+            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200"
+            : hasSess
+            ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200"
+            : "hover:bg-accent"
+        )}
       >
         {day}
         {hasSess && !isSelected && (
-          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-blue-500" />
+          <span className={cn(
+            "absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full",
+            hasInterv ? "bg-emerald-500" : "bg-blue-500"
+          )} />
         )}
       </button>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Calendar */}
+      <Card className="lg:col-span-2">
         <CardContent className="p-4">
           {/* Month navigation */}
           <div className="flex items-center justify-between mb-4">
             <Button variant="ghost" size="sm" onClick={prevMonth}>
-              <ChevronRight className="w-4 h-4 rotate-180" />
+              <ChevronLeft className="w-4 h-4" />
             </Button>
             <h3 className="text-sm font-medium">
               {monthNames[month]} {year}
@@ -2886,65 +3514,114 @@ function LearnerCalendarTab({
           <div className="grid grid-cols-7 gap-1">
             {cells}
           </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              Jour d'intervention
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+              Période de session
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full ring-2 ring-primary" />
+              Aujourd'hui
+            </span>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Selected day events */}
-      {selectedDay && (
+      {/* Right sidebar: selected day + upcoming */}
+      <div className="space-y-4">
+        {/* Selected day events */}
         <Card>
           <CardContent className="p-4">
-            <h4 className="text-sm font-medium mb-3">
-              {selectedDay.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            <h4 className="text-sm font-medium mb-3 capitalize">
+              {selectedDay
+                ? selectedDay.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+                : "Sélectionnez un jour"}
             </h4>
-            {selectedSessions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucune session ce jour.</p>
+            {selectedDay && selectedEvents.interventions.length === 0 && selectedEvents.sessions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucun événement ce jour.</p>
             ) : (
               <div className="space-y-2">
-                {selectedSessions.map((s) => (
-                  <div key={s.id} className="flex items-center gap-3 p-2 rounded-lg border bg-blue-50/50 dark:bg-blue-900/10">
-                    <CalendarCheck className="w-4 h-4 text-blue-500 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{s.title}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{formatDate(s.startDate)} — {formatDate(s.endDate)}</span>
-                        {s.location && <span>| {s.location}</span>}
+                {/* Intervention dates with times */}
+                {selectedEvents.interventions.map((sd: any) => {
+                  const sess = enrolledSessions.find((s) => s.id === sd.sessionId);
+                  return (
+                    <div key={sd.id} className="p-3 rounded-lg border bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800">
+                      <div className="flex items-center gap-2">
+                        <CalendarCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <p className="text-sm font-medium truncate">{sess?.title || "Session"}</p>
                       </div>
+                      {(sd.startTime || sd.endTime) && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 ml-6">
+                          <Clock className="w-3 h-3 inline mr-1" />
+                          {sd.startTime || "—"} → {sd.endTime || "—"}
+                        </p>
+                      )}
+                      {sd.notes && (
+                        <p className="text-xs text-muted-foreground mt-1 ml-6">{sd.notes}</p>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
+
+                {/* General session matches (only if no specific intervention) */}
+                {selectedEvents.sessions
+                  .filter((s) => !selectedEvents.interventions.some((sd: any) => sd.sessionId === s.id))
+                  .map((s) => (
+                    <div key={s.id} className="p-3 rounded-lg border bg-blue-50/50 dark:bg-blue-900/10">
+                      <div className="flex items-center gap-2">
+                        <CalendarCheck className="w-4 h-4 text-blue-500 shrink-0" />
+                        <p className="text-sm font-medium truncate">{s.title}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 ml-6">
+                        {formatDate(s.startDate)} — {formatDate(s.endDate)}
+                      </p>
+                      {s.location && (
+                        <p className="text-xs text-muted-foreground ml-6">
+                          <MapPin className="w-3 h-3 inline mr-1" />
+                          {s.location}
+                        </p>
+                      )}
+                    </div>
+                  ))}
               </div>
             )}
           </CardContent>
         </Card>
-      )}
 
-      {/* Upcoming sessions summary */}
-      <Card>
-        <CardContent className="p-4">
-          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            Prochaines echeances
-          </h4>
-          {enrolledSessions
-            .filter((s) => new Date(s.endDate) >= new Date())
-            .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-            .slice(0, 5)
-            .map((s) => (
-              <div key={s.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{s.title}</p>
-                  {s.location && <p className="text-xs text-muted-foreground">{s.location}</p>}
+        {/* Upcoming sessions summary */}
+        <Card>
+          <CardContent className="p-4">
+            <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Prochaines échéances
+            </h4>
+            {enrolledSessions
+              .filter((s) => new Date(s.endDate) >= new Date())
+              .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+              .slice(0, 5)
+              .map((s) => (
+                <div key={s.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{s.title}</p>
+                    {s.location && <p className="text-xs text-muted-foreground">{s.location}</p>}
+                  </div>
+                  <Badge variant="outline" className="text-xs shrink-0 ml-2">
+                    {formatDate(s.startDate)}
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="text-xs shrink-0 ml-2">
-                  {formatDate(s.startDate)}
-                </Badge>
-              </div>
-            ))}
-          {enrolledSessions.filter((s) => new Date(s.endDate) >= new Date()).length === 0 && (
-            <p className="text-sm text-muted-foreground">Aucune session a venir.</p>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            {enrolledSessions.filter((s) => new Date(s.endDate) >= new Date()).length === 0 && (
+              <p className="text-sm text-muted-foreground">Aucune session à venir.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -3046,7 +3723,15 @@ function LearnerForumTab({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/learner/forum-posts"] });
       setViewingPost(null);
-      toast({ title: "Sujet supprime" });
+      toast({ title: "Sujet supprimé" });
+    },
+  });
+
+  const togglePinMutation = useMutation({
+    mutationFn: (post: ForumPost) => apiRequest("PATCH", `/api/learner/forum-posts/${post.id}`, { pinned: !post.pinned }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/learner/forum-posts"] });
+      toast({ title: "Post mis à jour" });
     },
   });
 
@@ -3056,7 +3741,7 @@ function LearnerForumTab({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/learner/forum-replies"] });
       setReplyContent("");
-      toast({ title: "Reponse ajoutee" });
+      toast({ title: "Réponse ajoutée" });
     },
     onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
@@ -3115,11 +3800,23 @@ function LearnerForumTab({
                   <span className="text-xs text-muted-foreground">{formatPostDate(viewingPost.createdAt)}</span>
                 </div>
               </div>
-              {user?.id === viewingPost.authorId && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deletePostMutation.mutate(viewingPost.id)}>
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              )}
+              <div className="flex items-center gap-1">
+                {(user?.role === "admin" || user?.role === "trainer") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => togglePinMutation.mutate(viewingPost)}
+                  >
+                    {viewingPost.pinned ? "Désépingler" : "Épingler"}
+                  </Button>
+                )}
+                {(user?.id === viewingPost.authorId || user?.role === "admin") && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deletePostMutation.mutate(viewingPost.id)}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="text-sm whitespace-pre-wrap border-t pt-3">{viewingPost.content}</div>
           </CardContent>
@@ -3127,7 +3824,7 @@ function LearnerForumTab({
 
         {/* Replies */}
         <div className="space-y-2">
-          <h4 className="text-sm font-medium">{replies.length} reponse(s)</h4>
+          <h4 className="text-sm font-medium">{replies.length} réponse(s)</h4>
           {repliesLoading ? (
             <Skeleton className="h-16 w-full" />
           ) : (
@@ -3223,7 +3920,7 @@ function LearnerForumTab({
           <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
           <h3 className="text-lg font-medium mb-1">Espace collaboratif</h3>
           <p className="text-sm text-muted-foreground">
-            Selectionnez une session pour acceder au forum de discussion.
+            Sélectionnez une session pour accéder au forum de discussion.
           </p>
         </div>
       ) : postsLoading ? (
@@ -3233,7 +3930,7 @@ function LearnerForumTab({
       ) : posts.length === 0 ? (
         <div className="text-center py-12">
           <MessageSquare className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
-          <p className="text-sm text-muted-foreground">Aucun sujet pour cette session. Soyez le premier a en creer un !</p>
+          <p className="text-sm text-muted-foreground">Aucun sujet pour cette session. Soyez le premier à en créer un !</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -3252,7 +3949,7 @@ function LearnerForumTab({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      {post.pinned && <Badge variant="secondary" className="text-xs">Epingle</Badge>}
+                      {post.pinned && <Badge variant="secondary" className="text-xs">Épinglé</Badge>}
                       <h4 className="text-sm font-medium truncate">{post.title}</h4>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -3325,13 +4022,93 @@ function LearnerVisioTab({
   const mySessions = sessions.filter(s => mySessionIds.includes(s.id));
   const visioSessions = mySessions.filter(s => (s as any).virtualClassUrl);
 
+  const now = new Date();
+
+  // Sort: active first, then upcoming, then past
+  const sortedVisio = [...visioSessions].sort((a, b) => {
+    const aStart = new Date(a.startDate);
+    const aEnd = new Date(a.endDate);
+    const bStart = new Date(b.startDate);
+    const bEnd = new Date(b.endDate);
+    const aActive = now >= aStart && now <= aEnd;
+    const bActive = now >= bStart && now <= bEnd;
+    const aFuture = now < aStart;
+    const bFuture = now < bStart;
+    if (aActive && !bActive) return -1;
+    if (!aActive && bActive) return 1;
+    if (aFuture && !bFuture) return -1;
+    if (!aFuture && bFuture) return 1;
+    return aStart.getTime() - bStart.getTime();
+  });
+
+  // Find next upcoming visio
+  const nextVisio = sortedVisio.find((s) => {
+    const start = new Date(s.startDate);
+    const end = new Date(s.endDate);
+    return now >= start && now <= end; // active first
+  }) || sortedVisio.find((s) => new Date(s.startDate) > now);
+
   return (
     <div className="space-y-4">
+      {/* Highlighted next class */}
+      {nextVisio && (() => {
+        const start = new Date(nextVisio.startDate);
+        const end = new Date(nextVisio.endDate);
+        const isActive = now >= start && now <= end;
+        const daysUntil = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        return (
+          <Card className={isActive ? "border-green-400 bg-green-50/50 dark:bg-green-900/10" : "border-primary/20 bg-primary/5"}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "p-4 rounded-full",
+                  isActive ? "bg-green-100 dark:bg-green-900/30" : "bg-primary/10"
+                )}>
+                  <VideoIcon className={cn(
+                    "w-8 h-8",
+                    isActive ? "text-green-600" : "text-primary"
+                  )} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {isActive ? "En cours maintenant" : "Prochaine classe virtuelle"}
+                  </p>
+                  <p className="text-lg font-bold truncate">{nextVisio.title}</p>
+                  <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {start.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}
+                      {" — "}
+                      {end.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                    </span>
+                    {!isActive && daysUntil > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        dans {daysUntil} jour{daysUntil > 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  size="lg"
+                  className={isActive ? "bg-green-600 hover:bg-green-700" : ""}
+                  onClick={() => window.open((nextVisio as any).virtualClassUrl, "_blank")}
+                >
+                  <VideoIcon className="w-5 h-5 mr-2" />
+                  {isActive ? "Rejoindre maintenant" : "Accéder au lien"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* All visio sessions list */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <VideoIcon className="w-5 h-5" />
-            Classes virtuelles
+            Toutes les classes virtuelles
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -3343,34 +4120,51 @@ function LearnerVisioTab({
             </div>
           ) : (
             <div className="space-y-3">
-              {visioSessions.map(session => {
-                const now = new Date();
+              {sortedVisio.map(session => {
                 const start = new Date(session.startDate);
                 const end = new Date(session.endDate);
                 const isActive = now >= start && now <= end;
                 const isPast = now > end;
                 const isFuture = now < start;
+                const isNext = session.id === nextVisio?.id;
 
                 return (
-                  <div key={session.id} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">{session.title}</h4>
+                  <div
+                    key={session.id}
+                    className={cn(
+                      "border rounded-lg p-4 transition-colors",
+                      isActive && "border-green-300 bg-green-50/30 dark:bg-green-900/5",
+                      isPast && "opacity-60"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium truncate">{session.title}</h4>
+                          {isActive && (
+                            <span className="relative flex h-2.5 w-2.5 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                           <span>
-                            {new Date(session.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                            {start.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
                             {" — "}
-                            {new Date(session.endDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                            {end.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
                           </span>
                         </div>
                         <div className="mt-2">
-                          {isActive && <Badge className="bg-green-100 text-green-700">En cours</Badge>}
+                          {isActive && <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">En cours</Badge>}
                           {isFuture && <Badge variant="outline">À venir</Badge>}
                           {isPast && <Badge variant="secondary">Terminée</Badge>}
                         </div>
                       </div>
                       <Button
                         disabled={isPast}
+                        variant={isActive ? "default" : "outline"}
+                        className={isActive ? "bg-green-600 hover:bg-green-700" : ""}
                         onClick={() => window.open((session as any).virtualClassUrl, "_blank")}
                       >
                         <VideoIcon className="w-4 h-4 mr-2" />
@@ -3399,22 +4193,14 @@ function LearnerAboutTab({
   enrollments: Enrollment[];
   sessions: Session[];
 }) {
-  const { data: orgSettings } = useQuery<any[]>({
-    queryKey: ["/api/learner/session-info"],
-    queryFn: async () => {
-      const mySessionIds = enrollments.map(e => e.sessionId);
-      if (mySessionIds.length === 0) return [];
-      const results = await Promise.all(
-        mySessionIds.slice(0, 3).map(sid =>
-          apiRequest("GET", `/api/learner/session-info?sessionId=${sid}`)
-            .then(r => r.json())
-            .catch(() => null)
-        )
-      );
-      return results.filter(Boolean);
-    },
-    enabled: enrollments.length > 0,
+  const { data: settings } = useQuery<Record<string, string>>({
+    queryKey: ["/api/settings"],
   });
+
+  const orgName = settings?.org_name || "SO'SAFE Formation";
+  const orgEmail = settings?.org_email || settings?.smtp_from_email || "contact@sosafe-formation.fr";
+  const orgPhone = settings?.org_phone || "01 23 45 67 89";
+  const orgAddress = settings?.org_address || "";
 
   const mySessionIds = enrollments.map(e => e.sessionId);
   const mySessions = sessions.filter(s => mySessionIds.includes(s.id));
@@ -3427,7 +4213,7 @@ function LearnerAboutTab({
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Info className="w-5 h-5" />
-            Bienvenue sur SO'SAFE Formation
+            Bienvenue sur {orgName}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -3545,16 +4331,1211 @@ function LearnerAboutTab({
             <div className="border rounded-lg p-4 space-y-2">
               <p className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">contact@sosafe-formation.fr</span>
+                <a href={`mailto:${orgEmail}`} className="font-medium text-primary hover:underline">{orgEmail}</a>
               </p>
               <p className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">01 23 45 67 89</span>
+                <a href={`tel:${orgPhone}`} className="font-medium text-primary hover:underline">{orgPhone}</a>
               </p>
+              {orgAddress && (
+                <p className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">{orgAddress}</span>
+                </p>
+              )}
             </div>
+            <Button variant="outline" size="sm" asChild className="gap-2">
+              <a href="/messaging">
+                <MessageSquare className="w-4 h-4" />
+                Envoyer un message à l'équipe
+              </a>
+            </Button>
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ============================================================
+// LEARNER BADGES & CERTIFICATIONS TAB
+// ============================================================
+
+function LearnerBadgesTab({ traineeId, progressData, modules }: { traineeId: string; progressData: LearnerProgress[]; modules: ElearningModule[] }) {
+  // Fetch certifications
+  const { data: certifications } = useQuery<TraineeCertification[]>({
+    queryKey: [`/api/trainees/${traineeId}/certifications`],
+  });
+
+  // Fetch badge awards for this trainee
+  const { data: badgeAwards } = useQuery<BadgeAward[]>({
+    queryKey: ["/api/badge-awards"],
+  });
+
+  // Fetch all digital badges for metadata
+  const { data: badges } = useQuery<DigitalBadge[]>({
+    queryKey: ["/api/digital-badges"],
+  });
+
+  // Fetch blocks for all modules to identify quiz blocks
+  const { data: allBlocks } = useQuery<ElearningBlock[]>({
+    queryKey: ["/api/elearning-blocks", modules.map((m) => m.id).join(",")],
+    queryFn: async () => {
+      const results: ElearningBlock[] = [];
+      for (const mod of modules) {
+        const res = await fetch(`/api/elearning-blocks?moduleId=${mod.id}`, { credentials: "include" });
+        if (res.ok) {
+          const blocks = await res.json();
+          results.push(...blocks);
+        }
+      }
+      return results;
+    },
+    enabled: modules.length > 0,
+  });
+
+  // Build quiz score history from progress + quiz blocks
+  const quizHistory = useMemo(() => {
+    if (!allBlocks || !progressData) return [];
+    const quizBlocks = allBlocks.filter((b) => b.type === "quiz");
+    const quizBlockIds = new Set(quizBlocks.map((b) => b.id));
+    return progressData
+      .filter((p) => p.blockId && quizBlockIds.has(p.blockId) && p.completed && p.score !== null && p.score !== undefined)
+      .map((p) => {
+        const block = quizBlocks.find((b) => b.id === p.blockId);
+        const mod = modules.find((m) => m.id === p.moduleId);
+        return {
+          ...p,
+          blockTitle: block?.title || "Quiz",
+          moduleTitle: mod?.title || "Module",
+          passingScore: block?.quizConfig?.passingScore || 50,
+        };
+      })
+      .sort((a, b) => {
+        const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }, [allBlocks, progressData, modules]);
+
+  const myBadgeAwards = useMemo(
+    () => (badgeAwards || []).filter((ba) => ba.traineeId === traineeId && ba.status === "active"),
+    [badgeAwards, traineeId]
+  );
+
+  const activeCerts = (certifications || []).filter((c) => c.status === "valid" || c.status === "active");
+  const expiredCerts = (certifications || []).filter((c) => c.status !== "valid" && c.status !== "active");
+
+  const levelColors: Record<string, string> = {
+    bronze: "from-amber-600 to-amber-800",
+    silver: "from-gray-400 to-gray-600",
+    gold: "from-yellow-400 to-yellow-600",
+    platinum: "from-indigo-400 to-purple-600",
+  };
+
+  const levelLabels: Record<string, string> = {
+    bronze: "Bronze",
+    silver: "Argent",
+    gold: "Or",
+    platinum: "Platine",
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Badges section */}
+      <div>
+        <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <Medal className="w-5 h-5 text-amber-500" />
+          Mes Badges
+          {myBadgeAwards.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{myBadgeAwards.length}</Badge>
+          )}
+        </h3>
+        {myBadgeAwards.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              <Medal className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">Aucun badge obtenu</p>
+              <p className="text-sm mt-1">Complétez vos formations pour obtenir des badges de réussite.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {myBadgeAwards.map((award) => {
+              const badge = badges?.find((b) => b.id === award.badgeId);
+              if (!badge) return null;
+              const level = badge.level || "bronze";
+
+              return (
+                <Card key={award.id} className="overflow-hidden">
+                  <div className={cn("h-2 bg-gradient-to-r", levelColors[level] || levelColors.bronze)} />
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "w-12 h-12 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br text-white",
+                        levelColors[level] || levelColors.bronze
+                      )}>
+                        {badge.imageUrl ? (
+                          <img src={badge.imageUrl} alt={badge.title} className="w-8 h-8 rounded-full object-cover" />
+                        ) : (
+                          <Medal className="w-6 h-6" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{badge.title}</p>
+                        {badge.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{badge.description}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <Badge variant="outline" className="text-xs">
+                            {levelLabels[level] || level}
+                          </Badge>
+                          {award.awardedAt && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(new Date(award.awardedAt).toISOString())}
+                            </span>
+                          )}
+                        </div>
+                        {award.sessionTitle && (
+                          <p className="text-xs text-muted-foreground mt-1 truncate">
+                            Session : {award.sessionTitle}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {badge.linkedinShareable && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full mt-3 text-xs gap-1.5"
+                        onClick={() => {
+                          if (award.linkedinShareUrl) {
+                            window.open(award.linkedinShareUrl, "_blank");
+                          }
+                        }}
+                        disabled={!award.linkedinShareUrl}
+                      >
+                        <Share2 className="w-3 h-3" />
+                        Partager sur LinkedIn
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Quiz score history */}
+      <div>
+        <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <BarChart3 className="w-5 h-5 text-blue-500" />
+          Historique des Quiz
+          {quizHistory.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{quizHistory.length}</Badge>
+          )}
+        </h3>
+        {quizHistory.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">Aucun quiz complété</p>
+              <p className="text-sm mt-1">Vos résultats de quiz apparaîtront ici après avoir complété des évaluations.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {quizHistory.map((q, i) => {
+              const passed = (q.score || 0) >= q.passingScore;
+              return (
+                <Card key={`${q.id}-${i}`}>
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className={cn(
+                      "p-2.5 rounded-full shrink-0",
+                      passed ? "bg-green-100 dark:bg-green-900/20" : "bg-red-100 dark:bg-red-900/20"
+                    )}>
+                      {passed ? (
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <AlertCircle className="w-5 h-5 text-red-500" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{q.blockTitle}</p>
+                      <p className="text-xs text-muted-foreground">{q.moduleTitle}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={cn(
+                        "text-lg font-bold",
+                        passed ? "text-green-600" : "text-red-500"
+                      )}>
+                        {q.score}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Seuil : {q.passingScore}%
+                      </p>
+                    </div>
+                    {q.completedAt && (
+                      <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                        {formatDate(new Date(q.completedAt).toISOString())}
+                      </span>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Certifications section */}
+      <div>
+        <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <Shield className="w-5 h-5 text-green-500" />
+          Mes Certifications
+          {activeCerts.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{activeCerts.length}</Badge>
+          )}
+        </h3>
+        {activeCerts.length === 0 && expiredCerts.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">Aucune certification</p>
+              <p className="text-sm mt-1">Vos certifications obtenues apparaîtront ici.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {activeCerts.map((cert) => (
+              <Card key={cert.id} className="border-green-200 dark:border-green-800">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="p-2.5 rounded-full bg-green-100 dark:bg-green-900/20 shrink-0">
+                    <Shield className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{cert.label}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                      {cert.type && <Badge variant="outline" className="text-xs">{cert.type}</Badge>}
+                      <span>Obtenue le {formatDate(cert.obtainedAt)}</span>
+                      {cert.expiresAt && (
+                        <span className={cn(
+                          new Date(cert.expiresAt) < new Date() ? "text-red-500" : "text-muted-foreground"
+                        )}>
+                          Expire le {formatDate(cert.expiresAt)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 shrink-0">
+                    Valide
+                  </Badge>
+                  {cert.documentUrl && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={cert.documentUrl} download>
+                        <Download className="w-3.5 h-3.5" />
+                      </a>
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+            {expiredCerts.length > 0 && (
+              <>
+                <p className="text-sm font-medium text-muted-foreground mt-4">Certifications expirées</p>
+                {expiredCerts.map((cert) => (
+                  <Card key={cert.id} className="opacity-60">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 shrink-0">
+                        <Shield className="w-5 h-5 text-gray-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium">{cert.label}</p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <span>Obtenue le {formatDate(cert.obtainedAt)}</span>
+                          {cert.expiresAt && (
+                            <span className="text-red-500">Expirée le {formatDate(cert.expiresAt)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="shrink-0">Expirée</Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// IMMERSIVE MODULE VIEWER
+// ============================================================
+
+function ImmersiveModuleViewer({
+  initialModuleId,
+  initialBlockIndex,
+  modules,
+  progressData,
+  traineeId,
+  onExit,
+}: {
+  initialModuleId: string;
+  initialBlockIndex: number;
+  modules: ElearningModule[];
+  progressData: LearnerProgress[];
+  traineeId: string;
+  onExit: () => void;
+}) {
+  const { toast } = useToast();
+  const [currentModuleId, setCurrentModuleId] = useState(initialModuleId);
+  const [currentBlockIndex, setCurrentBlockIndex] = useState(initialBlockIndex);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationType, setCelebrationType] = useState<"block" | "quiz" | "module">("block");
+  const [showModuleComplete, setShowModuleComplete] = useState(false);
+
+  const sortedModules = useMemo(
+    () => modules.slice().sort((a, b) => a.orderIndex - b.orderIndex),
+    [modules]
+  );
+  const currentModule = sortedModules.find((m) => m.id === currentModuleId);
+
+  // Fetch blocks for the current module
+  const { data: blocks } = useQuery<ElearningBlock[]>({
+    queryKey: ["/api/elearning-blocks", `?moduleId=${currentModuleId}`],
+    enabled: !!currentModuleId,
+  });
+
+  // Fetch quiz questions for quiz blocks
+  const { data: quizQuestions } = useQuery<QuizQuestion[]>({
+    queryKey: ["/api/quiz-questions"],
+  });
+
+  // Fetch SCORM packages
+  const { data: scormPackages } = useQuery<ScormPackage[]>({
+    queryKey: ["/api/scorm-packages"],
+  });
+
+  const sortedBlocks = useMemo(
+    () => blocks?.slice().sort((a, b) => a.orderIndex - b.orderIndex) || [],
+    [blocks]
+  );
+
+  const currentBlock = sortedBlocks[currentBlockIndex];
+  const hasNext = currentBlockIndex < sortedBlocks.length - 1;
+  const hasPrevious = currentBlockIndex > 0;
+
+  // Overall progress for the current module
+  const moduleProgress = useMemo(() => {
+    const relevant = progressData.filter((p) => p.moduleId === currentModuleId);
+    const completed = relevant.filter((p) => p.completed).length;
+    const total = sortedBlocks.length;
+    return { completed, total, percent: total > 0 ? Math.round((completed / total) * 100) : 0 };
+  }, [progressData, currentModuleId, sortedBlocks]);
+
+  // Sequential locking
+  const isBlockLocked = useCallback(
+    (blockIndex: number) => {
+      if (blockIndex === 0) return false;
+      for (let i = 0; i < blockIndex; i++) {
+        const prevBlock = sortedBlocks[i];
+        const prevProgress = progressData.find((p) => p.blockId === prevBlock.id && p.moduleId === currentModuleId);
+        if (!prevProgress?.completed) return true;
+      }
+      return false;
+    },
+    [sortedBlocks, progressData, currentModuleId]
+  );
+
+  const blockProgress = currentBlock
+    ? progressData.find((p) => p.blockId === currentBlock.id && p.moduleId === currentModuleId)
+    : undefined;
+  const isCurrentCompleted = blockProgress?.completed ?? false;
+  const isCurrentLocked = currentBlock ? isBlockLocked(currentBlockIndex) : false;
+
+  // Reading timer for passive blocks
+  const [readingTimeLeft, setReadingTimeLeft] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!currentBlock || isCurrentCompleted) {
+      setReadingTimeLeft(0);
+      return;
+    }
+    const passiveTypes = ["text", "document", "image", "resource_web", "virtual_class", "survey"];
+    if (!passiveTypes.includes(currentBlock.type)) {
+      setReadingTimeLeft(0);
+      return;
+    }
+    const contentLength = (currentBlock.content || "").length + (currentBlock.title || "").length;
+    const wordCount = Math.max(contentLength / 5, 50);
+    const readingSeconds = Math.min(60, Math.max(10, Math.round((wordCount / 200) * 60)));
+    setReadingTimeLeft(readingSeconds);
+
+    const interval = setInterval(() => {
+      setReadingTimeLeft((prev) => {
+        if (prev <= 1) { clearInterval(interval); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    timerRef.current = interval;
+    return () => { clearInterval(interval); };
+  }, [currentBlock?.id, isCurrentCompleted]);
+
+  const canGoNext = isCurrentCompleted;
+
+  // Mark block complete mutation
+  const markCompleteMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      apiRequest("POST", "/api/learner-progress", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/learner-progress"] });
+      // Check if this was the last block → module complete
+      const completedCount = progressData.filter((p) => p.moduleId === currentModuleId && p.completed).length + 1;
+      const isLastBlock = completedCount >= sortedBlocks.length;
+      if (isLastBlock) {
+        setCelebrationType("module");
+        fireConfettiEpic();
+        setShowCelebration(true);
+        setTimeout(() => { setShowCelebration(false); setShowModuleComplete(true); }, 2000);
+      } else {
+        setCelebrationType("block");
+        fireConfettiSmall();
+        setShowCelebration(true);
+        setTimeout(() => {
+          setShowCelebration(false);
+          if (hasNext) setCurrentBlockIndex((i) => i + 1);
+        }, 1200);
+      }
+    },
+    onError: () =>
+      toast({ title: "Erreur lors de la mise à jour", variant: "destructive" }),
+  });
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onExit();
+      if (e.key === "ArrowRight" && hasNext && canGoNext && !showCelebration && !showModuleComplete) goToNextBlock();
+      if (e.key === "ArrowLeft" && hasPrevious && !showCelebration && !showModuleComplete) goToPreviousBlock();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onExit, hasNext, hasPrevious, canGoNext, showCelebration, showModuleComplete]);
+
+  // Lock body scroll
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  const goToNextBlock = () => {
+    if (hasNext && canGoNext) setCurrentBlockIndex((i) => i + 1);
+  };
+  const goToPreviousBlock = () => {
+    if (hasPrevious) setCurrentBlockIndex((i) => i - 1);
+  };
+
+  const handleMarkComplete = () => {
+    if (!currentBlock) return;
+    markCompleteMutation.mutate({
+      traineeId,
+      moduleId: currentModuleId,
+      blockId: currentBlock.id,
+      completed: true,
+      score: null,
+    });
+  };
+
+  // When QuizPlayer or other self-completing components finish, detect via progress data change
+  const prevProgressRef = useRef(progressData);
+  useEffect(() => {
+    if (!currentBlock) return;
+    const wasCompleted = prevProgressRef.current.find(
+      (p) => p.blockId === currentBlock.id && p.moduleId === currentModuleId
+    )?.completed;
+    const nowCompleted = progressData.find(
+      (p) => p.blockId === currentBlock.id && p.moduleId === currentModuleId
+    )?.completed;
+    if (!wasCompleted && nowCompleted) {
+      const completedCount = progressData.filter((p) => p.moduleId === currentModuleId && p.completed).length;
+      const isLastBlock = completedCount >= sortedBlocks.length;
+      if (isLastBlock) {
+        setCelebrationType("module");
+        fireConfettiEpic();
+        setShowCelebration(true);
+        setTimeout(() => { setShowCelebration(false); setShowModuleComplete(true); }, 2000);
+      } else {
+        const isQuiz = currentBlock.type === "quiz" || currentBlock.type === "video_quiz";
+        if (isQuiz) {
+          setCelebrationType("quiz");
+          fireConfettiMedium();
+        } else {
+          setCelebrationType("block");
+          fireConfettiSmall();
+        }
+        setShowCelebration(true);
+        setTimeout(() => {
+          setShowCelebration(false);
+          if (hasNext) setCurrentBlockIndex((i) => i + 1);
+        }, 1500);
+      }
+    }
+    prevProgressRef.current = progressData;
+  }, [progressData, currentBlock, currentModuleId, hasNext, sortedBlocks]);
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-in fade-in duration-200">
+      {/* TOP BAR */}
+      <div className="h-14 border-b flex items-center px-4 gap-4 shrink-0 bg-background">
+        <Button variant="ghost" size="sm" onClick={onExit} className="gap-2 shrink-0">
+          <ChevronLeft className="w-4 h-4" />
+          <span className="hidden sm:inline">Retour</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 md:hidden"
+          onClick={() => setSidebarOpen((o) => !o)}
+        >
+          {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+        </Button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium truncate">{currentModule?.title}</p>
+            {(() => {
+              const pt = (currentModule as any)?.pathType;
+              if (pt === "learning") return <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 dark:bg-green-900/20 text-[10px] px-1.5 py-0 shrink-0">Apprentissage</Badge>;
+              if (pt === "assessment") return <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-900/20 text-[10px] px-1.5 py-0 shrink-0">Évaluation</Badge>;
+              return null;
+            })()}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Bloc {currentBlockIndex + 1} / {sortedBlocks.length}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <Progress value={moduleProgress.percent} className="w-24 sm:w-32 h-2" />
+          <span className="text-xs font-medium tabular-nums">{moduleProgress.percent}%</span>
+        </div>
+        <Button variant="ghost" size="icon" onClick={onExit} className="shrink-0">
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+
+      {/* BODY */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* SIDEBAR */}
+        <div
+          className={cn(
+            "border-r bg-muted/30 shrink-0 flex flex-col transition-all duration-300 overflow-hidden",
+            sidebarOpen ? "w-72" : "w-0"
+          )}
+        >
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                Contenu du module
+              </p>
+              {sortedBlocks.map((block, idx) => {
+                const bp = progressData.find((p) => p.blockId === block.id && p.moduleId === currentModuleId);
+                const isActive = idx === currentBlockIndex;
+                const isComplete = bp?.completed;
+                const locked = isBlockLocked(idx);
+
+                return (
+                  <button
+                    key={block.id}
+                    onClick={() => !locked && setCurrentBlockIndex(idx)}
+                    disabled={locked}
+                    className={cn(
+                      "w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-3 transition-colors",
+                      isActive && "bg-primary/10 text-primary font-medium",
+                      !isActive && !locked && "hover:bg-accent/50",
+                      locked && "opacity-40 cursor-not-allowed"
+                    )}
+                  >
+                    {isComplete ? (
+                      <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                    ) : locked ? (
+                      <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+                    ) : (
+                      <BlockTypeIcon type={block.type} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className="truncate block">{block.title}</span>
+                      {block.duration && (
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Clock className="w-2.5 h-2.5" />
+                          ~{block.duration} min
+                        </span>
+                      )}
+                    </div>
+                    {isActive && <ChevronRight className="w-3 h-3 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+
+          {/* Module switcher — grouped by pathType */}
+          {sortedModules.length > 1 && (
+            <div className="border-t p-3 space-y-1">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-2">Modules</p>
+              {(() => {
+                const learningMods = sortedModules.filter((m) => (m as any).pathType === "learning");
+                const assessmentMods = sortedModules.filter((m) => (m as any).pathType === "assessment");
+                const combinedMods = sortedModules.filter((m) => !(m as any).pathType || (m as any).pathType === "combined");
+                const hasMultiple = [learningMods.length > 0, assessmentMods.length > 0, combinedMods.length > 0].filter(Boolean).length > 1;
+
+                const renderGroup = (mods: typeof sortedModules, label: string, color: string) => (
+                  <div key={label}>
+                    {hasMultiple && <p className={`text-[10px] font-semibold mt-1 mb-0.5 ${color}`}>{label}</p>}
+                    {mods.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => { setCurrentModuleId(m.id); setCurrentBlockIndex(0); }}
+                        className={cn(
+                          "w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 transition-colors",
+                          m.id === currentModuleId ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent/50 text-muted-foreground"
+                        )}
+                      >
+                        <span className="truncate">{m.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+
+                return (
+                  <>
+                    {learningMods.length > 0 && renderGroup(learningMods, "Apprentissage", "text-green-600")}
+                    {assessmentMods.length > 0 && renderGroup(assessmentMods, "Évaluation", "text-orange-600")}
+                    {combinedMods.length > 0 && renderGroup(combinedMods, "Combiné", "text-blue-600")}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* MAIN CONTENT */}
+        <div className="flex-1 overflow-auto">
+          {!currentBlock ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-muted-foreground">
+                <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p>Sélectionnez un bloc pour commencer</p>
+              </div>
+            </div>
+          ) : isCurrentLocked ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-muted-foreground">
+                <Lock className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p className="font-medium">Bloc verrouillé</p>
+                <p className="text-sm mt-1">Terminez le bloc précédent pour débloquer celui-ci.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto px-6 sm:px-8 py-8">
+              {/* Block header */}
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <BlockTypeIcon type={currentBlock.type} />
+                  <BlockTypeLabel type={currentBlock.type} />
+                  {currentBlock.duration && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      ~{currentBlock.duration} min
+                    </span>
+                  )}
+                  {isCurrentCompleted && (
+                    <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 dark:bg-green-900/20">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Terminé
+                    </Badge>
+                  )}
+                </div>
+                <h2 className="text-2xl font-bold">{currentBlock.title}</h2>
+              </div>
+
+              {/* Block content */}
+              <div className="space-y-6">
+                {/* TEXT */}
+                {currentBlock.type === "text" && (
+                  <div className="space-y-4">
+                    {currentBlock.content && (
+                      currentBlock.content.includes("<") ? (
+                        <div
+                          className="prose prose-sm dark:prose-invert max-w-none text-base leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: currentBlock.content }}
+                        />
+                      ) : (
+                        <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-base leading-relaxed">
+                          {currentBlock.content}
+                        </div>
+                      )
+                    )}
+                    {!isCurrentCompleted && (
+                      readingTimeLeft > 0 ? (
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <Clock className="w-4 h-4 animate-pulse" />
+                          <span className="text-sm">Temps de lecture restant : <strong>{readingTimeLeft}s</strong></span>
+                          <Progress value={Math.max(0, 100 - (readingTimeLeft / 60) * 100)} className="flex-1 h-2 max-w-[200px]" />
+                        </div>
+                      ) : (
+                        <Button onClick={handleMarkComplete} disabled={markCompleteMutation.isPending}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Marquer comme lu
+                        </Button>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* VIDEO */}
+                {currentBlock.type === "video" && (
+                  <VideoBlockPlayer
+                    block={currentBlock}
+                    isCompleted={isCurrentCompleted}
+                    onMarkComplete={handleMarkComplete}
+                    isPending={markCompleteMutation.isPending}
+                  />
+                )}
+
+                {/* QUIZ */}
+                {currentBlock.type === "quiz" && (
+                  <QuizPlayer
+                    blockId={currentBlock.id}
+                    traineeId={traineeId}
+                    moduleId={currentModuleId}
+                    existingProgress={blockProgress || undefined}
+                    quizConfig={(currentBlock.quizConfig as any) || undefined}
+                  />
+                )}
+
+                {/* VIDEO + QUIZ */}
+                {currentBlock.type === "video_quiz" && (
+                  <VideoQuizPlayer
+                    block={currentBlock}
+                    blockId={currentBlock.id}
+                    traineeId={traineeId}
+                    moduleId={currentModuleId}
+                    existingProgress={blockProgress || undefined}
+                  />
+                )}
+
+                {/* SCORM */}
+                {currentBlock.type === "scorm" && currentBlock.scormPackageId && (
+                  <ScormPlayer
+                    block={currentBlock}
+                    traineeId={traineeId}
+                    moduleId={currentModuleId}
+                    existingProgress={blockProgress || undefined}
+                  />
+                )}
+
+                {/* ASSIGNMENT */}
+                {currentBlock.type === "assignment" && (
+                  <AssignmentSubmitter
+                    block={currentBlock}
+                    traineeId={traineeId}
+                    moduleId={currentModuleId}
+                    existingProgress={blockProgress || undefined}
+                  />
+                )}
+
+                {/* FLASHCARD */}
+                {currentBlock.type === "flashcard" && (
+                  <FlashcardPlayer
+                    block={currentBlock}
+                    traineeId={traineeId}
+                    moduleId={currentModuleId}
+                    isCompleted={isCurrentCompleted}
+                    onMarkComplete={handleMarkComplete}
+                    isPending={markCompleteMutation.isPending}
+                  />
+                )}
+
+                {/* RESOURCE WEB / IFRAME */}
+                {currentBlock.type === "resource_web" && (
+                  <div className="space-y-4">
+                    {currentBlock.embedCode ? (
+                      <div
+                        className="rounded-xl overflow-hidden border"
+                        dangerouslySetInnerHTML={{ __html: currentBlock.embedCode }}
+                      />
+                    ) : currentBlock.embedUrl ? (
+                      <div className="aspect-video rounded-xl overflow-hidden border">
+                        <iframe
+                          src={currentBlock.embedUrl}
+                          className="w-full h-full"
+                          allowFullScreen
+                          title={currentBlock.title}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">Aucune ressource disponible.</p>
+                    )}
+                    {!isCurrentCompleted && (
+                      readingTimeLeft > 0 ? (
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <Clock className="w-4 h-4 animate-pulse" />
+                          <span className="text-sm">Temps restant : <strong>{readingTimeLeft}s</strong></span>
+                          <Progress value={Math.max(0, 100 - (readingTimeLeft / 60) * 100)} className="flex-1 h-2 max-w-[200px]" />
+                        </div>
+                      ) : (
+                        <Button onClick={handleMarkComplete} disabled={markCompleteMutation.isPending}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Marquer comme terminé
+                        </Button>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* VIRTUAL CLASS */}
+                {currentBlock.type === "virtual_class" && (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-full bg-emerald-100 dark:bg-emerald-900/20">
+                            <MonitorPlay className="w-6 h-6 text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium">Classe virtuelle</p>
+                            {currentBlock.virtualClassDate && (
+                              <p className="text-sm text-muted-foreground">
+                                <Clock className="w-3 h-3 inline mr-1" />
+                                {formatDate(currentBlock.virtualClassDate)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {currentBlock.virtualClassUrl && (
+                          <Button asChild className="mt-4 w-full">
+                            <a href={currentBlock.virtualClassUrl} target="_blank" rel="noopener noreferrer">
+                              <Video className="w-4 h-4 mr-2" />
+                              Rejoindre la classe
+                            </a>
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* DOCUMENT */}
+                {currentBlock.type === "document" && (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardContent className="p-6 flex items-center gap-4">
+                        <div className="p-3 rounded-full bg-sky-100 dark:bg-sky-900/20">
+                          <Download className="w-6 h-6 text-sky-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{currentBlock.fileName || "Document"}</p>
+                          {currentBlock.fileSize && (
+                            <p className="text-xs text-muted-foreground">
+                              {(currentBlock.fileSize / 1024).toFixed(0)} Ko
+                            </p>
+                          )}
+                        </div>
+                        {currentBlock.fileUrl && (
+                          <Button asChild variant="outline">
+                            <a href={currentBlock.fileUrl} download>
+                              <Download className="w-4 h-4 mr-2" />
+                              Télécharger
+                            </a>
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                    {currentBlock.content && (
+                      <p className="text-muted-foreground whitespace-pre-wrap">{currentBlock.content}</p>
+                    )}
+                    {!isCurrentCompleted && (
+                      readingTimeLeft > 0 ? (
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <Clock className="w-4 h-4 animate-pulse" />
+                          <span className="text-sm">Temps restant : <strong>{readingTimeLeft}s</strong></span>
+                          <Progress value={Math.max(0, 100 - (readingTimeLeft / 60) * 100)} className="flex-1 h-2 max-w-[200px]" />
+                        </div>
+                      ) : (
+                        <Button onClick={handleMarkComplete} disabled={markCompleteMutation.isPending}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Marquer comme consulté
+                        </Button>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* IMAGE / GALLERY */}
+                {currentBlock.type === "image" && (
+                  <div className="space-y-4">
+                    {currentBlock.imageUrls && currentBlock.imageUrls.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {currentBlock.imageUrls.map((url, idx) => (
+                          <img
+                            key={idx}
+                            src={url}
+                            alt={`${currentBlock.title} - ${idx + 1}`}
+                            className="w-full rounded-xl border object-cover"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">Aucune image disponible.</p>
+                    )}
+                    {!isCurrentCompleted && (
+                      readingTimeLeft > 0 ? (
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <Clock className="w-4 h-4 animate-pulse" />
+                          <span className="text-sm">Temps restant : <strong>{readingTimeLeft}s</strong></span>
+                          <Progress value={Math.max(0, 100 - (readingTimeLeft / 60) * 100)} className="flex-1 h-2 max-w-[200px]" />
+                        </div>
+                      ) : (
+                        <Button onClick={handleMarkComplete} disabled={markCompleteMutation.isPending}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Marquer comme vu
+                        </Button>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* SURVEY */}
+                {currentBlock.type === "survey" && (
+                  <div className="space-y-4">
+                    {currentBlock.content && (
+                      <p className="text-muted-foreground mb-4">{currentBlock.content}</p>
+                    )}
+                    <QuizPlayer
+                      blockId={currentBlock.id}
+                      traineeId={traineeId}
+                      moduleId={currentModuleId}
+                      existingProgress={blockProgress || undefined}
+                      quizConfig={(currentBlock.quizConfig as any) || undefined}
+                      isSurvey
+                    />
+                  </div>
+                )}
+
+                {/* SCENARIO */}
+                {currentBlock.type === "scenario" && (
+                  <ScenarioPlayer
+                    block={currentBlock}
+                    traineeId={traineeId}
+                    moduleId={currentModuleId}
+                    existingProgress={blockProgress || undefined}
+                  />
+                )}
+
+                {/* SIMULATION */}
+                {currentBlock.type === "simulation" && (
+                  <SimulationPlayer
+                    block={currentBlock}
+                    traineeId={traineeId}
+                    moduleId={currentModuleId}
+                    existingProgress={blockProgress || undefined}
+                  />
+                )}
+              </div>
+
+              {/* NAVIGATION FOOTER */}
+              <div className="flex items-center justify-between mt-8 pt-6 border-t">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={goToPreviousBlock}
+                    disabled={!hasPrevious}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Précédent
+                  </Button>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">
+                    <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px]">←</kbd>
+                    <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] ml-1">→</kbd>
+                  </span>
+                </div>
+                {hasNext ? (
+                  <div className="flex flex-col items-end gap-1">
+                    <Button onClick={goToNextBlock} disabled={!canGoNext} className="gap-2">
+                      Suivant
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    {!canGoNext && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        Complétez ce bloc pour continuer
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <Button variant="outline" onClick={onExit} className="gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    Terminer
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* CELEBRATION OVERLAY — proportional to achievement */}
+        <AnimatePresence>
+          {showCelebration && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center bg-background/80 z-10 pointer-events-none"
+            >
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                className="text-center space-y-3"
+              >
+                {celebrationType === "module" ? (
+                  <>
+                    <motion.div
+                      animate={{ rotate: [0, -10, 10, -10, 0] }}
+                      transition={{ duration: 0.5, delay: 0.3 }}
+                      className="mx-auto w-24 h-24 rounded-full bg-gradient-to-br from-amber-200 to-yellow-400 dark:from-amber-800 dark:to-yellow-600 flex items-center justify-center shadow-lg"
+                    >
+                      <Star className="w-12 h-12 text-amber-700 dark:text-amber-200" />
+                    </motion.div>
+                    <p className="text-2xl font-bold">Module terminé !</p>
+                    <p className="text-sm text-muted-foreground">Félicitations, continuez comme ça !</p>
+                  </>
+                ) : celebrationType === "quiz" ? (
+                  <>
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 0.4, delay: 0.2 }}
+                      className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-green-200 to-emerald-400 dark:from-green-800 dark:to-emerald-600 flex items-center justify-center"
+                    >
+                      <Zap className="w-10 h-10 text-green-700 dark:text-green-200" />
+                    </motion.div>
+                    <p className="text-xl font-bold">Quiz réussi !</p>
+                    <p className="text-sm text-muted-foreground">Excellent travail</p>
+                  </>
+                ) : (
+                  <>
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 0.3 }}
+                      className="mx-auto w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center"
+                    >
+                      <CheckCircle className="w-8 h-8 text-green-500" />
+                    </motion.div>
+                    <p className="text-lg font-bold">Bravo !</p>
+                  </>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* MODULE COMPLETE SCREEN */}
+        <AnimatePresence>
+          {showModuleComplete && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center bg-background z-20"
+            >
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0, y: 30 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                className="text-center space-y-6 max-w-md mx-auto px-6"
+              >
+                <motion.div
+                  animate={{ rotate: [0, -5, 5, -5, 0], scale: [1, 1.05, 1] }}
+                  transition={{ duration: 1, repeat: Infinity, repeatDelay: 3 }}
+                  className="mx-auto w-28 h-28 rounded-full bg-gradient-to-br from-amber-200 via-yellow-300 to-orange-300 dark:from-amber-700 dark:via-yellow-600 dark:to-orange-600 flex items-center justify-center shadow-xl"
+                >
+                  <Trophy className="w-14 h-14 text-amber-700 dark:text-amber-200" />
+                </motion.div>
+
+                <div>
+                  <h2 className="text-3xl font-bold mb-2">Module terminé !</h2>
+                  <p className="text-muted-foreground">
+                    Vous avez complété <span className="font-semibold text-foreground">{currentModule?.title}</span>
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <p className="text-2xl font-bold text-green-600">{moduleProgress.completed}</p>
+                      <p className="text-xs text-muted-foreground">blocs complétés</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <p className="text-2xl font-bold text-primary">100%</p>
+                      <p className="text-xs text-muted-foreground">progression</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Quiz scores summary */}
+                {(() => {
+                  const quizScores = progressData.filter(
+                    (p) => p.moduleId === currentModuleId && p.score !== null && p.score !== undefined
+                  );
+                  if (quizScores.length === 0) return null;
+                  const avg = Math.round(quizScores.reduce((s, p) => s + (p.score || 0), 0) / quizScores.length);
+                  return (
+                    <Card>
+                      <CardContent className="p-4 text-center">
+                        <Target className="w-5 h-5 mx-auto text-primary mb-1" />
+                        <p className="text-2xl font-bold">{avg}%</p>
+                        <p className="text-xs text-muted-foreground">score moyen aux quiz</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                <div className="flex flex-col gap-2 pt-2">
+                  {sortedModules.length > 1 && (() => {
+                    const currentIdx = sortedModules.findIndex((m) => m.id === currentModuleId);
+                    const nextModule = sortedModules[currentIdx + 1];
+                    if (!nextModule) return null;
+                    return (
+                      <Button
+                        onClick={() => {
+                          setCurrentModuleId(nextModule.id);
+                          setCurrentBlockIndex(0);
+                          setShowModuleComplete(false);
+                        }}
+                        className="gap-2"
+                      >
+                        Module suivant : {nextModule.title}
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    );
+                  })()}
+                  <Button variant="outline" onClick={onExit} className="gap-2">
+                    Retour au tableau de bord
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -3566,32 +5547,14 @@ function LearnerAboutTab({
 export default function LearnerPortal() {
   const { user } = useAuth();
 
-  // Fetch trainees to find the current user's trainee record
-  const { data: trainees } = useQuery<Trainee[]>({
-    queryKey: ["/api/trainees"],
-  });
+  // Use traineeId directly from the authenticated user
+  const traineeId = user?.traineeId;
 
-  // Match the logged-in user to their trainee record by email or name
-  const trainee = useMemo(() => {
-    if (!trainees || !user) return null;
-    // First try to match by email
-    if (user.email) {
-      const byEmail = trainees.find((t) => t.email === user.email);
-      if (byEmail) return byEmail;
-    }
-    // Fallback: match by first + last name
-    return trainees.find(
-      (t) => t.firstName === user.firstName && t.lastName === user.lastName
-    ) || null;
-  }, [trainees, user]);
-
-  const traineeId = trainee?.id;
-
-  // Fetch enrollments
+  // Fetch only validated enrollments for the current learner (server-side filtered)
   const { data: enrollments, isLoading: enrollmentsLoading } = useQuery<
     Enrollment[]
   >({
-    queryKey: ["/api/enrollments"],
+    queryKey: ["/api/learner/my-enrollments"],
   });
 
   // Fetch sessions
@@ -3615,13 +5578,20 @@ export default function LearnerPortal() {
     enabled: !!traineeId,
   });
 
-  // Filter enrollments for the current trainee
-  const myEnrollments = useMemo(() => {
-    if (!enrollments || !traineeId) return [];
-    return enrollments.filter(
-      (e) => e.traineeId === traineeId && e.status !== "cancelled"
-    );
-  }, [enrollments, traineeId]);
+  // Enrollments are already filtered server-side by traineeId and validated status
+  const myEnrollments = enrollments || [];
+
+  // Fetch pending signatures for badge count
+  const { data: pendingSignatures } = useQuery<any[]>({
+    queryKey: [`/api/pending-signatures?signerId=${traineeId}&signerType=trainee`],
+    enabled: !!traineeId,
+  });
+
+  // Fetch evaluation assignments for badge count
+  const { data: evalAssignments } = useQuery<any[]>({
+    queryKey: [`/api/evaluation-assignments?traineeId=${traineeId}`],
+    enabled: !!traineeId,
+  });
 
   // Stats
   const completedSessions = myEnrollments.filter(
@@ -3631,7 +5601,96 @@ export default function LearnerPortal() {
     (e) => e.status !== "completed" && e.status !== "cancelled"
   ).length;
 
-  const isLoading = enrollmentsLoading || !trainees;
+  // Global progress across all modules
+  const globalProgress = useMemo(() => {
+    if (!modules || !progressData || !sessions || myEnrollments.length === 0) return 0;
+    const enrolledSessionIds = new Set(myEnrollments.map((e) => e.sessionId));
+    const enrolledSessions = sessions.filter((s) => enrolledSessionIds.has(s.id));
+    const relevantModules = (modules || []).filter((m) =>
+      (m as any).status === "published" &&
+      enrolledSessions.some(
+        (s) => m.sessionId === s.id || (m.programId === s.programId && !m.sessionId)
+      )
+    );
+    if (relevantModules.length === 0) return 0;
+    const moduleIds = new Set(relevantModules.map((m) => m.id));
+    const relevant = progressData.filter((p) => moduleIds.has(p.moduleId));
+    if (relevant.length === 0) return 0;
+    const completed = relevant.filter((p) => p.completed).length;
+    return Math.round((completed / relevant.length) * 100);
+  }, [modules, progressData, sessions, myEnrollments]);
+
+  // Pending actions counts
+  const pendingSignatureCount = pendingSignatures?.filter((ps: any) => !ps.signedAt)?.length || 0;
+  const pendingEvalCount = evalAssignments?.filter((ea: any) => !ea.completedAt)?.length || 0;
+
+  // Next upcoming session
+  const nextSession = useMemo(() => {
+    if (!sessions || myEnrollments.length === 0) return null;
+    const now = new Date();
+    const enrolledSessionIds = new Set(myEnrollments.map((e) => e.sessionId));
+    return sessions
+      .filter((s) => enrolledSessionIds.has(s.id) && new Date(s.startDate) > now)
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0] || null;
+  }, [sessions, myEnrollments]);
+
+  // All upcoming/ongoing sessions for quick access
+  const upcomingSessions = useMemo(() => {
+    if (!sessions || myEnrollments.length === 0) return [];
+    const now = new Date();
+    const enrolledSessionIds = new Set(myEnrollments.map((e) => e.sessionId));
+    return sessions
+      .filter((s) => enrolledSessionIds.has(s.id) && new Date(s.endDate) >= now)
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  }, [sessions, myEnrollments]);
+
+  const [activeTab, setActiveTab] = useState("formations");
+
+  const isLoading = enrollmentsLoading;
+
+  // Learner stats (XP, streak)
+  const { data: learnerStats } = useQuery<{
+    quizAvg: number | null;
+    blocksCompleted: number;
+    totalMinutes: number;
+    streak: number;
+  }>({
+    queryKey: ["/api/learner/my-stats"],
+  });
+
+  // XP calculation: 10 XP per block completed + bonus for quiz scores
+  const totalXP = useMemo(() => {
+    if (!progressData) return 0;
+    let xp = 0;
+    for (const p of progressData) {
+      if (p.completed) {
+        xp += 10; // base XP per block
+        if (p.score !== null && p.score !== undefined) {
+          xp += Math.round(p.score / 10); // bonus for quiz score
+        }
+      }
+    }
+    return xp;
+  }, [progressData]);
+
+  // Immersive mode state
+  const [immersiveState, setImmersiveState] = useState<{
+    enrollmentId: string;
+    sessionId: string;
+    moduleId: string;
+    blockIndex: number;
+  } | null>(null);
+
+  const enterImmersiveMode = useCallback(
+    (enrollmentId: string, sessionId: string, moduleId: string, blockIndex?: number) => {
+      setImmersiveState({ enrollmentId, sessionId, moduleId, blockIndex: blockIndex ?? 0 });
+    },
+    []
+  );
+
+  const exitImmersiveMode = useCallback(() => {
+    setImmersiveState(null);
+  }, []);
 
   if (!user) {
     return (
@@ -3651,15 +5710,51 @@ export default function LearnerPortal() {
   }
 
   return (
+    <>
     <PageLayout>
-      {/* Header */}
-      <PageHeader
-        title="Portail Apprenant"
-        subtitle="Votre espace de formation personnalisé"
-      />
+      {/* Personalized welcome */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <img src="/logo-sosafe.png" alt="SO'SAFE" className="h-10 object-contain dark:hidden" />
+          <img src="/logo-sosafe-white.png" alt="SO'SAFE" className="h-10 object-contain hidden dark:block" />
+          <div>
+            <h1 className="text-2xl font-bold">
+              Bonjour {user.firstName} {user.lastName} !
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {activeSessions > 0
+                ? `Vous avez ${activeSessions} formation${activeSessions > 1 ? "s" : ""} en cours`
+                : completedSessions > 0
+                ? "Toutes vos formations sont terminées"
+                : "Bienvenue sur votre espace de formation"}
+            </p>
+          </div>
+        </div>
+        {globalProgress > 0 && (
+          <div className="hidden sm:flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Progression globale</p>
+              <p className="text-lg font-bold">{globalProgress}%</p>
+            </div>
+            <div className="relative w-14 h-14">
+              <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
+                <circle cx="28" cy="28" r="24" stroke="currentColor" strokeWidth="4" fill="none" className="text-muted/30" />
+                <circle
+                  cx="28" cy="28" r="24"
+                  stroke="currentColor" strokeWidth="4" fill="none"
+                  className="text-primary"
+                  strokeDasharray={`${2 * Math.PI * 24}`}
+                  strokeDashoffset={`${2 * Math.PI * 24 * (1 - globalProgress / 100)}`}
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20">
@@ -3667,9 +5762,7 @@ export default function LearnerPortal() {
             </div>
             <div>
               <p className="text-2xl font-bold">{myEnrollments.length}</p>
-              <p className="text-xs text-muted-foreground">
-                Inscriptions totales
-              </p>
+              <p className="text-xs text-muted-foreground">Formations</p>
             </div>
           </CardContent>
         </Card>
@@ -3680,9 +5773,7 @@ export default function LearnerPortal() {
             </div>
             <div>
               <p className="text-2xl font-bold">{activeSessions}</p>
-              <p className="text-xs text-muted-foreground">
-                Sessions en cours
-              </p>
+              <p className="text-xs text-muted-foreground">En cours</p>
             </div>
           </CardContent>
         </Card>
@@ -3693,52 +5784,227 @@ export default function LearnerPortal() {
             </div>
             <div>
               <p className="text-2xl font-bold">{completedSessions}</p>
+              <p className="text-xs text-muted-foreground">Terminées</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+              <Trophy className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{globalProgress}%</p>
+              <p className="text-xs text-muted-foreground">Progression</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* XP */}
+        <Card className="border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50/50 to-orange-50/50 dark:from-amber-900/10 dark:to-orange-900/10">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+              <Zap className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">{totalXP}</p>
+              <p className="text-xs text-muted-foreground">XP gagnés</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Streak */}
+        <Card className={learnerStats?.streak && learnerStats.streak > 0 ? "border-orange-200 dark:border-orange-800 bg-gradient-to-br from-orange-50/50 to-red-50/50 dark:from-orange-900/10 dark:to-red-900/10" : ""}>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${learnerStats?.streak && learnerStats.streak > 0 ? "bg-orange-100 dark:bg-orange-900/30" : "bg-gray-50 dark:bg-gray-900/20"}`}>
+              <Flame className={`w-5 h-5 ${learnerStats?.streak && learnerStats.streak > 0 ? "text-orange-600 dark:text-orange-400" : "text-gray-400"}`} />
+            </div>
+            <div>
+              <p className={`text-2xl font-bold ${learnerStats?.streak && learnerStats.streak > 0 ? "text-orange-700 dark:text-orange-400" : ""}`}>
+                {learnerStats?.streak || 0}
+              </p>
               <p className="text-xs text-muted-foreground">
-                Sessions terminées
+                jour{(learnerStats?.streak || 0) > 1 ? "s" : ""} d'affilée
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Trainee not linked warning */}
-      {!isLoading && !traineeId && (
-        <Card className="border-amber-300 dark:border-amber-700">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">
-                Profil apprenant non associé
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Votre compte utilisateur n'est pas encore lié à un
-                profil stagiaire. Contactez votre administrateur pour qu'il
-                associe votre compte.
-              </p>
+      {/* Mes Sessions — prominent section */}
+      {upcomingSessions.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Mes sessions
+            </h2>
+            {upcomingSessions.length > 3 && (
+              <Button variant="ghost" size="sm" onClick={() => setActiveTab("sessions")} className="text-xs gap-1">
+                Tout voir
+                <ChevronRight className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {upcomingSessions.slice(0, 3).map((session) => {
+              const enrollment = myEnrollments.find((e) => e.sessionId === session.id);
+              const program = programs?.find((p) => p.id === session.programId);
+              const start = new Date(session.startDate);
+              const end = new Date(session.endDate);
+              const now = new Date();
+              const isOngoing = start <= now && end >= now;
+              const daysUntil = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+              return (
+                <Card
+                  key={session.id}
+                  className={cn(
+                    "cursor-pointer transition-all hover:shadow-md hover:border-primary/30",
+                    isOngoing && "border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10"
+                  )}
+                  onClick={() => setActiveTab("sessions")}
+                >
+                  <CardContent className="p-4 space-y-3">
+                    {/* Status bar */}
+                    <div className="flex items-center gap-2">
+                      {isOngoing ? (
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 gap-1">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                          </span>
+                          En cours
+                        </Badge>
+                      ) : daysUntil <= 7 ? (
+                        <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-xs">
+                          Dans {daysUntil} jour{daysUntil > 1 ? "s" : ""}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs">
+                          {formatDate(session.startDate)}
+                        </Badge>
+                      )}
+                      {enrollment && (
+                        <EnrollmentStatusBadge status={enrollment.status} />
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    <div>
+                      {program && (
+                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                          {program.title}
+                        </p>
+                      )}
+                      <p className="font-semibold text-sm mt-0.5 line-clamp-2">{session.title}</p>
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatDate(session.startDate)}
+                      </span>
+                      {session.location && (
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {session.location}
+                        </span>
+                      )}
+                      {session.modality && (
+                        <span className="flex items-center gap-1">
+                          <Globe className="w-3 h-3" />
+                          {session.modality === "presentiel" ? "Présentiel" : session.modality === "distanciel" ? "Distanciel" : session.modality === "elearning" ? "E-learning" : session.modality}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Virtual class quick access */}
+                    {isOngoing && session.virtualClassUrl && (
+                      <Button
+                        size="sm"
+                        className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(session.virtualClassUrl!, "_blank");
+                        }}
+                      >
+                        <Video className="w-4 h-4" />
+                        Rejoindre la classe virtuelle
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Pending actions banner */}
+          {(pendingSignatureCount > 0 || pendingEvalCount > 0) && (
+            <div className="flex items-center gap-3 flex-wrap">
+              {pendingSignatureCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab("signature")}
+                  className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 gap-2"
+                >
+                  <PenTool className="w-4 h-4" />
+                  {pendingSignatureCount} signature{pendingSignatureCount > 1 ? "s" : ""} en attente
+                </Button>
+              )}
+              {pendingEvalCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab("evaluations")}
+                  className="text-purple-600 border-purple-300 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 gap-2"
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  {pendingEvalCount} évaluation{pendingEvalCount > 1 ? "s" : ""} en attente
+                </Button>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       )}
 
       {/* Tabs for Formations, Signature, Documents, Evaluations */}
-      {traineeId ? (
-        <Tabs defaultValue="formations" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="formations" className="gap-2">
               <BookOpen className="w-4 h-4" />
               Formations
             </TabsTrigger>
-            <TabsTrigger value="signature" className="gap-2">
+            <TabsTrigger value="sessions" className="gap-2 relative">
+              <Calendar className="w-4 h-4" />
+              Sessions
+              {upcomingSessions.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+                  {upcomingSessions.length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="signature" className="gap-2 relative">
               <PenTool className="w-4 h-4" />
               Signature
+              {pendingSignatureCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center font-bold">
+                  {pendingSignatureCount}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="documents" className="gap-2">
               <FileText className="w-4 h-4" />
               Documents
             </TabsTrigger>
-            <TabsTrigger value="evaluations" className="gap-2">
+            <TabsTrigger value="evaluations" className="gap-2 relative">
               <ClipboardList className="w-4 h-4" />
               Évaluations
+              {pendingEvalCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] flex items-center justify-center font-bold">
+                  {pendingEvalCount}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="calendar" className="gap-2">
               <CalendarCheck className="w-4 h-4" />
@@ -3751,6 +6017,10 @@ export default function LearnerPortal() {
             <TabsTrigger value="visio" className="gap-2">
               <VideoIcon className="w-4 h-4" />
               Visio
+            </TabsTrigger>
+            <TabsTrigger value="badges" className="gap-2">
+              <Medal className="w-4 h-4" />
+              Badges
             </TabsTrigger>
             <TabsTrigger value="about" className="gap-2">
               <Info className="w-4 h-4" />
@@ -3798,6 +6068,9 @@ export default function LearnerPortal() {
                       modules={sessionModules}
                       progressData={progressData || []}
                       traineeId={traineeId!}
+                      onEnterImmersive={(moduleId, blockIndex) =>
+                        enterImmersiveMode(enrollment.id, session.id, moduleId, blockIndex)
+                      }
                     />
                   );
                 })}
@@ -3805,9 +6078,13 @@ export default function LearnerPortal() {
             )}
           </TabsContent>
 
+          <TabsContent value="sessions">
+            <LearnerSessionsTab traineeId={traineeId!} />
+          </TabsContent>
+
           <TabsContent value="signature">
             <LearnerSignatureTab
-              traineeId={traineeId}
+              traineeId={traineeId || ""}
               enrollments={myEnrollments}
               sessions={sessions || []}
             />
@@ -3815,14 +6092,14 @@ export default function LearnerPortal() {
 
           <TabsContent value="documents">
             <LearnerDocumentsTab
-              traineeId={traineeId}
+              traineeId={traineeId || ""}
               enrollments={myEnrollments}
               sessions={sessions || []}
             />
           </TabsContent>
 
           <TabsContent value="evaluations">
-            <LearnerEvaluationsTab traineeId={traineeId} />
+            <LearnerEvaluationsTab traineeId={traineeId || ""} />
           </TabsContent>
 
           <TabsContent value="calendar">
@@ -3846,6 +6123,16 @@ export default function LearnerPortal() {
             />
           </TabsContent>
 
+          <TabsContent value="badges">
+            {traineeId && (
+              <LearnerBadgesTab
+                traineeId={traineeId}
+                progressData={progressData || []}
+                modules={modules || []}
+              />
+            )}
+          </TabsContent>
+
           <TabsContent value="about">
             <LearnerAboutTab
               enrollments={myEnrollments}
@@ -3853,11 +6140,32 @@ export default function LearnerPortal() {
             />
           </TabsContent>
         </Tabs>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : null}
     </PageLayout>
+
+    {/* Immersive module viewer portal */}
+    {immersiveState && (() => {
+      const enrollment = myEnrollments.find((e) => e.id === immersiveState.enrollmentId);
+      const session = sessions?.find((s) => s.id === immersiveState.sessionId);
+      if (!enrollment || !session) return null;
+      if (!["confirmed", "attended", "completed"].includes(enrollment.status)) return null;
+      const sessionModules = (modules || []).filter(
+        (m) =>
+          (m as any).status === "published" &&
+          (m.sessionId === session.id ||
+            (m.programId === session.programId && !m.sessionId))
+      );
+      return createPortal(
+        <ImmersiveModuleViewer
+          initialModuleId={immersiveState.moduleId}
+          initialBlockIndex={immersiveState.blockIndex}
+          modules={sessionModules}
+          progressData={progressData || []}
+          traineeId={traineeId!}
+          onExit={exitImmersiveMode}
+        />,
+        document.body
+      );
+    })()}
+    </>
   );
 }

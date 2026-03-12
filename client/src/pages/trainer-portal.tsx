@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, uploadFile } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
@@ -45,11 +45,18 @@ import {
   Award,
   AlertTriangle,
   TrendingUp,
+  ClipboardCheck,
+  BarChart3,
+  MonitorPlay,
+  Maximize2,
+  Play,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { Session, TrainerDocument, ExpenseNote, TrainerInvoice, Program, Trainee, TrainerCompetency, SessionDate, Enrollment, ElearningModule } from "@shared/schema";
+import { ImmersiveModuleViewer } from "@/pages/learner/components/ImmersiveModuleViewer";
+import { DocumentSignatureViewer } from "@/pages/learner/components/DocumentSignatureViewer";
 import { PageLayout } from "@/components/shared/PageLayout";
-import { PageHeader } from "@/components/shared/PageHeader";
-import type { Session, TrainerDocument, ExpenseNote, TrainerInvoice, Program, Trainee, TrainerCompetency } from "@shared/schema";
+import { Progress } from "@/components/ui/progress";
 import {
   TRAINER_DOCUMENT_TYPES,
   TRAINER_DOCUMENT_STATUSES,
@@ -313,6 +320,7 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
 
   const [signingDocId, setSigningDocId] = useState<string | null>(null);
   const [previewDocContent, setPreviewDocContent] = useState<{ title: string; content: string } | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<{ id: string; title: string; type: string; content: string } | null>(null);
 
   const signDocumentMutation = useMutation({
     mutationFn: (data: { documentId: string; signatureData: string }) =>
@@ -324,8 +332,9 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/pending-signatures?signerId=${trainerId}&signerType=trainer`] });
       queryClient.invalidateQueries({ queryKey: [`/api/signatures?signerId=${trainerId}`] });
-      toast({ title: "Document signe avec succes" });
+      toast({ title: "Document signé et retourné à l'administrateur" });
       setSigningDocId(null);
+      setViewingDoc(null);
     },
     onError: () => toast({ title: "Erreur lors de la signature", variant: "destructive" }),
   });
@@ -456,75 +465,26 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
             )}
             {!showBatchSign &&
               pendingDocs.map((doc) => {
-                const isSigning = signingDocId === doc.id;
                 return (
                   <div
                     key={doc.id}
-                    className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10"
+                    className="flex items-center justify-between p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10"
                   >
-                    <div className="flex items-center justify-between p-3">
-                      <div>
-                        <p className="text-sm font-medium">{doc.title}</p>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{doc.title}</p>
                         <p className="text-xs text-muted-foreground capitalize">{doc.type.replace(/_/g, " ")}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setPreviewDocContent({ title: doc.title, content: doc.content })}
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          Apercu
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={isSigning ? "secondary" : "default"}
-                          onClick={() => setSigningDocId(isSigning ? null : doc.id)}
-                        >
-                          <PenTool className="w-4 h-4 mr-2" />
-                          {isSigning ? "Annuler" : "Signer"}
-                        </Button>
-                      </div>
                     </div>
-                    {isSigning && (
-                      <div className="px-3 pb-3 border-t border-blue-200 dark:border-blue-800 pt-3 space-y-2">
-                        <p className="text-sm text-muted-foreground">Signez ci-dessous pour valider ce document.</p>
-                        <div className="border rounded-lg p-1 bg-white dark:bg-gray-950">
-                          <canvas
-                            ref={docCanvasRef}
-                            width={500}
-                            height={200}
-                            className="w-full cursor-crosshair touch-none"
-                            onMouseDown={docStartDraw}
-                            onMouseMove={docDraw}
-                            onMouseUp={docEndDraw}
-                            onMouseLeave={docEndDraw}
-                            onTouchStart={docStartDraw}
-                            onTouchMove={docDraw}
-                            onTouchEnd={docEndDraw}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={clearDocCanvas}>
-                            Effacer
-                          </Button>
-                          <Button
-                            size="sm"
-                            disabled={!docHasSignature || signDocumentMutation.isPending}
-                            onClick={() => {
-                              const canvas = docCanvasRef.current;
-                              if (!canvas || !docHasSignature) return;
-                              signDocumentMutation.mutate({
-                                documentId: doc.id,
-                                signatureData: canvas.toDataURL("image/png"),
-                              });
-                            }}
-                          >
-                            {signDocumentMutation.isPending ? "Envoi..." : "Valider la signature"}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => setViewingDoc(doc)}
+                      className="gap-2 shrink-0"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Consulter et signer
+                    </Button>
                   </div>
                 );
               })}
@@ -669,6 +629,19 @@ function TrainerSignaturePad({ trainerId }: { trainerId: string }) {
           </CardContent>
         </Card>
       )}
+      {/* Full-screen document viewer with signature */}
+      {viewingDoc &&
+        createPortal(
+          <DocumentSignatureViewer
+            title={viewingDoc.title}
+            type={viewingDoc.type}
+            content={viewingDoc.content}
+            onSign={(sig) => signDocumentMutation.mutate({ documentId: viewingDoc.id, signatureData: sig })}
+            onClose={() => setViewingDoc(null)}
+            isPending={signDocumentMutation.isPending}
+          />,
+          document.body
+        )}
     </div>
   );
 }
@@ -1260,6 +1233,47 @@ function CompetenciesTab({ trainerId }: { trainerId: string }) {
 
 function EnrichedSessionCard({ session }: { session: Session }) {
   const [traineesOpen, setTraineesOpen] = useState(false);
+  const [addTraineeOpen, setAddTraineeOpen] = useState(false);
+  const [newFirstName, setNewFirstName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const { toast } = useToast();
+
+  const addTraineeMutation = useMutation({
+    mutationFn: async () => {
+      // 1. Create trainee
+      const trainee = await apiRequest("POST", "/api/trainees", {
+        firstName: newFirstName,
+        lastName: newLastName,
+        email: newEmail,
+        phone: newPhone || null,
+        status: "active",
+      });
+      const traineeData = await trainee.json();
+      // 2. Enroll in session
+      await apiRequest("POST", "/api/enrollments", {
+        sessionId: session.id,
+        traineeId: traineeData.id,
+        status: "confirmed",
+      });
+      return traineeData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/sessions/${session.id}/trainees`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/sessions/${session.id}/enrollment-count`] });
+      setAddTraineeOpen(false);
+      setNewFirstName("");
+      setNewLastName("");
+      setNewEmail("");
+      setNewPhone("");
+      toast({ title: "Stagiaire ajouté et inscrit à la session" });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || "Erreur";
+      toast({ title: msg.includes("unique") || msg.includes("existe") ? "Un stagiaire avec cet email existe déjà" : msg, variant: "destructive" });
+    },
+  });
 
   const { data: program } = useQuery<Program>({
     queryKey: [`/api/programs/${session.programId}`],
@@ -1273,6 +1287,10 @@ function EnrichedSessionCard({ session }: { session: Session }) {
   const { data: sessionTrainees, isLoading: traineesLoading } = useQuery<Trainee[]>({
     queryKey: [`/api/sessions/${session.id}/trainees`],
     enabled: traineesOpen,
+  });
+
+  const { data: interventionDates } = useQuery<SessionDate[]>({
+    queryKey: [`/api/sessions/${session.id}/dates`],
   });
 
   return (
@@ -1296,6 +1314,21 @@ function EnrichedSessionCard({ session }: { session: Session }) {
             {formatDate(session.startDate)} &mdash; {formatDate(session.endDate)}
           </span>
         </div>
+        {interventionDates && interventionDates.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="w-4 h-4 shrink-0" />
+              <span>{interventionDates.length} jour(s) d'intervention</span>
+            </div>
+            <div className="flex flex-wrap gap-1 ml-6">
+              {interventionDates.map((d) => (
+                <Badge key={d.id} variant="outline" className="text-[10px] py-0 px-1.5">
+                  {new Date(d.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
         {session.location && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <MapPin className="w-4 h-4 shrink-0" />
@@ -1335,18 +1368,612 @@ function EnrichedSessionCard({ session }: { session: Session }) {
                     <Users className="w-3 h-3 text-muted-foreground" />
                     <span>{trainee.firstName} {trainee.lastName}</span>
                     {trainee.email && (
-                      <span className="text-xs text-muted-foreground ml-auto">{trainee.email}</span>
+                      <a href={`mailto:${trainee.email}`} className="text-xs text-primary hover:underline ml-auto">{trainee.email}</a>
                     )}
                   </div>
                 ))
               ) : (
                 <p className="text-xs text-muted-foreground text-center py-2">Aucun stagiaire inscrit</p>
               )}
+              <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => setAddTraineeOpen(true)}>
+                <Plus className="w-3 h-3 mr-1" /> Ajouter un stagiaire
+              </Button>
             </div>
           </CollapsibleContent>
         </Collapsible>
+
+        {/* Add trainee dialog */}
+        <Dialog open={addTraineeOpen} onOpenChange={setAddTraineeOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Ajouter un stagiaire</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Prénom <span className="text-red-500">*</span></Label>
+                <Input value={newFirstName} onChange={(e) => setNewFirstName(e.target.value)} placeholder="Prénom" />
+              </div>
+              <div className="space-y-1">
+                <Label>Nom <span className="text-red-500">*</span></Label>
+                <Input value={newLastName} onChange={(e) => setNewLastName(e.target.value)} placeholder="Nom" />
+              </div>
+              <div className="space-y-1">
+                <Label>Email <span className="text-red-500">*</span></Label>
+                <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="email@exemple.com" />
+              </div>
+              <div className="space-y-1">
+                <Label>Téléphone</Label>
+                <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="06 00 00 00 00" />
+              </div>
+              <Button
+                className="w-full"
+                disabled={!newFirstName || !newLastName || !newEmail || addTraineeMutation.isPending}
+                onClick={() => addTraineeMutation.mutate()}
+              >
+                {addTraineeMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                Ajouter et inscrire
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
+  );
+}
+
+// ============================================================
+// LEARNER PROGRESS TAB
+// ============================================================
+
+interface TraineeProgress {
+  traineeId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  enrollmentStatus: string;
+  completedBlocks: number;
+  totalBlocks: number;
+  progressPercent: number;
+}
+
+interface SessionProgress {
+  sessionId: string;
+  sessionTitle: string;
+  programTitle: string;
+  startDate: string;
+  endDate: string;
+  moduleCount: number;
+  trainees: TraineeProgress[];
+}
+
+function TrainerProgressTab() {
+  const { data: progressData, isLoading } = useQuery<SessionProgress[]>({
+    queryKey: ["/api/trainer/session-progress"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!progressData || progressData.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <TrendingUp className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+        <h3 className="text-lg font-medium mb-1">Aucune donnée</h3>
+        <p className="text-sm text-muted-foreground">
+          Aucun apprenant inscrit à vos sessions pour le moment.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {progressData.map((sp) => {
+        const avgProgress = sp.trainees.length > 0
+          ? Math.round(sp.trainees.reduce((sum, t) => sum + t.progressPercent, 0) / sp.trainees.length)
+          : 0;
+
+        return (
+          <Card key={sp.sessionId}>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  {sp.programTitle && (
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">
+                      {sp.programTitle}
+                    </p>
+                  )}
+                  <CardTitle className="text-lg">{sp.sessionTitle}</CardTitle>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {formatDate(sp.startDate)} — {formatDate(sp.endDate)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      {sp.trainees.length} apprenant{sp.trainees.length !== 1 ? "s" : ""}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <BookOpen className="w-3 h-3" />
+                      {sp.moduleCount} module{sp.moduleCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                </div>
+                <Badge variant="outline" className={avgProgress >= 80 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : avgProgress >= 40 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"}>
+                  Moy. {avgProgress}%
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sp.trainees.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Aucun apprenant inscrit.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Apprenant</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Statut</TableHead>
+                        <TableHead>Progression</TableHead>
+                        <TableHead className="text-right">Blocs</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sp.trainees.map((t) => (
+                        <TableRow key={t.traineeId}>
+                          <TableCell className="font-medium">{t.firstName} {t.lastName}</TableCell>
+                          <TableCell className="text-sm">{t.email ? <a href={`mailto:${t.email}`} className="text-primary hover:underline">{t.email}</a> : <span className="text-muted-foreground">—</span>}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {t.enrollmentStatus === "confirmed" ? "Confirmé" : t.enrollmentStatus === "completed" ? "Terminé" : t.enrollmentStatus === "attended" ? "Présent" : t.enrollmentStatus === "registered" ? "Inscrit" : t.enrollmentStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 min-w-[120px]">
+                              <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${t.progressPercent >= 80 ? "bg-green-500" : t.progressPercent >= 40 ? "bg-amber-500" : "bg-gray-400"}`}
+                                  style={{ width: `${t.progressPercent}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-medium w-8 text-right">{t.progressPercent}%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-muted-foreground">
+                            {t.completedBlocks}/{t.totalBlocks}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================
+// ATTENDANCE / ÉMARGEMENT TAB
+// ============================================================
+
+interface AttendanceSheetData {
+  id: string;
+  sessionId: string;
+  date: string;
+  period: string;
+  notes: string | null;
+}
+
+interface AttendanceRecordData {
+  id: string;
+  sheetId: string;
+  traineeId: string;
+  status: string;
+  signedAt: string | null;
+  signatureData: string | null;
+}
+
+function TrainerAttendanceTab({ sessions }: { sessions: Session[] }) {
+  const { toast } = useToast();
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("");
+
+  const { data: sheets, isLoading: sheetsLoading } = useQuery<AttendanceSheetData[]>({
+    queryKey: ["/api/trainer/attendance"],
+  });
+
+  const sessionSheets = useMemo(() => {
+    if (!sheets || !selectedSessionId) return [];
+    return sheets.filter((s) => s.sessionId === selectedSessionId)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [sheets, selectedSessionId]);
+
+  const [selectedSheetId, setSelectedSheetId] = useState<string>("");
+
+  const { data: records } = useQuery<AttendanceRecordData[]>({
+    queryKey: ["/api/trainer/attendance-records", { sheetId: selectedSheetId }],
+    queryFn: async () => {
+      if (!selectedSheetId) return [];
+      const resp = await fetch(`/api/trainer/attendance-records?sheetId=${selectedSheetId}`, { credentials: "include" });
+      return resp.json();
+    },
+    enabled: !!selectedSheetId,
+  });
+
+  // Fetch enrollments for selected session
+  const { data: enrollments } = useQuery<any[]>({
+    queryKey: [`/api/enrollments`, { sessionId: selectedSessionId }],
+    queryFn: async () => {
+      if (!selectedSessionId) return [];
+      const resp = await fetch(`/api/enrollments?sessionId=${selectedSessionId}`, { credentials: "include" });
+      return resp.json();
+    },
+    enabled: !!selectedSessionId,
+  });
+
+  // Fetch trainees
+  const { data: trainees } = useQuery<Trainee[]>({
+    queryKey: ["/api/trainees"],
+  });
+
+  const activeEnrollments = useMemo(() => {
+    if (!enrollments) return [];
+    return enrollments.filter((e: any) => e.status !== "cancelled");
+  }, [enrollments]);
+
+  const periodLabels: Record<string, string> = {
+    matin: "Matin",
+    "apres-midi": "Après-midi",
+    journee: "Journée entière",
+  };
+
+  const statusLabels: Record<string, string> = {
+    present: "Présent",
+    absent: "Absent",
+    late: "Retard",
+    excused: "Excusé",
+  };
+
+  const statusColors: Record<string, string> = {
+    present: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    absent: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    late: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    excused: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  };
+
+  // Create sheet mutation
+  const createSheetMutation = useMutation({
+    mutationFn: async (data: { sessionId: string; date: string; period: string }) => {
+      const resp = await apiRequest("POST", "/api/trainer/attendance", data);
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trainer/attendance"] });
+      toast({ title: "Feuille de présence créée" });
+    },
+  });
+
+  // Upsert record mutation
+  const upsertRecordMutation = useMutation({
+    mutationFn: async ({ recordId, traineeId, sheetId, status }: { recordId?: string; traineeId: string; sheetId: string; status: string }) => {
+      if (recordId) {
+        const resp = await apiRequest("PATCH", `/api/trainer/attendance-records/${recordId}`, { status, signedAt: new Date().toISOString() });
+        return resp.json();
+      } else {
+        const resp = await apiRequest("POST", "/api/trainer/attendance-records", { sheetId, traineeId, status, signedAt: new Date().toISOString() });
+        return resp.json();
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trainer/attendance-records"] });
+    },
+  });
+
+  const handleCreateSheet = () => {
+    if (!selectedSessionId) return;
+    const today = new Date().toISOString().split("T")[0];
+    createSheetMutation.mutate({ sessionId: selectedSessionId, date: today, period: "journee" });
+  };
+
+  const findRecord = (traineeId: string) => {
+    return records?.find((r) => r.traineeId === traineeId);
+  };
+
+  const getTrainee = (traineeId: string) => {
+    return trainees?.find((t) => t.id === traineeId);
+  };
+
+  if (sheetsLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Session selector */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <Label className="text-sm mb-1 block">Session</Label>
+              <Select value={selectedSessionId} onValueChange={(v) => { setSelectedSessionId(v); setSelectedSheetId(""); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionnez une session" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sessions.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.title} ({formatDate(s.startDate)})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedSessionId && (
+              <Button size="sm" className="mt-5" onClick={handleCreateSheet} disabled={createSheetMutation.isPending}>
+                <Plus className="w-4 h-4 mr-1" />
+                Nouvelle feuille
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sheet selector */}
+      {selectedSessionId && sessionSheets.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <Label className="text-sm mb-1 block">Feuille de présence</Label>
+            <Select value={selectedSheetId} onValueChange={setSelectedSheetId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionnez une feuille" />
+              </SelectTrigger>
+              <SelectContent>
+                {sessionSheets.map((sh) => (
+                  <SelectItem key={sh.id} value={sh.id}>
+                    {formatDate(sh.date)} — {periodLabels[sh.period] || sh.period}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedSessionId && sessionSheets.length === 0 && (
+        <div className="text-center py-8">
+          <PenTool className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+          <p className="text-sm text-muted-foreground">
+            Aucune feuille de présence pour cette session. Créez-en une pour commencer l'émargement.
+          </p>
+        </div>
+      )}
+
+      {/* Attendance grid */}
+      {selectedSheetId && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Émargement</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activeEnrollments.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Aucun apprenant inscrit à cette session.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Apprenant</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead>Signé</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeEnrollments.map((enrollment: any) => {
+                      const trainee = getTrainee(enrollment.traineeId);
+                      const record = findRecord(enrollment.traineeId);
+                      if (!trainee) return null;
+
+                      return (
+                        <TableRow key={enrollment.id}>
+                          <TableCell className="font-medium">
+                            {trainee.firstName} {trainee.lastName}
+                          </TableCell>
+                          <TableCell>
+                            {record ? (
+                              <Badge variant="outline" className={statusColors[record.status] || ""}>
+                                {statusLabels[record.status] || record.status}
+                              </Badge>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {record?.signedAt ? (
+                              <span className="text-xs text-green-600 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                {new Date(record.signedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Non signé</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {(["present", "absent", "late", "excused"] as const).map((status) => (
+                                <Button
+                                  key={status}
+                                  variant={record?.status === status ? "default" : "outline"}
+                                  size="sm"
+                                  className="h-7 text-xs px-2"
+                                  onClick={() => upsertRecordMutation.mutate({
+                                    recordId: record?.id,
+                                    traineeId: enrollment.traineeId,
+                                    sheetId: selectedSheetId,
+                                    status,
+                                  })}
+                                  disabled={upsertRecordMutation.isPending}
+                                >
+                                  {status === "present" ? "P" : status === "absent" ? "A" : status === "late" ? "R" : "E"}
+                                </Button>
+                              ))}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// EVALUATIONS TAB
+// ============================================================
+
+interface TrainerEvalData {
+  sessionId: string;
+  sessionTitle: string;
+  programTitle: string;
+  startDate: string;
+  assignments: {
+    id: string;
+    traineeId: string;
+    respondentName: string;
+    respondentType: string;
+    status: string;
+    completedAt: string | null;
+  }[];
+}
+
+function TrainerEvaluationsTab() {
+  const { data: evalData, isLoading } = useQuery<TrainerEvalData[]>({
+    queryKey: ["/api/trainer/evaluations"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!evalData || evalData.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <ClipboardCheck className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+        <h3 className="text-lg font-medium mb-1">Aucune évaluation</h3>
+        <p className="text-sm text-muted-foreground">
+          Aucune évaluation n'a été assignée pour vos sessions.
+        </p>
+      </div>
+    );
+  }
+
+  const respondentTypeLabels: Record<string, string> = {
+    trainee: "Apprenant",
+    manager: "Manager",
+    enterprise: "Entreprise",
+    trainer: "Formateur",
+  };
+
+  const statusLabels: Record<string, string> = {
+    pending: "En attente",
+    sent: "Envoyée",
+    completed: "Complétée",
+    expired: "Expirée",
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    sent: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    expired: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  };
+
+  return (
+    <div className="space-y-6">
+      {evalData.map((ed) => {
+        const completed = ed.assignments.filter((a) => a.status === "completed").length;
+        const total = ed.assignments.length;
+
+        return (
+          <Card key={ed.sessionId}>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  {ed.programTitle && (
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">
+                      {ed.programTitle}
+                    </p>
+                  )}
+                  <CardTitle className="text-lg">{ed.sessionTitle}</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {formatDate(ed.startDate)}
+                  </p>
+                </div>
+                <Badge variant="outline">
+                  {completed}/{total} complétée{completed !== 1 ? "s" : ""}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Répondant</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead>Complétée le</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ed.assignments.map((a) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="font-medium">{a.respondentName || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">
+                            {respondentTypeLabels[a.respondentType] || a.respondentType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={statusColors[a.status] || ""}>
+                            {statusLabels[a.status] || a.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {a.completedAt ? formatDate(a.completedAt) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1354,10 +1981,11 @@ function EnrichedSessionCard({ session }: { session: Session }) {
 // MAIN PAGE
 // ============================================================
 
-export default function TrainerPortal() {
+export default function TrainerPortal({ params }: { params?: { section?: string } }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [previewDoc, setPreviewDoc] = useState<{ fileUrl: string; title: string; mimeType?: string } | null>(null);
+  const [immersiveModuleId, setImmersiveModuleId] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadType, setUploadType] = useState("autre");
@@ -1369,6 +1997,12 @@ export default function TrainerPortal() {
   // Fetch sessions assigned to this trainer
   const { data: sessions, isLoading: sessionsLoading } = useQuery<Session[]>({
     queryKey: [`/api/trainers/${trainerId}/sessions`],
+    enabled: !!trainerId,
+  });
+
+  // Fetch e-learning modules for this trainer's sessions
+  const { data: elearningModules } = useQuery<ElearningModule[]>({
+    queryKey: ["/api/elearning-modules"],
     enabled: !!trainerId,
   });
 
@@ -1436,107 +2070,24 @@ export default function TrainerPortal() {
     );
   }
 
+  const activeSection = params?.section || "sessions";
+
   return (
+    <>
     <PageLayout>
-      {/* Header */}
-      <PageHeader
-        title="Portail Formateur"
-        subtitle="Gérez vos sessions et ressources"
-      />
-
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-              <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats.total}</p>
-              <p className="text-xs text-muted-foreground">Sessions totales</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
-              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats.upcoming}</p>
-              <p className="text-xs text-muted-foreground">Sessions a venir</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-50 dark:bg-green-900/20">
-              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats.completed}</p>
-              <p className="text-xs text-muted-foreground">Sessions terminees</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Trainer not linked warning */}
-      {!isLoading && !trainerId && (
-        <Card className="border-amber-300 dark:border-amber-700">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">Profil formateur non associe</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Votre compte utilisateur n'est pas encore lie a un profil formateur.
-                Contactez votre administrateur pour qu'il associe votre compte.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Loading state */}
-      {isLoading && trainerId && (
+      {isLoading && (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {/* Tabbed content */}
-      {!isLoading && trainerId && (
-        <Tabs defaultValue="sessions" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="sessions" className="gap-2">
-              <Calendar className="w-4 h-4" />
-              Sessions
-            </TabsTrigger>
-            <TabsTrigger value="documents" className="gap-2">
-              <FileText className="w-4 h-4" />
-              Documents
-            </TabsTrigger>
-            <TabsTrigger value="signature" className="gap-2">
-              <PenTool className="w-4 h-4" />
-              Signature
-            </TabsTrigger>
-            <TabsTrigger value="competences" className="gap-2">
-              <Award className="w-4 h-4" />
-              Competences
-            </TabsTrigger>
-            <TabsTrigger value="expenses" className="gap-2">
-              <Receipt className="w-4 h-4" />
-              Notes de frais
-            </TabsTrigger>
-            <TabsTrigger value="invoices" className="gap-2">
-              <CreditCard className="w-4 h-4" />
-              Factures
-            </TabsTrigger>
-          </TabsList>
+      {!isLoading && (<>
 
-          {/* Sessions Tab */}
-          <TabsContent value="sessions">
-            {sessions && sessions.length > 0 ? (
+          {/* Sessions */}
+          {activeSection === "sessions" && (
+            sessions && sessions.length > 0 ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {sessions.map((session) => (
                   <EnrichedSessionCard key={session.id} session={session} />
@@ -1550,11 +2101,98 @@ export default function TrainerPortal() {
                   Vous n'avez aucune session assignee pour le moment.
                 </p>
               </div>
-            )}
-          </TabsContent>
+            )
+          )}
 
-          {/* Documents Tab */}
-          <TabsContent value="documents">
+          {/* Progress */}
+          {activeSection === "progress" && <TrainerProgressTab />}
+
+          {/* Attendance */}
+          {activeSection === "attendance" && <TrainerAttendanceTab sessions={sessions || []} />}
+
+          {/* Evaluations */}
+          {activeSection === "evaluations" && <TrainerEvaluationsTab />}
+
+          {/* E-Learning */}
+          {activeSection === "elearning" && (() => {
+              const sessionIds = new Set((sessions || []).map((s) => s.id));
+              const programIds = new Set((sessions || []).map((s) => s.programId));
+              const myModules = (elearningModules || []).filter(
+                (m) =>
+                  (m as any).status === "published" &&
+                  (sessionIds.has(m.sessionId || "") || programIds.has(m.programId || ""))
+              );
+              if (myModules.length === 0) {
+                return (
+                  <div className="text-center py-16">
+                    <MonitorPlay className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+                    <h3 className="text-lg font-medium mb-1">Aucun module e-learning</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Aucun module publie pour vos sessions.
+                    </p>
+                  </div>
+                );
+              }
+              // Group modules by session
+              const grouped = new Map<string, { session: Session; modules: ElearningModule[] }>();
+              for (const mod of myModules) {
+                const session = (sessions || []).find(
+                  (s) => s.id === mod.sessionId || s.programId === mod.programId
+                );
+                if (!session) continue;
+                const entry = grouped.get(session.id) || { session, modules: [] };
+                entry.modules.push(mod);
+                grouped.set(session.id, entry);
+              }
+              return (
+                <div className="space-y-4">
+                  {Array.from(grouped.values()).map(({ session, modules: mods }) => (
+                    <Card key={session.id}>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{session.title}</CardTitle>
+                        <p className="text-xs text-muted-foreground">
+                          {mods.length} module{mods.length > 1 ? "s" : ""} e-learning
+                        </p>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {mods
+                          .sort((a, b) => a.orderIndex - b.orderIndex)
+                          .map((mod) => (
+                            <div
+                              key={mod.id}
+                              className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted/80 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                                  <MonitorPlay className="w-4 h-4 text-primary" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{mod.title}</p>
+                                  {mod.description && (
+                                    <p className="text-xs text-muted-foreground truncate">{mod.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5 shrink-0"
+                                onClick={() => setImmersiveModuleId(mod.id)}
+                              >
+                                <Maximize2 className="w-3.5 h-3.5" />
+                                Visualiser
+                              </Button>
+                            </div>
+                          ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              );
+            })()}
+
+          {/* Documents */}
+          {activeSection === "documents" && (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1629,29 +2267,21 @@ export default function TrainerPortal() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          )}
 
-          {/* Signature Tab */}
-          <TabsContent value="signature">
-            <TrainerSignaturePad trainerId={trainerId} />
-          </TabsContent>
+          {/* Signature */}
+          {activeSection === "signature" && <TrainerSignaturePad trainerId={trainerId || ""} />}
 
-          {/* Competences Tab */}
-          <TabsContent value="competences">
-            <CompetenciesTab trainerId={trainerId} />
-          </TabsContent>
+          {/* Compétences */}
+          {activeSection === "competences" && <CompetenciesTab trainerId={trainerId || ""} />}
 
-          {/* Expense Notes Tab */}
-          <TabsContent value="expenses">
-            <ExpenseNotesTab trainerId={trainerId} />
-          </TabsContent>
+          {/* Notes de frais */}
+          {activeSection === "expenses" && <ExpenseNotesTab trainerId={trainerId || ""} />}
 
-          {/* Trainer Invoices Tab */}
-          <TabsContent value="invoices">
-            <TrainerInvoicesTab trainerId={trainerId} />
-          </TabsContent>
-        </Tabs>
-      )}
+          {/* Factures */}
+          {activeSection === "invoices" && <TrainerInvoicesTab trainerId={trainerId || ""} />}
+
+      </>)}
 
       {/* Upload document dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
@@ -1723,5 +2353,23 @@ export default function TrainerPortal() {
         mimeType={previewDoc?.mimeType || null}
       />
     </PageLayout>
+
+    {/* Immersive e-learning preview */}
+    {immersiveModuleId && (() => {
+      const mod = (elearningModules || []).find((m) => m.id === immersiveModuleId);
+      if (!mod) return null;
+      return createPortal(
+        <ImmersiveModuleViewer
+          initialModuleId={immersiveModuleId}
+          initialBlockIndex={0}
+          modules={[mod]}
+          progressData={[]}
+          previewMode={true}
+          onExit={() => setImmersiveModuleId(null)}
+        />,
+        document.body
+      );
+    })()}
+    </>
   );
 }

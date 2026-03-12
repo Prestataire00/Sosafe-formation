@@ -475,7 +475,7 @@ function EnterpriseDetail({ enterprise, onBack }: { enterprise: Enterprise; onBa
                 <div className="flex justify-between"><span className="text-muted-foreground">SIRET</span><span>{enterprise.siret || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">N° TVA</span><span>{enterprise.tvaNumber || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Format juridique</span><span>{enterprise.formatJuridique ? formatLabels[enterprise.formatJuridique] || enterprise.formatJuridique : "—"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{enterprise.email || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Email</span>{enterprise.email ? <a href={`mailto:${enterprise.email}`} className="text-primary hover:underline">{enterprise.email}</a> : <span>—</span>}</div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Téléphone</span><span>{enterprise.phone || "—"}</span></div>
               </CardContent>
             </Card>
@@ -490,7 +490,7 @@ function EnterpriseDetail({ enterprise, onBack }: { enterprise: Enterprise; onBa
               <CardHeader><CardTitle className="text-base">Contact principal</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Nom</span><span>{enterprise.contactName || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{enterprise.contactEmail || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Email</span>{enterprise.contactEmail ? <a href={`mailto:${enterprise.contactEmail}`} className="text-primary hover:underline">{enterprise.contactEmail}</a> : <span>—</span>}</div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Téléphone</span><span>{enterprise.contactPhone || "—"}</span></div>
               </CardContent>
             </Card>
@@ -540,7 +540,7 @@ function EnterpriseDetail({ enterprise, onBack }: { enterprise: Enterprise; onBa
                           {c.firstName} {c.lastName}
                           {c.isPrimary && <Badge variant="outline" className="ml-2 text-xs">Principal</Badge>}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{c.email || "—"}</TableCell>
+                        <TableCell className="text-sm">{c.email ? <a href={`mailto:${c.email}`} className="text-primary hover:underline">{c.email}</a> : <span className="text-muted-foreground">—</span>}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{c.phone || "—"}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{c.department || "—"}</TableCell>
                         <TableCell><Badge variant="outline" className="text-xs">{roleLabels[c.role] || c.role}</Badge></TableCell>
@@ -773,7 +773,7 @@ export default function Enterprises() {
                   {(ent.email || ent.contactEmail) && (
                     <div className="flex items-center gap-1.5">
                       <Mail className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{ent.email || ent.contactEmail}</span>
+                      <a href={`mailto:${ent.email || ent.contactEmail}`} className="truncate text-primary hover:underline">{ent.email || ent.contactEmail}</a>
                     </div>
                   )}
                   {(ent.phone || ent.contactPhone) && (

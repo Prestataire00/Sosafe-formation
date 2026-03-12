@@ -6,7 +6,7 @@ import { execSync } from "child_process";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { seedDatabase } from "./seed";
+import { seedDatabase, seedAutomationDefaults, seedOrganizationDefaults } from "./seed";
 import { startEmailWorker } from "./email-service";
 import { startSmsWorker } from "./sms-service";
 import { startScheduledTasks } from "./scheduled-tasks";
@@ -15,7 +15,7 @@ import { startScheduledTasks } from "./scheduled-tasks";
 function freePort(port: number) {
   try {
     const result = execSync(
-      `lsof -ti:${port} 2>/dev/null || grep -l "0100007F:$(printf '%04X' ${port})\\|00000000:$(printf '%04X' ${port})" /proc/*/net/tcp /proc/*/net/tcp6 2>/dev/null | grep -oP '/proc/\\K[0-9]+' | sort -u`,
+      `lsof -ti:${port} 2>/dev/null`,
       { encoding: "utf-8" },
     ).trim();
     if (result) {
@@ -44,6 +44,11 @@ declare module "http" {
 app.use(
   express.json({
     limit: "10mb",
+    type: (req) => {
+      const ct = req.headers["content-type"] || "";
+      if (ct.includes("multipart/form-data")) return false;
+      return ct.includes("json") || !ct;
+    },
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -111,6 +116,8 @@ app.use((req, res, next) => {
 
   try {
     await seedDatabase();
+    await seedAutomationDefaults();
+    await seedOrganizationDefaults();
   } catch (err) {
     console.error("Seed error:", err);
   }
@@ -148,7 +155,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(port, "127.0.0.1", () => {
+  httpServer.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
   });
 })();

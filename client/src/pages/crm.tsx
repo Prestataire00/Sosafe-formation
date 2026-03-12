@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,6 +160,7 @@ function ContactsTab() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
+  const [filterTagId, setFilterTagId] = useState<string>("all");
   const [tagDialog, setTagDialog] = useState(false);
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState("#6366f1");
@@ -272,9 +273,11 @@ function ContactsTab() {
     }));
   }
 
-  const filtered = allContacts.filter(c =>
-    !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()) || c.extra.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = allContacts.filter(c => {
+    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()) || c.extra.toLowerCase().includes(search.toLowerCase());
+    const matchTag = filterTagId === "all" || c.tags.some(t => t.id === filterTagId);
+    return matchSearch && matchTag;
+  });
 
   const typeLabel = (t: string) => {
     const m: Record<string, string> = { trainee: "Apprenant", enterprise: "Entreprise", prospect: "Prospect" };
@@ -340,6 +343,22 @@ function ContactsTab() {
             <SelectItem value="prospect">Prospects</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filterTagId} onValueChange={setFilterTagId}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filtrer par tag" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les tags</SelectItem>
+            {tags?.map(tag => (
+              <SelectItem key={tag.id} value={tag.id}>
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                  {tag.name} ({assignments?.filter(a => a.tagId === tag.id).length || 0})
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Contacts table */}
@@ -364,7 +383,7 @@ function ContactsTab() {
                   <TableCell>
                     <StatusBadge status={contact.type} label={typeLabel(contact.type)} />
                   </TableCell>
-                  <TableCell className="text-sm">{contact.email}</TableCell>
+                  <TableCell className="text-sm">{contact.email ? <a href={`mailto:${contact.email}`} className="text-primary hover:underline">{contact.email}</a> : "—"}</TableCell>
                   <TableCell className="text-sm">{contact.phone}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{contact.extra}</TableCell>
                   <TableCell>
@@ -480,9 +499,14 @@ function CampaignsTab() {
   const [targetType, setTargetType] = useState("all");
   const [targetContactType, setTargetContactType] = useState("all");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [manualRecipients, setManualRecipients] = useState<Array<{ email: string; name: string; type: string }>>([]);
+  const [manualSearch, setManualSearch] = useState("");
 
   const { data: campaigns, isLoading } = useQuery<MarketingCampaign[]>({ queryKey: ["/api/marketing-campaigns"] });
   const { data: tags } = useQuery<ContactTag[]>({ queryKey: ["/api/contact-tags"] });
+  const { data: allTrainees } = useQuery<Trainee[]>({ queryKey: ["/api/trainees"], enabled: targetType === "manual" });
+  const { data: allEnterprises } = useQuery<Enterprise[]>({ queryKey: ["/api/enterprises"], enabled: targetType === "manual" });
+  const { data: allProspects } = useQuery<Prospect[]>({ queryKey: ["/api/prospects"], enabled: targetType === "manual" });
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/marketing-campaigns", data),
@@ -528,6 +552,8 @@ function CampaignsTab() {
     setTargetType("all");
     setTargetContactType("all");
     setSelectedTagIds([]);
+    setManualRecipients([]);
+    setManualSearch("");
   };
 
   const openEdit = (c: MarketingCampaign) => {
@@ -538,11 +564,35 @@ function CampaignsTab() {
     setTargetType(c.targetType);
     setTargetContactType(c.targetContactType);
     setSelectedTagIds(c.targetTagIds || []);
+    setManualRecipients([]);
     setDialog(true);
   };
 
+  // Build available contacts for manual selection
+  const manualContacts = useMemo(() => {
+    if (targetType !== "manual") return [];
+    const contacts: Array<{ email: string; name: string; type: string }> = [];
+    allTrainees?.filter(t => t.email).forEach(t => contacts.push({ email: t.email, name: `${t.firstName} ${t.lastName}`, type: "Apprenant" }));
+    allEnterprises?.filter(e => e.contactEmail).forEach(e => contacts.push({ email: e.contactEmail!, name: e.name, type: "Entreprise" }));
+    allProspects?.filter(p => p.contactEmail).forEach(p => contacts.push({ email: p.contactEmail!, name: `${p.companyName} (${p.contactName})`, type: "Prospect" }));
+    if (!manualSearch) return contacts;
+    const s = manualSearch.toLowerCase();
+    return contacts.filter(c => c.name.toLowerCase().includes(s) || c.email.toLowerCase().includes(s));
+  }, [targetType, allTrainees, allEnterprises, allProspects, manualSearch]);
+
+  const toggleManualRecipient = (contact: { email: string; name: string; type: string }) => {
+    setManualRecipients(prev =>
+      prev.some(r => r.email === contact.email)
+        ? prev.filter(r => r.email !== contact.email)
+        : [...prev, contact]
+    );
+  };
+
   const handleSave = () => {
-    const data = { title, subject, body, targetType, targetContactType, targetTagIds: selectedTagIds };
+    const data: any = { title, subject, body, targetType, targetContactType, targetTagIds: selectedTagIds };
+    if (targetType === "manual") {
+      data.manualEmails = manualRecipients.map(r => r.email);
+    }
     if (editing) {
       updateMutation.mutate({ id: editing.id, data });
     } else {
@@ -688,6 +738,40 @@ function CampaignsTab() {
                 </div>
               </div>
             )}
+            {targetType === "manual" && (
+              <div className="space-y-2">
+                <Label>Destinataires ({manualRecipients.length} sélectionnés)</Label>
+                <Input
+                  value={manualSearch}
+                  onChange={e => setManualSearch(e.target.value)}
+                  placeholder="Rechercher un contact..."
+                  className="mb-2"
+                />
+                <div className="max-h-48 overflow-y-auto border rounded-md p-2 space-y-1">
+                  {manualContacts.slice(0, 50).map((contact: { email: string; name: string; type: string }) => {
+                    const isSelected = manualRecipients.some(r => r.email === contact.email);
+                    return (
+                      <label
+                        key={contact.email}
+                        className={`flex items-center gap-2 p-1.5 rounded cursor-pointer text-sm ${isSelected ? "bg-primary/10" : "hover:bg-accent/50"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleManualRecipient(contact)}
+                          className="accent-primary"
+                        />
+                        <span className="flex-1 truncate">{contact.name}</span>
+                        <span className="text-xs text-muted-foreground">{contact.type}</span>
+                      </label>
+                    );
+                  })}
+                  {manualContacts.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">Aucun contact trouvé</p>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDialog(false)}>Annuler</Button>
               <Button onClick={handleSave} disabled={!title.trim() || !subject.trim() || !body.trim()}>
@@ -816,7 +900,7 @@ function PipelineTab() {
               <div>
                 <CardTitle className="text-lg">{selectedProspect.companyName}</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {selectedProspect.contactName} — {selectedProspect.contactEmail} — {selectedProspect.contactPhone}
+                  {selectedProspect.contactName} — <a href={`mailto:${selectedProspect.contactEmail}`} className="text-primary hover:underline">{selectedProspect.contactEmail}</a> — {selectedProspect.contactPhone}
                 </p>
               </div>
               <Select

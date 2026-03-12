@@ -133,13 +133,23 @@ function AttendanceGrid({
     queryKey: ["/api/trainees"],
   });
 
-  // For each sheet, fetch attendance records
-  const sheetRecordsQueries = sheets.map((sheet) =>
-    useQuery<AttendanceRecord[]>({
-      queryKey: ["/api/attendance-records", `?sheetId=${sheet.id}`],
-      enabled: !!sheet.id,
-    })
-  );
+  // Fetch all attendance records for all sheets in a single query
+  const sheetIdsKey = sheets.map((s) => s.id).sort().join(",");
+  const { data: allRecordsRaw } = useQuery<AttendanceRecord[]>({
+    queryKey: ["/api/attendance-records", "sheets", sheetIdsKey],
+    queryFn: async () => {
+      const results: AttendanceRecord[] = [];
+      for (const sheet of sheets) {
+        const res = await fetch(`/api/attendance-records?sheetId=${sheet.id}`, { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          results.push(...data);
+        }
+      }
+      return results;
+    },
+    enabled: sheets.length > 0,
+  });
 
   // Create or update attendance record
   const upsertRecordMutation = useMutation({
@@ -166,10 +176,8 @@ function AttendanceGrid({
       });
     },
     onSuccess: () => {
-      sheets.forEach((sheet) => {
-        queryClient.invalidateQueries({
-          queryKey: ["/api/attendance-records", `?sheetId=${sheet.id}`],
-        });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/attendance-records", "sheets", sheetIdsKey],
       });
       queryClient.invalidateQueries({
         queryKey: ["/api/attendance-records/report"],
@@ -207,10 +215,8 @@ function AttendanceGrid({
       });
     },
     onSuccess: () => {
-      sheets.forEach((sheet) => {
-        queryClient.invalidateQueries({
-          queryKey: ["/api/attendance-records", `?sheetId=${sheet.id}`],
-        });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/attendance-records", "sheets", sheetIdsKey],
       });
       queryClient.invalidateQueries({
         queryKey: ["/api/attendance-records/report"],
@@ -230,10 +236,13 @@ function AttendanceGrid({
 
   // Build a map of sheetId -> records
   const recordsBySheet = new Map<string, AttendanceRecord[]>();
-  sheets.forEach((sheet, idx) => {
-    const records = sheetRecordsQueries[idx]?.data || [];
-    recordsBySheet.set(sheet.id, records);
-  });
+  if (allRecordsRaw) {
+    for (const record of allRecordsRaw) {
+      const list = recordsBySheet.get(record.sheetId) || [];
+      list.push(record);
+      recordsBySheet.set(record.sheetId, list);
+    }
+  }
 
   // Find existing record for a trainee in a sheet
   function findRecord(
@@ -306,9 +315,7 @@ function AttendanceGrid({
                         ? `${trainee.firstName} ${trainee.lastName}`
                         : "Inconnu"}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {trainee?.email || ""}
-                    </p>
+                    {trainee?.email ? <a href={`mailto:${trainee.email}`} className="text-xs text-primary hover:underline">{trainee.email}</a> : null}
                   </div>
                 </TableCell>
                 {sheets.map((sheet) => {
@@ -629,7 +636,7 @@ function TabletEmargement({
                   <p className="text-sm font-medium">
                     {trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}
                   </p>
-                  <p className="text-xs text-muted-foreground">{trainee?.email || ""}</p>
+                  {trainee?.email ? <a href={`mailto:${trainee.email}`} className="text-xs text-primary hover:underline">{trainee.email}</a> : null}
                 </div>
                 {isSigned ? (
                   <StatusBadge status="signed" label="Signe" />
@@ -786,7 +793,7 @@ function EmailEmargement({
                     <p className="text-sm font-medium">
                       {trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}
                     </p>
-                    <p className="text-xs text-muted-foreground">{trainee?.email || "Pas d'email"}</p>
+                    {trainee?.email ? <a href={`mailto:${trainee.email}`} className="text-xs text-primary hover:underline">{trainee.email}</a> : <p className="text-xs text-muted-foreground">Pas d'email</p>}
                   </div>
                   <div className="flex items-center gap-2">
                     {hasToken && !isSigned && (
@@ -1560,9 +1567,10 @@ export default function Attendance() {
       setSheetDialogOpen(false);
       toast({ title: "Feuille d'emargement creee" });
     },
-    onError: () =>
+    onError: (err: Error) =>
       toast({
         title: "Erreur lors de la creation",
+        description: err.message,
         variant: "destructive",
       }),
   });

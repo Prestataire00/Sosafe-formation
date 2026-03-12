@@ -82,8 +82,8 @@ export function requirePermission(...permissions: string[]) {
     if (!user) {
       return res.status(401).json({ message: "Utilisateur introuvable" });
     }
-    // Admin with no specific permissions = full access
-    if (user.role === "admin" && (!user.permissions || (user.permissions as string[]).length === 0)) {
+    // Admin always has full access
+    if (user.role === "admin") {
       return next();
     }
     const userPerms = (user.permissions as string[]) || [];

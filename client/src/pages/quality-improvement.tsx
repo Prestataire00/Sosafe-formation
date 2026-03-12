@@ -704,13 +704,13 @@ function IncidentFormDialog({ open, onClose, onSubmit, editing, sessions }: any)
 
   const handleSubmit = () => {
     onSubmit({
-      sessionId: sessionId || null,
+      sessionId: (sessionId && sessionId !== "_none") ? sessionId : null,
       sessionTitle: selectedSession?.title || editing?.sessionTitle || "",
       type,
       severity,
       title,
       description,
-      category: category || null,
+      category: (category && category !== "_none") ? category : null,
       rootCause: rootCause || null,
     });
   };
@@ -756,7 +756,7 @@ function IncidentFormDialog({ open, onClose, onSubmit, editing, sessions }: any)
               <Select value={sessionId} onValueChange={setSessionId}>
                 <SelectTrigger><SelectValue placeholder="Optionnel" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Aucune</SelectItem>
+                  <SelectItem value="_none">Aucune</SelectItem>
                   {sessions?.map((s: any) => (
                     <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
                   ))}
@@ -768,7 +768,7 @@ function IncidentFormDialog({ open, onClose, onSubmit, editing, sessions }: any)
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue placeholder="Optionnel" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Non défini</SelectItem>
+                  <SelectItem value="_none">Non défini</SelectItem>
                   {INCIDENT_CATEGORIES.map(c => (
                     <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                   ))}

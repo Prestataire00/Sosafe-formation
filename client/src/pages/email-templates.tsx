@@ -559,6 +559,15 @@ function EmailLogsTab() {
       toast({ title: "Erreur lors du renvoi", variant: "destructive" }),
   });
 
+  const markOpenedMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("POST", `/api/email-logs/${id}/mark-opened`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email-logs"] });
+      toast({ title: "Email marqué comme ouvert" });
+    },
+  });
+
   const openTrackingSheet = (logId: string) => {
     setSelectedLogId(logId);
     setTrackingSheetOpen(true);
@@ -618,7 +627,13 @@ function EmailLogsTab() {
                         {formatDate(log.openedAt)}
                       </Badge>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Non ouvert</span>
+                      <button
+                        className="text-xs text-muted-foreground hover:text-primary hover:underline cursor-pointer"
+                        onClick={() => markOpenedMutation.mutate(log.id)}
+                        title="Cliquer pour marquer comme ouvert"
+                      >
+                        Non ouvert
+                      </button>
                     )}
                   </td>
                   <td className="p-3 text-center">{log.openCount || 0}</td>

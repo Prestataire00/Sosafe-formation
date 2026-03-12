@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { GraduationCap, LogIn, UserPlus, Shield, Users, Building2, BookOpen } from "lucide-react";
+import { LogIn, UserPlus, Shield, Users, Building2, BookOpen } from "lucide-react";
 import { USER_ROLES } from "@shared/schema";
 
 export default function AuthPage() {
@@ -57,14 +57,20 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2">
-            <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary">
-              <GraduationCap className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold" data-testid="text-app-title">SO'SAFE</h1>
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center">
+            <img
+              src="/logo-sosafe.png"
+              alt="SO'SAFE"
+              className="h-16 object-contain dark:hidden"
+            />
+            <img
+              src="/logo-sosafe-white.png"
+              alt="SO'SAFE"
+              className="h-16 object-contain hidden dark:block"
+            />
           </div>
-          <p className="text-sm text-muted-foreground">Plateforme de gestion de formation</p>
+          <p className="text-sm text-muted-foreground" data-testid="text-app-title">Plateforme de gestion de formation</p>
         </div>
 
         <Card>

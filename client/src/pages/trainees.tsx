@@ -33,7 +33,10 @@ import {
   FileText,
   RefreshCw,
   ExternalLink,
+  LayoutGrid,
+  List,
 } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +57,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { AdvancedFilters } from "@/components/shared/AdvancedFilters";
+import { ExportButton } from "@/components/shared/ExportButton";
 import { TRAINEE_CIVILITIES, TRAINEE_PROFILE_TYPES, PRO_STATUT_TYPES, DIETARY_REGIMES, TRAINEE_PROFESSIONS, USER_DOCUMENT_STATUSES, AI_ANALYSIS_STATUSES, AI_CONFIDENCE_LEVELS } from "@shared/schema";
 
 function ProfileTypeBadge({ profileType }: { profileType: string | null }) {
@@ -106,6 +111,20 @@ function TraineeForm({
   // Santé
   const [profession, setProfession] = useState(trainee?.profession || "");
   const [rppsNumber, setRppsNumber] = useState(trainee?.rppsNumber || "");
+
+  // Adresse
+  const [address, setAddress] = useState(trainee?.address || "");
+  const [traineeCity, setTraineeCity] = useState(trainee?.city || "");
+  const [postalCode, setPostalCode] = useState(trainee?.postalCode || "");
+  const [country, setCountry] = useState(trainee?.country || "France");
+
+  // Responsable
+  const [managerName, setManagerName] = useState(trainee?.managerName || "");
+  const [managerEmail, setManagerEmail] = useState(trainee?.managerEmail || "");
+
+  // Documents administratifs
+  const [diplomaNumber, setDiplomaNumber] = useState(trainee?.diplomaNumber || "");
+  const [socialSecurityNumber, setSocialSecurityNumber] = useState(trainee?.socialSecurityNumber || "");
 
   // Complémentaire
   const [poleEmploiId, setPoleEmploiId] = useState(trainee?.poleEmploiId || "");
@@ -167,6 +186,14 @@ function TraineeForm({
       avatarUrl: avatarUrl || null,
       rppsNumber: rppsNumber || null,
       profession: profession || null,
+      address: address || null,
+      city: traineeCity || null,
+      postalCode: postalCode || null,
+      country: country || null,
+      managerName: managerName || null,
+      managerEmail: managerEmail || null,
+      diplomaNumber: diplomaNumber || null,
+      socialSecurityNumber: socialSecurityNumber || null,
     });
   };
 
@@ -216,18 +243,39 @@ function TraineeForm({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="trainee-firstName">Prénom</Label>
+              <Label htmlFor="trainee-firstName">Prénom <span className="text-red-500">*</span></Label>
               <Input id="trainee-firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required data-testid="input-trainee-firstName" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="trainee-lastName">Nom</Label>
+              <Label htmlFor="trainee-lastName">Nom <span className="text-red-500">*</span></Label>
               <Input id="trainee-lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} required data-testid="input-trainee-lastName" />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="trainee-dateOfBirth">Date de naissance</Label>
-              <Input id="trainee-dateOfBirth" type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} data-testid="input-trainee-dateOfBirth" />
+              <div className="flex gap-2">
+                <Input
+                  id="trainee-dateOfBirth"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className="flex-1"
+                  data-testid="input-trainee-dateOfBirth"
+                />
+                <Input
+                  placeholder="JJ/MM/AAAA"
+                  value={dateOfBirth ? dateOfBirth.split("-").reverse().join("/") : ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const match = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                    if (match) {
+                      setDateOfBirth(`${match[3]}-${match[2]}-${match[1]}`);
+                    }
+                  }}
+                  className="w-32"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="trainee-cityOfBirth">Ville de naissance</Label>
@@ -246,7 +294,7 @@ function TraineeForm({
         <h4 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Contact</h4>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="trainee-email">Email</Label>
+            <Label htmlFor="trainee-email">Email <span className="text-red-500">*</span></Label>
             <Input id="trainee-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="input-trainee-email" />
           </div>
           <div className="space-y-2">
@@ -256,7 +304,32 @@ function TraineeForm({
         </div>
       </div>
 
-      {/* Section 3: Profil */}
+      {/* Section 3: Adresse */}
+      <div className="border-t pt-4">
+        <h4 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Adresse</h4>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="trainee-address">Adresse</Label>
+            <Input id="trainee-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Numéro et nom de rue" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="trainee-postalCode">Code postal</Label>
+              <Input id="trainee-postalCode" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="Ex: 75001" maxLength={10} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="trainee-city">Ville</Label>
+              <Input id="trainee-city" value={traineeCity} onChange={(e) => setTraineeCity(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="trainee-country">Pays</Label>
+              <Input id="trainee-country" value={country} onChange={(e) => setCountry(e.target.value)} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 4: Profil */}
       <div className="border-t pt-4">
         <h4 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Profil</h4>
         <div className="space-y-4">
@@ -406,7 +479,37 @@ function TraineeForm({
         </div>
       </div>
 
-      {/* Section 4: Complémentaire */}
+      {/* Section: Responsable */}
+      <div className="border-t pt-4">
+        <h4 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Responsable</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="trainee-managerName">Nom du responsable</Label>
+            <Input id="trainee-managerName" value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder="Nom complet" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="trainee-managerEmail">Email du responsable</Label>
+            <Input id="trainee-managerEmail" type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} placeholder="responsable@entreprise.com" />
+          </div>
+        </div>
+      </div>
+
+      {/* Section: Documents administratifs */}
+      <div className="border-t pt-4">
+        <h4 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Documents administratifs</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="trainee-diplomaNumber">Numéro de diplôme</Label>
+            <Input id="trainee-diplomaNumber" value={diplomaNumber} onChange={(e) => setDiplomaNumber(e.target.value)} placeholder="Ex: 2024-XXXX" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="trainee-socialSecurityNumber">Numéro de sécurité sociale</Label>
+            <Input id="trainee-socialSecurityNumber" value={socialSecurityNumber} onChange={(e) => setSocialSecurityNumber(e.target.value)} placeholder="15 chiffres" maxLength={15} />
+          </div>
+        </div>
+      </div>
+
+      {/* Section: Complémentaire */}
       <div className="border-t pt-4">
         <h4 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Complémentaire</h4>
         <div className="space-y-4">
@@ -595,8 +698,78 @@ function TraineeDocuments({ traineeId }: { traineeId: string }) {
   );
 }
 
+function TrombinoscopeGrid({
+  trainees,
+  enterprises,
+  onEdit,
+  onDelete,
+}: {
+  trainees: Trainee[];
+  enterprises: Enterprise[];
+  onEdit: (trainee: Trainee) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      {trainees.map((trainee) => {
+        const enterprise = enterprises.find((e) => e.id === trainee.enterpriseId);
+        const initials = `${trainee.firstName?.[0] || ""}${trainee.lastName?.[0] || ""}`.toUpperCase();
+        const companyDisplay = trainee.profileType === "profession_liberale"
+          ? trainee.proDenomination
+          : (enterprise?.name || trainee.company);
+
+        return (
+          <Card key={trainee.id} className="overflow-hidden group">
+            <CardContent className="p-4 flex flex-col items-center text-center space-y-3">
+              <Avatar className="w-20 h-20">
+                {trainee.avatarUrl ? (
+                  <AvatarImage src={trainee.avatarUrl} alt={`${trainee.firstName} ${trainee.lastName}`} />
+                ) : null}
+                <AvatarFallback className="text-lg bg-primary/10 text-primary">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="space-y-1">
+                <p className="font-medium text-sm leading-tight">
+                  {trainee.civility ? `${trainee.civility} ` : ""}
+                  {trainee.firstName} {trainee.lastName}
+                </p>
+                {companyDisplay && (
+                  <p className="text-xs text-muted-foreground truncate max-w-[150px]">
+                    {companyDisplay}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 flex-wrap justify-center">
+                <StatusBadge
+                  status={trainee.status === "active" ? "actif" : "inactif"}
+                  label={trainee.status === "active" ? "Actif" : "Inactif"}
+                />
+                <ProfileTypeBadge profileType={trainee.profileType} />
+              </div>
+
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(trainee)}>
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(trainee.id)}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Trainees() {
   const [search, setSearch] = useState("");
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  const [viewMode, setViewMode] = useState<"list" | "trombinoscope">("list");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTrainee, setEditTrainee] = useState<Trainee | undefined>();
   const { toast } = useToast();
@@ -616,7 +789,10 @@ export default function Trainees() {
       setDialogOpen(false);
       toast({ title: "Stagiaire ajouté avec succès" });
     },
-    onError: () => toast({ title: "Erreur lors de l'ajout", variant: "destructive" }),
+    onError: (err: any) => {
+      const msg = err?.message || "Erreur lors de l'ajout";
+      toast({ title: msg.includes("unique") ? "Un stagiaire avec cet email existe déjà" : msg, variant: "destructive" });
+    },
   });
 
   const updateMutation = useMutation({
@@ -628,7 +804,10 @@ export default function Trainees() {
       setEditTrainee(undefined);
       toast({ title: "Stagiaire modifié avec succès" });
     },
-    onError: () => toast({ title: "Erreur lors de la modification", variant: "destructive" }),
+    onError: (err: any) => {
+      const msg = err?.message || "Erreur lors de la modification";
+      toast({ title: msg.includes("unique") ? "Un stagiaire avec cet email existe déjà" : msg, variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -640,18 +819,60 @@ export default function Trainees() {
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
 
+  const traineeFilters = [
+    {
+      key: "enterpriseId",
+      label: "Entreprise",
+      type: "select" as const,
+      options: (enterprises || []).map((e) => ({ value: e.id, label: e.name })),
+    },
+    {
+      key: "status",
+      label: "Statut",
+      type: "select" as const,
+      options: [
+        { value: "active", label: "Actif" },
+        { value: "inactive", label: "Inactif" },
+      ],
+    },
+  ];
+
+  const exportColumns = [
+    { key: "firstName", label: "Prénom" },
+    { key: "lastName", label: "Nom" },
+    { key: "email", label: "Email" },
+    { key: "phone", label: "Téléphone" },
+    { key: "enterpriseName", label: "Entreprise" },
+    { key: "address", label: "Adresse" },
+    { key: "city", label: "Ville" },
+    { key: "postalCode", label: "Code postal" },
+    { key: "managerName", label: "Responsable" },
+  ];
+
   const filtered = trainees?.filter(
     (t) => {
       const q = search.toLowerCase();
-      return (
+      const matchesSearch =
         `${t.firstName} ${t.lastName}`.toLowerCase().includes(q) ||
         t.email.toLowerCase().includes(q) ||
         (t.company || "").toLowerCase().includes(q) ||
         (t.proDenomination || "").toLowerCase().includes(q) ||
-        (t.proSiret || "").toLowerCase().includes(q)
-      );
+        (t.proSiret || "").toLowerCase().includes(q);
+
+      const matchesEnterprise =
+        !filterValues.enterpriseId || t.enterpriseId === filterValues.enterpriseId;
+
+      const matchesStatus =
+        !filterValues.status || t.status === filterValues.status;
+
+      return matchesSearch && matchesEnterprise && matchesStatus;
     }
   ) || [];
+
+  const exportData = filtered.map((t) => ({
+    ...t,
+    enterpriseName: enterprises?.find((e) => e.id === t.enterpriseId)?.name || t.company || "",
+  }));
 
   return (
     <PageLayout>
@@ -659,13 +880,32 @@ export default function Trainees() {
         title="Stagiaires"
         subtitle="Gérez vos stagiaires et participants"
         actions={
-          <Button
-            onClick={() => { setEditTrainee(undefined); setDialogOpen(true); }}
-            data-testid="button-create-trainee"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Ajouter un stagiaire
-          </Button>
+          <div className="flex items-center gap-2">
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "trombinoscope")}>
+              <TabsList>
+                <TabsTrigger value="list" className="gap-1.5">
+                  <List className="w-4 h-4" />
+                  Liste
+                </TabsTrigger>
+                <TabsTrigger value="trombinoscope" className="gap-1.5">
+                  <LayoutGrid className="w-4 h-4" />
+                  Trombinoscope
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <ExportButton
+              data={exportData}
+              columns={exportColumns}
+              filename="stagiaires"
+            />
+            <Button
+              onClick={() => { setEditTrainee(undefined); setDialogOpen(true); }}
+              data-testid="button-create-trainee"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Ajouter un stagiaire
+            </Button>
+          </div>
         }
       />
 
@@ -674,6 +914,12 @@ export default function Trainees() {
         onChange={setSearch}
         placeholder="Rechercher un stagiaire..."
         className="max-w-sm"
+      />
+
+      <AdvancedFilters
+        filters={traineeFilters}
+        values={filterValues}
+        onChange={setFilterValues}
       />
 
       {isLoading ? (
@@ -702,6 +948,13 @@ export default function Trainees() {
             />
           </CardContent>
         </Card>
+      ) : viewMode === "trombinoscope" ? (
+        <TrombinoscopeGrid
+          trainees={filtered}
+          enterprises={enterprises || []}
+          onEdit={(trainee) => { setEditTrainee(trainee); setDialogOpen(true); }}
+          onDelete={(id) => deleteMutation.mutate(id)}
+        />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -728,7 +981,7 @@ export default function Trainees() {
                         </p>
                       </TableCell>
                       <TableCell>
-                        <p className="text-sm text-muted-foreground">{trainee.email}</p>
+                        <a href={`mailto:${trainee.email}`} className="text-sm text-primary hover:underline">{trainee.email}</a>
                       </TableCell>
                       <TableCell>
                         <p className="text-sm text-muted-foreground">{trainee.phone || "—"}</p>

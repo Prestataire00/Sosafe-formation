@@ -74,6 +74,7 @@ import {
 } from "@/components/ui/table";
 import type { SurveyTemplate, InsertSurveyTemplate, SurveyResponse, Session, EvaluationAssignment, Trainee, Enrollment } from "@shared/schema";
 import { EVALUATION_TYPES, DEFAULT_EVALUATION_QUESTIONS } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 
 const SURVEY_CATEGORIES = [
   { value: "satisfaction", label: "Satisfaction" },
@@ -873,6 +874,7 @@ function ResponseEditDialog({
 function ResponsesTab() {
   const [search, setSearch] = useState("");
   const [editingResponse, setEditingResponse] = useState<SurveyResponse | null>(null);
+  const { hasPermission } = useAuth();
 
   const { data: responses, isLoading: loadingResponses } = useQuery<SurveyResponse[]>({
     queryKey: ["/api/survey-responses"],
@@ -1039,6 +1041,7 @@ function ResponsesTab() {
                             : "-"}
                         </p>
                       </TableCell>
+                      {hasPermission("override_survey_responses") && (
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -1050,6 +1053,7 @@ function ResponsesTab() {
                           <Pencil className="w-4 h-4" />
                         </Button>
                       </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -1077,6 +1081,7 @@ function EvaluationsTab() {
   const [selectedAssignment, setSelectedAssignment] = useState<EvaluationAssignment | null>(null);
   const [evalEditingResponse, setEvalEditingResponse] = useState<SurveyResponse | null>(null);
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
 
   const { data: sessions } = useQuery<Session[]>({ queryKey: ["/api/sessions"] });
   const { data: templates } = useQuery<SurveyTemplate[]>({ queryKey: ["/api/survey-templates"] });
@@ -1395,7 +1400,7 @@ function EvaluationsTab() {
               </div>
             )}
 
-            {detailResponse && (
+            {detailResponse && hasPermission("override_survey_responses") && (
               <div className="pt-3 border-t flex justify-end">
                 <Button
                   variant="outline"

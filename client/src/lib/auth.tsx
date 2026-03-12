@@ -28,6 +28,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (data: { username: string; password: string; role: string; firstName: string; lastName: string; email?: string }) => Promise<void>;
   logout: () => Promise<void>;
+  hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -73,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, hasPermission: (perm: string) => hasPermission(user, perm) }}>
       {children}
     </AuthContext.Provider>
   );

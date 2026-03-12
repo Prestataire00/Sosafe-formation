@@ -18,7 +18,6 @@ import {
   CheckSquare,
   Star,
   MonitorPlay,
-  BookMarked,
   Award,
   MessageSquare,
   Target,
@@ -27,6 +26,11 @@ import {
   Medal,
   Sparkles,
   ListChecks,
+  PenTool,
+  Home,
+  CalendarCheck,
+  VideoIcon,
+  Info,
   Globe,
   Database,
   Wrench,
@@ -42,7 +46,7 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useAuth, hasPermission } from "@/lib/auth";
 
-type NavItem = {
+export type NavItem = {
   title: string;
   url: string;
   icon: typeof LayoutDashboard;
@@ -51,20 +55,43 @@ type NavItem = {
   permission?: string;
 };
 
-const allNav: NavItem[] = [
+export const allNav: NavItem[] = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard, roles: ["admin", "trainer", "trainee", "enterprise"], group: "dashboard" },
 
-  { title: "Formations", url: "/programs", icon: BookOpen, roles: ["admin", "trainer", "trainee", "enterprise"], permission: "manage_programs", group: "formation" },
-  { title: "Sessions", url: "/sessions", icon: Calendar, roles: ["admin", "trainer", "trainee", "enterprise"], permission: "manage_sessions", group: "formation" },
-  { title: "Inscriptions", url: "/enrollments", icon: ClipboardList, roles: ["admin", "trainer"], permission: "manage_enrollments", group: "formation" },
-  { title: "Émargement", url: "/attendance", icon: CheckSquare, roles: ["admin", "trainer"], permission: "manage_attendance", group: "formation" },
-  { title: "E-Learning", url: "/elearning", icon: MonitorPlay, roles: ["admin", "trainer"], permission: "manage_elearning", group: "formation" },
-  { title: "Listes de tâches", url: "/task-lists", icon: ListChecks, roles: ["admin", "trainer"], group: "formation" },
-  { title: "Portail Apprenant", url: "/learner-portal", icon: BookMarked, roles: ["trainee"], group: "formation" },
-  { title: "Portail Formateur", url: "/trainer-portal", icon: BookMarked, roles: ["trainer"], group: "formation" },
+  { title: "Formations", url: "/programs", icon: BookOpen, roles: ["admin"], permission: "manage_programs", group: "formation" },
+  { title: "Sessions", url: "/sessions", icon: Calendar, roles: ["admin"], permission: "manage_sessions", group: "formation" },
+  { title: "Inscriptions", url: "/enrollments", icon: ClipboardList, roles: ["admin"], permission: "manage_enrollments", group: "formation" },
+  { title: "Émargement", url: "/attendance", icon: CheckSquare, roles: ["admin"], permission: "manage_attendance", group: "formation" },
+  { title: "E-Learning", url: "/elearning", icon: MonitorPlay, roles: ["admin"], permission: "manage_elearning", group: "formation" },
+  { title: "Listes de tâches", url: "/task-lists", icon: ListChecks, roles: ["admin"], group: "formation" },
   { title: "Portail Entreprise", url: "/enterprise-portal", icon: Building2, roles: ["enterprise"], group: "formation" },
 
-  { title: "Apprenants", url: "/trainees", icon: GraduationCap, roles: ["admin", "trainer"], permission: "manage_trainees", group: "contacts" },
+  // Learner portal sections
+  { title: "Accueil", url: "/learner-portal/dashboard", icon: Home, roles: ["trainee"], group: "formation" },
+  { title: "Formations", url: "/learner-portal/formations", icon: BookOpen, roles: ["trainee"], group: "formation" },
+  { title: "Calendrier", url: "/learner-portal/calendar", icon: CalendarCheck, roles: ["trainee"], group: "formation" },
+  { title: "Documents", url: "/learner-portal/documents", icon: FileText, roles: ["trainee"], group: "formation" },
+  { title: "Badges", url: "/learner-portal/badges", icon: Medal, roles: ["trainee"], group: "formation" },
+  { title: "Sessions", url: "/learner-portal/sessions", icon: Calendar, roles: ["trainee"], group: "formation" },
+  { title: "Signatures", url: "/learner-portal/signature", icon: PenTool, roles: ["trainee"], group: "formation" },
+  { title: "Évaluations", url: "/learner-portal/evaluations", icon: ClipboardList, roles: ["trainee"], group: "formation" },
+  { title: "Forum", url: "/learner-portal/forum", icon: MessageSquare, roles: ["trainee"], group: "communication" },
+  { title: "Classes virtuelles", url: "/learner-portal/visio", icon: VideoIcon, roles: ["trainee"], group: "formation" },
+  { title: "À propos", url: "/learner-portal/about", icon: Info, roles: ["trainee"], group: "formation" },
+
+  // Trainer portal sections
+  { title: "Mes Sessions", url: "/trainer-portal/sessions", icon: Calendar, roles: ["trainer"], group: "formation" },
+  { title: "Progression", url: "/trainer-portal/progress", icon: BarChart3, roles: ["trainer"], group: "formation" },
+  { title: "Émargement", url: "/trainer-portal/attendance", icon: CheckSquare, roles: ["trainer"], group: "formation" },
+  { title: "Évaluations", url: "/trainer-portal/evaluations", icon: Star, roles: ["trainer"], group: "formation" },
+  { title: "E-Learning", url: "/trainer-portal/elearning", icon: MonitorPlay, roles: ["trainer"], group: "formation" },
+  { title: "Documents", url: "/trainer-portal/documents", icon: FileText, roles: ["trainer"], group: "formation" },
+  { title: "Signature", url: "/trainer-portal/signature", icon: PenTool, roles: ["trainer"], group: "formation" },
+  { title: "Compétences", url: "/trainer-portal/competences", icon: Award, roles: ["trainer"], group: "formation" },
+  { title: "Notes de frais", url: "/trainer-portal/expenses", icon: Receipt, roles: ["trainer"], group: "finance" },
+  { title: "Factures", url: "/trainer-portal/invoices", icon: CreditCard, roles: ["trainer"], group: "finance" },
+
+  { title: "Apprenants", url: "/trainees", icon: GraduationCap, roles: ["admin"], permission: "manage_trainees", group: "contacts" },
   { title: "Formateurs", url: "/trainers", icon: Users, roles: ["admin"], permission: "manage_trainers", group: "contacts" },
   { title: "Entreprises", url: "/enterprises", icon: Building2, roles: ["admin"], permission: "manage_enterprises", group: "contacts" },
   { title: "Prospects", url: "/prospects", icon: UserPlus, roles: ["admin"], permission: "manage_prospects", group: "contacts" },
@@ -72,8 +99,8 @@ const allNav: NavItem[] = [
 
   { title: "Devis", url: "/quotes", icon: Receipt, roles: ["admin"], permission: "manage_quotes", group: "finance" },
   { title: "Factures", url: "/invoices", icon: CreditCard, roles: ["admin"], permission: "manage_invoices", group: "finance" },
-  { title: "Notes de frais", url: "/expense-notes", icon: Receipt, roles: ["admin", "trainer"], group: "finance" },
-  { title: "Factures formateur", url: "/trainer-invoices", icon: CreditCard, roles: ["admin", "trainer"], group: "finance" },
+  { title: "Notes de frais", url: "/expense-notes", icon: Receipt, roles: ["admin"], group: "finance" },
+  { title: "Factures formateur", url: "/trainer-invoices", icon: CreditCard, roles: ["admin"], group: "finance" },
   { title: "Rapports financiers", url: "/financial-reports", icon: BarChart3, roles: ["admin"], permission: "view_financial_reports", group: "finance" },
 
   { title: "Qualité Qualiopi", url: "/quality", icon: Star, roles: ["admin"], permission: "manage_quality_actions", group: "qualite" },
@@ -160,13 +187,16 @@ export function AppSidebar() {
         <SheetContent side="left" className="w-72 p-0 bg-sidebar">
           <SheetHeader className="p-4 border-b">
             <SheetTitle className="flex items-center gap-2">
-              <div className="w-8 h-8 flex items-center justify-center rounded-md bg-primary shrink-0">
-                <GraduationCap className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold">SO'SAFE</span>
-                <span className="text-xs text-muted-foreground">Gestion de formation</span>
-              </div>
+              <img
+                src="/logo-sosafe.png"
+                alt="SO'SAFE"
+                className="h-8 object-contain dark:hidden"
+              />
+              <img
+                src="/logo-sosafe-white.png"
+                alt="SO'SAFE"
+                className="h-8 object-contain hidden dark:block"
+              />
             </SheetTitle>
             <SheetDescription className="sr-only">Navigation principale</SheetDescription>
           </SheetHeader>
@@ -243,10 +273,17 @@ export function AppSidebar() {
         {/* Icon bar */}
         <nav className="w-16 bg-sidebar border-r flex flex-col items-center">
           {/* Logo */}
-          <Link href="/" data-testid="link-home">
-            <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-primary mt-3 mb-1 shrink-0">
-              <GraduationCap className="w-5 h-5 text-primary-foreground" />
-            </div>
+          <Link href="/" data-testid="link-home" className="mt-3 mb-1 shrink-0">
+            <img
+              src="/logo-sosafe.png"
+              alt="SO'SAFE"
+              className="w-10 h-10 object-contain dark:hidden"
+            />
+            <img
+              src="/logo-sosafe-white.png"
+              alt="SO'SAFE"
+              className="w-10 h-10 object-contain hidden dark:block"
+            />
           </Link>
 
           <div className="w-10 h-px bg-border my-2" />

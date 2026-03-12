@@ -494,7 +494,7 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
     mutationFn: () =>
       apiRequest("POST", `/api/trainers/${trainer.id}/generate-contract`, {
         type: contractType,
-        sessionId: contractSessionId || undefined,
+        sessionId: (contractSessionId && contractSessionId !== "_none") ? contractSessionId : undefined,
       }),
     onSuccess: () => {
       setContractDialogOpen(false);
@@ -583,7 +583,7 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
             <Card>
               <CardHeader><CardTitle className="text-base">Informations</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{trainer.email}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Email</span><a href={`mailto:${trainer.email}`} className="text-primary hover:underline">{trainer.email}</a></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Téléphone</span><span>{trainer.phone || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Spécialité</span><span>{trainer.specialty || "—"}</span></div>
               </CardContent>
@@ -698,7 +698,7 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
                         <SelectValue placeholder="Selectionner une session..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Aucune session</SelectItem>
+                        <SelectItem value="_none">Aucune session</SelectItem>
                         {trainerSessions?.map((s) => (
                           <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
                         ))}
@@ -1118,7 +1118,7 @@ export default function Trainers() {
                   </div>
                 )}
                 <div className="space-y-1 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /><span className="truncate">{trainer.email}</span></div>
+                  <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /><a href={`mailto:${trainer.email}`} className="truncate text-primary hover:underline">{trainer.email}</a></div>
                   {trainer.phone && (<div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /><span>{trainer.phone}</span></div>)}
                 </div>
                 {trainer.bio && (<p className="text-xs text-muted-foreground mt-2 line-clamp-2">{trainer.bio}</p>)}
