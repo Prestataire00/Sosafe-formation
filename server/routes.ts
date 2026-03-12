@@ -25,6 +25,7 @@ import {
   insertUserDocumentSchema, insertSignatureSchema,
   insertExpenseNoteSchema,
   insertTrainerInvoiceSchema,
+  insertTrainerAvailabilitySchema,
   insertTrainerCompetencySchema,
   insertProgramPrerequisiteSchema,
   insertTraineeCertificationSchema,
@@ -722,6 +723,7 @@ export async function registerRoutes(
   app.use("/api/trainer-documents", requireAuth);
   app.use("/api/trainer-invoices", requireAuth);
   app.use("/api/trainer-competencies", requireAuth);
+  app.use("/api/trainer-availabilities", requireAuth);
   app.use("/api/expense-notes", requireAuth);
 
   // Trainer routes: requireAuth for all, requirePermission only for CRUD (not portal sub-routes)
@@ -7079,6 +7081,41 @@ Le contenu doit être en français, clair et bien structuré.`;
 
   app.delete("/api/trainer-competencies/:id", async (req, res) => {
     await storage.deleteTrainerCompetency(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // TRAINER AVAILABILITIES / DISPONIBILITES
+  // ============================================================
+
+  app.get("/api/trainer-availabilities", async (req, res) => {
+    const trainerId = req.query.trainerId as string | undefined;
+    const availabilities = await storage.getTrainerAvailabilities(trainerId);
+    res.json(availabilities);
+  });
+
+  app.get("/api/trainers/:id/availabilities", async (req, res) => {
+    const availabilities = await storage.getTrainerAvailabilities(req.params.id);
+    res.json(availabilities);
+  });
+
+  app.post("/api/trainers/:id/availabilities", async (req, res) => {
+    const parsed = insertTrainerAvailabilitySchema.safeParse({ ...req.body, trainerId: req.params.id });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const availability = await storage.createTrainerAvailability(parsed.data);
+    res.status(201).json(availability);
+  });
+
+  app.patch("/api/trainer-availabilities/:id", async (req, res) => {
+    const parsed = insertTrainerAvailabilitySchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const availability = await storage.updateTrainerAvailability(req.params.id, parsed.data);
+    if (!availability) return res.status(404).json({ message: "Disponibilité non trouvée" });
+    res.json(availability);
+  });
+
+  app.delete("/api/trainer-availabilities/:id", async (req, res) => {
+    await storage.deleteTrainerAvailability(req.params.id);
     res.status(204).send();
   });
 

@@ -576,6 +576,7 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
           <TabsTrigger value="evaluations" className="gap-2"><Star className="w-4 h-4" />Évaluations</TabsTrigger>
           <TabsTrigger value="competences" className="gap-2"><Award className="w-4 h-4" />Compétences</TabsTrigger>
           <TabsTrigger value="sessions" className="gap-2"><Calendar className="w-4 h-4" />Sessions</TabsTrigger>
+          <TabsTrigger value="planning" className="gap-2"><Clock className="w-4 h-4" />Planning</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profil">
@@ -973,8 +974,251 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="planning">
+          <TrainerPlanningAdmin trainerId={trainer.id} />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// ============================================================
+// TRAINER PLANNING (Admin view)
+// ============================================================
+
+function TrainerPlanningAdmin({ trainerId }: { trainerId: string }) {
+  const { toast } = useToast();
+  const [showDialog, setShowDialog] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [formType, setFormType] = useState<"available" | "unavailable">("unavailable");
+  const [formStartDate, setFormStartDate] = useState("");
+  const [formEndDate, setFormEndDate] = useState("");
+  const [formStartTime, setFormStartTime] = useState("");
+  const [formEndTime, setFormEndTime] = useState("");
+  const [formReason, setFormReason] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+  const [formRecurrence, setFormRecurrence] = useState("none");
+
+  const { data: availabilities, isLoading } = useQuery<any[]>({
+    queryKey: [`/api/trainers/${trainerId}/availabilities`],
+    enabled: !!trainerId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("POST", `/api/trainers/${trainerId}/availabilities`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
+      toast({ title: "Disponibilité ajoutée" });
+      resetForm();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      await apiRequest("PATCH", `/api/trainer-availabilities/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
+      toast({ title: "Disponibilité modifiée" });
+      resetForm();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/trainer-availabilities/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
+      toast({ title: "Entrée supprimée" });
+    },
+  });
+
+  const resetForm = () => {
+    setShowDialog(false);
+    setEditId(null);
+    setFormType("unavailable");
+    setFormStartDate("");
+    setFormEndDate("");
+    setFormStartTime("");
+    setFormEndTime("");
+    setFormReason("");
+    setFormNotes("");
+    setFormRecurrence("none");
+  };
+
+  const openEdit = (item: any) => {
+    setEditId(item.id);
+    setFormType(item.type);
+    setFormStartDate(item.startDate);
+    setFormEndDate(item.endDate);
+    setFormStartTime(item.startTime || "");
+    setFormEndTime(item.endTime || "");
+    setFormReason(item.reason || "");
+    setFormNotes(item.notes || "");
+    setFormRecurrence(item.recurrence || "none");
+    setShowDialog(true);
+  };
+
+  const handleSubmit = () => {
+    if (!formStartDate || !formEndDate) {
+      toast({ title: "Dates requises", variant: "destructive" });
+      return;
+    }
+    const payload = {
+      type: formType,
+      startDate: formStartDate,
+      endDate: formEndDate,
+      startTime: formStartTime || null,
+      endTime: formEndTime || null,
+      reason: formReason || null,
+      notes: formNotes || null,
+      recurrence: formRecurrence,
+      createdBy: "admin",
+    };
+    if (editId) {
+      updateMutation.mutate({ id: editId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const items = availabilities || [];
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">Planning et disponibilités</CardTitle>
+        <Button size="sm" onClick={() => { resetForm(); setShowDialog(true); }}>
+          <Plus className="w-4 h-4 mr-2" /> Ajouter
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="text-center py-8"><Clock className="w-8 h-8 mx-auto animate-spin text-muted-foreground" /></div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-8">
+            <Calendar className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+            <p className="text-sm text-muted-foreground">Aucune disponibilité ou indisponibilité déclarée</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Type</TableHead>
+                <TableHead>Du</TableHead>
+                <TableHead>Au</TableHead>
+                <TableHead>Horaires</TableHead>
+                <TableHead>Motif</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item: any) => (
+                <TableRow key={item.id} className={new Date(item.endDate) < new Date() ? "opacity-50" : ""}>
+                  <TableCell>
+                    <Badge variant={item.type === "available" ? "default" : "destructive"}>
+                      {item.type === "available" ? "Disponible" : "Indisponible"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{new Date(item.startDate).toLocaleDateString("fr-FR")}</TableCell>
+                  <TableCell>{new Date(item.endDate).toLocaleDateString("fr-FR")}</TableCell>
+                  <TableCell>
+                    {item.startTime && item.endTime ? `${item.startTime} - ${item.endTime}` : "Journée entière"}
+                  </TableCell>
+                  <TableCell>{item.reason || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {item.createdBy === "trainer" ? "Formateur" : "Admin"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(item.id)}>
+                        <Trash2 className="w-3 h-3 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+
+      {/* Dialog */}
+      <Dialog open={showDialog} onOpenChange={(open) => { if (!open) resetForm(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editId ? "Modifier" : "Ajouter"} une disponibilité</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={formType} onValueChange={(v: any) => setFormType(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="available">Disponible</SelectItem>
+                  <SelectItem value="unavailable">Indisponible</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Date début</Label>
+                <Input type="date" value={formStartDate} onChange={(e) => setFormStartDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Date fin</Label>
+                <Input type="date" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Heure début (optionnel)</Label>
+                <Input type="time" value={formStartTime} onChange={(e) => setFormStartTime(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Heure fin (optionnel)</Label>
+                <Input type="time" value={formEndTime} onChange={(e) => setFormEndTime(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Récurrence</Label>
+              <Select value={formRecurrence} onValueChange={setFormRecurrence}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucune (ponctuel)</SelectItem>
+                  <SelectItem value="weekly">Chaque semaine</SelectItem>
+                  <SelectItem value="monthly">Chaque mois</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Motif</Label>
+              <Input value={formReason} onChange={(e) => setFormReason(e.target.value)} placeholder="Ex: Congés, intervention externe..." />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (optionnel)</Label>
+              <Textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} rows={2} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={resetForm}>Annuler</Button>
+              <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
+                {editId ? "Modifier" : "Ajouter"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
 

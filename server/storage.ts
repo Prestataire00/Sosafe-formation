@@ -35,6 +35,7 @@ import {
   type Signature, type InsertSignature,
   type ExpenseNote, type InsertExpenseNote,
   type TrainerInvoice, type InsertTrainerInvoice,
+  type TrainerAvailability, type InsertTrainerAvailability,
   type TrainerCompetency, type InsertTrainerCompetency,
   type ProgramPrerequisite, type InsertProgramPrerequisite,
   type TraineeCertification, type InsertTraineeCertification,
@@ -87,7 +88,7 @@ import {
   automationRules, automationLogs, organizationSettings,
   enterpriseContacts, trainerDocuments, trainerEvaluations,
   userDocuments, signatures, expenseNotes, trainerInvoices,
-  trainerCompetencies, programPrerequisites, traineeCertifications,
+  trainerCompetencies, trainerAvailabilities, programPrerequisites, traineeCertifications,
   smsTemplates, smsLogs,
   forumPosts, forumReplies, forumMutes,
   analysisComments,
@@ -481,6 +482,12 @@ export interface IStorage {
   getTrainerInvoices(trainerId: string): Promise<TrainerInvoice[]>;
   createTrainerInvoice(invoice: InsertTrainerInvoice): Promise<TrainerInvoice>;
   updateTrainerInvoice(id: string, data: Partial<InsertTrainerInvoice>): Promise<TrainerInvoice | undefined>;
+
+  // Trainer Availabilities
+  getTrainerAvailabilities(trainerId?: string): Promise<TrainerAvailability[]>;
+  createTrainerAvailability(data: InsertTrainerAvailability): Promise<TrainerAvailability>;
+  updateTrainerAvailability(id: string, data: Partial<InsertTrainerAvailability>): Promise<TrainerAvailability | undefined>;
+  deleteTrainerAvailability(id: string): Promise<void>;
 
   // Trainer Competencies
   getTrainerCompetencies(trainerId: string): Promise<TrainerCompetency[]>;
@@ -2137,6 +2144,28 @@ export class DatabaseStorage implements IStorage {
   async updateTrainerInvoice(id: string, data: Partial<InsertTrainerInvoice>): Promise<TrainerInvoice | undefined> {
     const [result] = await db.update(trainerInvoices).set({ ...data, updatedAt: new Date() } as any).where(eq(trainerInvoices.id, id)).returning();
     return result;
+  }
+
+  // ---- Trainer Availabilities ----
+  async getTrainerAvailabilities(trainerId?: string): Promise<TrainerAvailability[]> {
+    if (trainerId) {
+      return db.select().from(trainerAvailabilities).where(eq(trainerAvailabilities.trainerId, trainerId)).orderBy(desc(trainerAvailabilities.startDate));
+    }
+    return db.select().from(trainerAvailabilities).orderBy(desc(trainerAvailabilities.startDate));
+  }
+
+  async createTrainerAvailability(data: InsertTrainerAvailability): Promise<TrainerAvailability> {
+    const [result] = await db.insert(trainerAvailabilities).values(data).returning();
+    return result;
+  }
+
+  async updateTrainerAvailability(id: string, data: Partial<InsertTrainerAvailability>): Promise<TrainerAvailability | undefined> {
+    const [result] = await db.update(trainerAvailabilities).set(data as any).where(eq(trainerAvailabilities.id, id)).returning();
+    return result;
+  }
+
+  async deleteTrainerAvailability(id: string): Promise<void> {
+    await db.delete(trainerAvailabilities).where(eq(trainerAvailabilities.id, id));
   }
 
   // ---- Trainer Competencies ----

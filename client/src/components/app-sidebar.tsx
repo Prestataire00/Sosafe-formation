@@ -88,6 +88,7 @@ export const allNav: NavItem[] = [
   { title: "Documents", url: "/trainer-portal/documents", icon: FileText, roles: ["trainer"], group: "formation" },
   { title: "Signature", url: "/trainer-portal/signature", icon: PenTool, roles: ["trainer"], group: "formation" },
   { title: "Compétences", url: "/trainer-portal/competences", icon: Award, roles: ["trainer"], group: "formation" },
+  { title: "Planning", url: "/trainer-portal/planning", icon: CalendarCheck, roles: ["trainer"], group: "formation" },
   { title: "Notes de frais", url: "/trainer-portal/expenses", icon: Receipt, roles: ["trainer"], group: "finance" },
   { title: "Factures", url: "/trainer-portal/invoices", icon: CreditCard, roles: ["trainer"], group: "finance" },
 

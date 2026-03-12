@@ -1131,6 +1131,30 @@ export const trainerInvoices = pgTable("trainer_invoices", {
 // NEW TABLES - TRAINER COMPETENCIES (Qualiopi)
 // ============================================================
 
+// ============================================================
+// TRAINER AVAILABILITIES / DISPONIBILITES FORMATEURS
+// ============================================================
+
+export const trainerAvailabilities = pgTable("trainer_availabilities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  trainerId: varchar("trainer_id").notNull(),
+  type: text("type").notNull().default("unavailable"), // "available" | "unavailable"
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  startTime: text("start_time"), // "09:00" format, null = all day
+  endTime: text("end_time"),     // "17:00" format, null = all day
+  recurrence: text("recurrence"), // "none" | "weekly" | "monthly"
+  reason: text("reason"),
+  notes: text("notes"),
+  createdBy: text("created_by"), // "trainer" | "admin"
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const AVAILABILITY_TYPES = [
+  { value: "available", label: "Disponible" },
+  { value: "unavailable", label: "Indisponible" },
+] as const;
+
 export const trainerCompetencies = pgTable("trainer_competencies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   trainerId: varchar("trainer_id").notNull(),
@@ -1233,6 +1257,7 @@ export const insertUserDocumentSchema = createInsertSchema(userDocuments).omit({
 export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: true, signedAt: true });
 export const insertExpenseNoteSchema = createInsertSchema(expenseNotes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTrainerInvoiceSchema = createInsertSchema(trainerInvoices).omit({ id: true, createdAt: true, updatedAt: true, submittedAt: true });
+export const insertTrainerAvailabilitySchema = createInsertSchema(trainerAvailabilities).omit({ id: true, createdAt: true });
 export const insertTrainerCompetencySchema = createInsertSchema(trainerCompetencies).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertForumPostSchema = createInsertSchema(forumPosts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertForumReplySchema = createInsertSchema(forumReplies).omit({ id: true, createdAt: true });
@@ -1639,6 +1664,8 @@ export type InsertExpenseNote = z.infer<typeof insertExpenseNoteSchema>;
 export type ExpenseNote = typeof expenseNotes.$inferSelect;
 export type InsertTrainerInvoice = z.infer<typeof insertTrainerInvoiceSchema>;
 export type TrainerInvoice = typeof trainerInvoices.$inferSelect;
+export type InsertTrainerAvailability = z.infer<typeof insertTrainerAvailabilitySchema>;
+export type TrainerAvailability = typeof trainerAvailabilities.$inferSelect;
 export type InsertTrainerCompetency = z.infer<typeof insertTrainerCompetencySchema>;
 export type TrainerCompetency = typeof trainerCompetencies.$inferSelect;
 export type InsertForumPost = z.infer<typeof insertForumPostSchema>;
