@@ -50,6 +50,11 @@ import {
   MonitorPlay,
   Maximize2,
   Play,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  Ban,
+  Trash2,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { Session, TrainerDocument, ExpenseNote, TrainerInvoice, Program, Trainee, TrainerCompetency, SessionDate, Enrollment, ElearningModule } from "@shared/schema";
@@ -1100,15 +1105,19 @@ type SatisfactionStats = {
 // PLANNING / DISPONIBILITES TAB — Vue calendrier
 // ============================================================
 
+function formatLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function PlanningTab({ trainerId }: { trainerId: string }) {
   const { toast } = useToast();
   const today = new Date();
+  const todayStr = formatLocalDate(today);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [paintMode, setPaintMode] = useState<"available" | "unavailable" | null>(null);
-  const [reasonDialog, setReasonDialog] = useState<{ date: string; type: string; existingId?: string } | null>(null);
-  const [reason, setReason] = useState("");
+  const [addPeriodDialog, setAddPeriodDialog] = useState(false);
+  const [periodForm, setPeriodForm] = useState({ type: "available" as string, startDate: "", endDate: "", reason: "" });
 
   const { data: availabilities, isLoading } = useQuery<any[]>({
     queryKey: [`/api/trainers/${trainerId}/availabilities`],
@@ -1126,15 +1135,9 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      await apiRequest("PATCH", `/api/trainer-availabilities/${id}`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
+      setAddPeriodDialog(false);
+      setPeriodForm({ type: "available", startDate: "", endDate: "", reason: "" });
+      toast({ title: "Période ajoutée avec succès" });
     },
   });
 
@@ -1144,6 +1147,7 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/trainers/${trainerId}/availabilities`] });
+      toast({ title: "Période supprimée" });
     },
   });
 
@@ -1154,8 +1158,7 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
       const start = new Date(a.startDate + "T00:00:00");
       const end = new Date(a.endDate + "T00:00:00");
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const key = d.toISOString().split("T")[0];
-        map.set(key, { type: a.type, id: a.id, reason: a.reason });
+        map.set(formatLocalDate(d), { type: a.type, id: a.id, reason: a.reason });
       }
     }
     return map;
@@ -1168,17 +1171,43 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
       const start = new Date(s.startDate + "T00:00:00");
       const end = new Date(s.endDate + "T00:00:00");
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        map.set(d.toISOString().split("T")[0], s.title);
+        map.set(formatLocalDate(d), s.title);
       }
     }
     return map;
   }, [sessions]);
 
+  // Stats computation
+  const stats = useMemo(() => {
+    let available = 0, unavailable = 0, busy = 0;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    Array.from(dateMap.entries()).forEach(([dateStr, info]) => {
+      const d = new Date(dateStr + "T00:00:00");
+      if (d >= now) {
+        if (info.type === "available") available++;
+        else if (info.type === "unavailable") unavailable++;
+      }
+    });
+    Array.from(sessionDays.keys()).forEach((dateStr) => {
+      const d = new Date(dateStr + "T00:00:00");
+      if (d >= now) busy++;
+    });
+    return { available, unavailable, busy };
+  }, [dateMap, sessionDays]);
+
   // Calendar generation
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const firstDayOfWeek = (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7; // Monday = 0
+  const firstDayOfWeek = (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7;
   const monthName = new Date(currentYear, currentMonth).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+  // Previous month trailing days
+  const prevMonthDays = new Date(currentYear, currentMonth, 0).getDate();
+  const trailingDaysBefore = Array.from({ length: firstDayOfWeek }, (_, i) => prevMonthDays - firstDayOfWeek + 1 + i);
+  // Next month leading days
+  const totalCells = firstDayOfWeek + daysInMonth;
+  const trailingDaysAfter = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
 
   const prevMonth = () => {
     if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); }
@@ -1190,82 +1219,18 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
   };
 
   const handleCellClick = (dateStr: string) => {
-    const existing = dateMap.get(dateStr);
-
-    if (paintMode) {
-      // Quick paint mode
-      if (existing && existing.type === paintMode) {
-        // Same type: remove
-        deleteMutation.mutate(existing.id);
-        return;
-      }
-      if (existing) {
-        // Different type: switch
-        deleteMutation.mutate(existing.id);
-      }
-      if (paintMode === "unavailable") {
-        // Ask for reason
-        setReasonDialog({ date: dateStr, type: "unavailable" });
-        setReason("");
-      } else {
-        createMutation.mutate({
-          type: "available",
-          startDate: dateStr,
-          endDate: dateStr,
-          createdBy: "trainer",
-        });
-      }
-      return;
-    }
-
-    // No paint mode: show details or toggle
-    if (existing) {
-      setSelectedDate(dateStr);
-    } else {
-      setSelectedDate(dateStr);
-    }
+    setSelectedDate(selectedDate === dateStr ? null : dateStr);
   };
 
-  const handleReasonSubmit = () => {
-    if (reasonDialog) {
-      createMutation.mutate({
-        type: reasonDialog.type,
-        startDate: reasonDialog.date,
-        endDate: reasonDialog.date,
-        reason: reason || null,
-        createdBy: "trainer",
-      });
-      setReasonDialog(null);
-      setReason("");
-    }
-  };
-
-  const handleQuickSet = (type: "available" | "unavailable") => {
-    if (!selectedDate) return;
-    const existing = dateMap.get(selectedDate);
-    if (existing) {
-      deleteMutation.mutate(existing.id);
-    }
-    if (type === "unavailable") {
-      setReasonDialog({ date: selectedDate, type: "unavailable" });
-      setReason("");
-      setSelectedDate(null);
-    } else {
-      createMutation.mutate({
-        type: "available",
-        startDate: selectedDate,
-        endDate: selectedDate,
-        createdBy: "trainer",
-      });
-      setSelectedDate(null);
-    }
-  };
-
-  const handleRemove = () => {
-    if (!selectedDate) return;
-    const existing = dateMap.get(selectedDate);
-    if (existing) deleteMutation.mutate(existing.id);
-    setSelectedDate(null);
+  const handleAddPeriod = () => {
+    if (!periodForm.startDate || !periodForm.endDate) return;
+    createMutation.mutate({
+      type: periodForm.type,
+      startDate: periodForm.startDate,
+      endDate: periodForm.endDate,
+      reason: periodForm.reason || null,
+      createdBy: "trainer",
+    });
   };
 
   if (isLoading) {
@@ -1280,115 +1245,152 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
   const selectedSession = selectedDate ? sessionDays.get(selectedDate) : null;
 
   return (
-    <div className="space-y-4">
-      {/* Légende + mode peinture */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-4 rounded bg-emerald-500" />
-                <span>Disponible</span>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Mes Disponibilités</h2>
+          <p className="text-muted-foreground">Gérez vos périodes de disponibilité</p>
+        </div>
+        <Button onClick={() => { setAddPeriodDialog(true); setPeriodForm({ type: "available", startDate: "", endDate: "", reason: "" }); }}>
+          <Plus className="w-4 h-4 mr-2" />
+          Ajouter une période
+        </Button>
+      </div>
+
+      {/* Stats cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-4 rounded bg-red-500" />
-                <span>Indisponible</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-4 rounded bg-blue-500" />
-                <span>Session planifiée</span>
+              <div>
+                <p className="text-sm text-muted-foreground">Jours disponibles</p>
+                <p className="text-2xl font-bold">{stats.available}</p>
+                <p className="text-xs text-muted-foreground">jours à venir</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Mode peinture :</span>
-              <Button
-                size="sm"
-                variant={paintMode === "available" ? "default" : "outline"}
-                className={paintMode === "available" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
-                onClick={() => setPaintMode(paintMode === "available" ? null : "available")}
-              >
-                Dispo
-              </Button>
-              <Button
-                size="sm"
-                variant={paintMode === "unavailable" ? "default" : "outline"}
-                className={paintMode === "unavailable" ? "bg-red-600 hover:bg-red-700" : ""}
-                onClick={() => setPaintMode(paintMode === "unavailable" ? null : "unavailable")}
-              >
-                Indispo
-              </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <CalendarDays className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Jours occupés</p>
+                <p className="text-2xl font-bold">{stats.busy}</p>
+                <p className="text-xs text-muted-foreground">jours à venir</p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                <Ban className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Jours indisponibles</p>
+                <p className="text-2xl font-bold">{stats.unavailable}</p>
+                <p className="text-xs text-muted-foreground">jours à venir</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Calendrier */}
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={prevMonth}>
-              <ChevronDown className="w-4 h-4 rotate-90" />
-            </Button>
-            <CardTitle className="text-lg capitalize">{monthName}</CardTitle>
-            <Button variant="ghost" size="sm" onClick={nextMonth}>
-              <ChevronDown className="w-4 h-4 -rotate-90" />
-            </Button>
+            <CardTitle className="text-lg">Calendrier</CardTitle>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={prevMonth}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm font-medium capitalize min-w-[140px] text-center">{monthName}</span>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextMonth}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          {/* Légende */}
+          <div className="flex items-center gap-4 text-xs pt-2">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm bg-emerald-500" />
+              <span>Disponible</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm bg-blue-500" />
+              <span>Occupé</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm bg-red-500" />
+              <span>Indisponible</span>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {/* Jours de la semaine */}
-          <div className="grid grid-cols-7 gap-1 mb-1">
+          <div className="grid grid-cols-7 mb-1">
             {weekDays.map((d) => (
-              <div key={d} className="text-center text-xs font-medium text-muted-foreground py-1">{d}</div>
+              <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">{d}</div>
             ))}
           </div>
 
           {/* Grille du calendrier */}
-          <div className="grid grid-cols-7 gap-1">
-            {/* Cellules vides avant le 1er */}
-            {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-              <div key={`empty-${i}`} className="aspect-square" />
+          <div className="grid grid-cols-7 border-t border-l">
+            {/* Jours du mois précédent */}
+            {trailingDaysBefore.map((day) => (
+              <div key={`prev-${day}`} className="border-r border-b p-1.5 min-h-[48px] bg-muted/10">
+                <span className="text-xs text-muted-foreground/40">{day}</span>
+              </div>
             ))}
 
-            {/* Jours du mois */}
+            {/* Jours du mois en cours */}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
               const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const info = dateMap.get(dateStr);
               const session = sessionDays.get(dateStr);
-              const isToday = dateStr === today.toISOString().split("T")[0];
-              const isWeekend = ((firstDayOfWeek + i) % 7) >= 5;
+              const isToday = dateStr === todayStr;
               const isSelected = selectedDate === dateStr;
 
-              let bgClass = "bg-muted/30 hover:bg-muted/60";
-              if (info?.type === "available") bgClass = "bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-900/60";
-              if (info?.type === "unavailable") bgClass = "bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60";
-              if (isWeekend && !info) bgClass = "bg-muted/10 hover:bg-muted/30";
+              let cellBg = "";
+              if (info?.type === "available") cellBg = "bg-emerald-50 dark:bg-emerald-900/20";
+              if (info?.type === "unavailable") cellBg = "bg-red-50 dark:bg-red-900/20";
+              if (session) cellBg = "bg-blue-50 dark:bg-blue-900/20";
 
               return (
                 <button
                   key={day}
                   onClick={() => handleCellClick(dateStr)}
-                  className={`
-                    aspect-square rounded-lg flex flex-col items-center justify-center relative transition-all text-sm
-                    ${bgClass}
-                    ${isToday ? "ring-2 ring-primary ring-offset-1" : ""}
-                    ${isSelected ? "ring-2 ring-blue-500 ring-offset-1" : ""}
-                    ${paintMode ? "cursor-pointer" : "cursor-pointer"}
-                  `}
+                  className={`border-r border-b p-1.5 min-h-[48px] text-left transition-colors hover:bg-muted/40 ${cellBg} ${isSelected ? "ring-2 ring-inset ring-primary" : ""}`}
                 >
-                  <span className={`font-medium ${isToday ? "text-primary" : ""} ${info?.type === "unavailable" ? "text-red-700 dark:text-red-300" : ""} ${info?.type === "available" ? "text-emerald-700 dark:text-emerald-300" : ""}`}>
+                  <span className={`text-xs font-medium inline-flex items-center justify-center w-6 h-6 rounded-full ${isToday ? "bg-primary text-primary-foreground" : ""} ${info?.type === "unavailable" ? "text-red-600 dark:text-red-400" : ""} ${info?.type === "available" ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
                     {day}
                   </span>
-                  {session && (
-                    <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  {info && (
+                    <div className={`mt-0.5 w-full h-1 rounded-full ${info.type === "available" ? "bg-emerald-400" : "bg-red-400"}`} />
                   )}
-                  {info?.reason && (
-                    <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  {session && (
+                    <div className="mt-0.5 w-full h-1 rounded-full bg-blue-400" />
                   )}
                 </button>
               );
             })}
+
+            {/* Jours du mois suivant */}
+            {Array.from({ length: trailingDaysAfter }).map((_, i) => (
+              <div key={`next-${i}`} className="border-r border-b p-1.5 min-h-[48px] bg-muted/10">
+                <span className="text-xs text-muted-foreground/40">{i + 1}</span>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -1399,66 +1401,113 @@ function PlanningTab({ trainerId }: { trainerId: string }) {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium">
+                <p className="font-semibold">
                   {new Date(selectedDate + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                 </p>
                 {selectedInfo && (
-                  <p className="text-sm mt-1">
+                  <div className="flex items-center gap-2 mt-1">
                     <Badge variant={selectedInfo.type === "available" ? "default" : "destructive"} className={selectedInfo.type === "available" ? "bg-emerald-600" : ""}>
                       {selectedInfo.type === "available" ? "Disponible" : "Indisponible"}
                     </Badge>
-                    {selectedInfo.reason && <span className="ml-2 text-muted-foreground">— {selectedInfo.reason}</span>}
-                  </p>
+                    {selectedInfo.reason && <span className="text-sm text-muted-foreground">— {selectedInfo.reason}</span>}
+                  </div>
                 )}
-                {selectedSession && (
-                  <p className="text-sm mt-1 text-blue-600">Session : {selectedSession}</p>
-                )}
-                {!selectedInfo && !selectedSession && (
-                  <p className="text-sm text-muted-foreground mt-1">Aucun statut défini</p>
-                )}
+                {selectedSession && <p className="text-sm mt-1 text-blue-600">Session : {selectedSession}</p>}
+                {!selectedInfo && !selectedSession && <p className="text-sm text-muted-foreground mt-1">Aucun statut défini</p>}
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleQuickSet("available")}>
-                  Dispo
+              {selectedInfo && (
+                <Button size="sm" variant="outline" onClick={() => { deleteMutation.mutate(selectedInfo.id); setSelectedDate(null); }}>
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Supprimer
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => handleQuickSet("unavailable")}>
-                  Indispo
-                </Button>
-                {selectedInfo && (
-                  <Button size="sm" variant="outline" onClick={handleRemove}>
-                    Effacer
-                  </Button>
-                )}
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Dialog motif indisponibilité */}
-      <Dialog open={!!reasonDialog} onOpenChange={(open) => { if (!open) setReasonDialog(null); }}>
+      {/* Liste des périodes */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Périodes enregistrées</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(!availabilities || availabilities.length === 0) ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CalendarDays className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p>Aucune période de disponibilité enregistrée</p>
+              <Button variant="outline" className="mt-3" onClick={() => setAddPeriodDialog(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Ajouter une période
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {availabilities.map((a: any) => (
+                <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${a.type === "available" ? "bg-emerald-500" : "bg-red-500"}`} />
+                    <div>
+                      <p className="text-sm font-medium">
+                        {new Date(a.startDate + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                        {a.startDate !== a.endDate && ` → ${new Date(a.endDate + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {a.type === "available" ? "Disponible" : "Indisponible"}
+                        {a.reason && ` — ${a.reason}`}
+                      </p>
+                    </div>
+                  </div>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => deleteMutation.mutate(a.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dialog ajouter une période */}
+      <Dialog open={addPeriodDialog} onOpenChange={setAddPeriodDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Motif d'indisponibilité</DialogTitle>
+            <DialogTitle>Ajouter une période</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {reasonDialog && new Date(reasonDialog.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
-            </p>
             <div className="space-y-2">
-              <Label>Motif (optionnel)</Label>
-              <Input
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Ex: Congés, RDV médical, formation personnelle..."
-                autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") handleReasonSubmit(); }}
-              />
+              <Label>Type</Label>
+              <Select value={periodForm.type} onValueChange={(v) => setPeriodForm({ ...periodForm, type: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="available">Disponible</SelectItem>
+                  <SelectItem value="unavailable">Indisponible</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Date de début</Label>
+                <Input type="date" value={periodForm.startDate} onChange={(e) => setPeriodForm({ ...periodForm, startDate: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Date de fin</Label>
+                <Input type="date" value={periodForm.endDate} onChange={(e) => setPeriodForm({ ...periodForm, endDate: e.target.value })} />
+              </div>
+            </div>
+            {periodForm.type === "unavailable" && (
+              <div className="space-y-2">
+                <Label>Motif (optionnel)</Label>
+                <Input value={periodForm.reason} onChange={(e) => setPeriodForm({ ...periodForm, reason: e.target.value })} placeholder="Ex: Congés, RDV médical..." />
+              </div>
+            )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setReasonDialog(null)}>Annuler</Button>
-              <Button variant="destructive" onClick={handleReasonSubmit}>
-                Marquer indisponible
+              <Button variant="outline" onClick={() => setAddPeriodDialog(false)}>Annuler</Button>
+              <Button onClick={handleAddPeriod} disabled={!periodForm.startDate || !periodForm.endDate || createMutation.isPending}>
+                {createMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                Ajouter
               </Button>
             </div>
           </div>
