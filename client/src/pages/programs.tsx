@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,7 @@ import {
   Loader2,
   ShieldCheck,
   AlertTriangle,
+  Upload,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -788,6 +790,7 @@ export default function Programs() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editProgram, setEditProgram] = useState<Program | undefined>();
   const [viewProgram, setViewProgram] = useState<Program | undefined>();
   const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
@@ -917,6 +920,10 @@ export default function Programs() {
             >
               <FileDown className="w-4 h-4 mr-2" />
               Catalogue PDF
+            </Button>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Importer CSV
             </Button>
             <Button onClick={() => { setEditProgram(undefined); setDialogOpen(true); }} data-testid="button-create-program">
               <Plus className="w-4 h-4 mr-2" />
@@ -1187,6 +1194,23 @@ export default function Programs() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CSVImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityType="programs"
+        entityLabel="formations"
+        queryKey="/api/programs"
+        requiredFields={["Titre"]}
+        exampleColumns={[
+          { header: "Titre", example: "Formation SST" },
+          { header: "Durée", example: "14" },
+          { header: "Prix", example: "350" },
+          { header: "Description", example: "Formation aux premiers secours" },
+          { header: "Objectifs", example: "Savoir porter secours" },
+          { header: "Modalité", example: "presentiel" },
+        ]}
+      />
     </PageLayout>
   );
 }

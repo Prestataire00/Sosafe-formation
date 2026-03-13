@@ -46,6 +46,7 @@ import {
   Users,
   FileText,
   ClipboardList,
+  Upload,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
@@ -645,6 +647,7 @@ export default function Enterprises() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editEnterprise, setEditEnterprise] = useState<Enterprise | undefined>();
   const [viewEnterprise, setViewEnterprise] = useState<Enterprise | undefined>();
+  const [importOpen, setImportOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: enterprises, isLoading } = useQuery<Enterprise[]>({
@@ -699,10 +702,16 @@ export default function Enterprises() {
         title="Entreprises"
         subtitle="Gérez vos entreprises clientes"
         actions={
-          <Button onClick={() => { setEditEnterprise(undefined); setDialogOpen(true); }} data-testid="button-create-enterprise">
-            <Plus className="w-4 h-4 mr-2" />
-            Ajouter une entreprise
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Importer CSV
+            </Button>
+            <Button onClick={() => { setEditEnterprise(undefined); setDialogOpen(true); }} data-testid="button-create-enterprise">
+              <Plus className="w-4 h-4 mr-2" />
+              Ajouter une entreprise
+            </Button>
+          </div>
         }
       />
 
@@ -809,6 +818,24 @@ export default function Enterprises() {
           />
         </DialogContent>
       </Dialog>
+
+      <CSVImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityType="enterprises"
+        entityLabel="entreprises"
+        queryKey="/api/enterprises"
+        requiredFields={["Nom"]}
+        exampleColumns={[
+          { header: "Nom", example: "ACME SAS" },
+          { header: "SIRET", example: "12345678901234" },
+          { header: "Adresse", example: "10 rue de la Paix" },
+          { header: "Ville", example: "Paris" },
+          { header: "Code postal", example: "75001" },
+          { header: "Email", example: "contact@acme.fr" },
+          { header: "Téléphone", example: "0145678900" },
+        ]}
+      />
     </PageLayout>
   );
 }

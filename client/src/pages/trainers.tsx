@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +51,7 @@ import {
   XCircle,
   Clock,
   Download,
+  Upload,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
@@ -1347,6 +1349,7 @@ function TrainerPlanningAdmin({ trainerId }: { trainerId: string }) {
 export default function Trainers() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editTrainer, setEditTrainer] = useState<Trainer | undefined>();
   const [viewTrainer, setViewTrainer] = useState<Trainer | undefined>();
   const { toast } = useToast();
@@ -1404,10 +1407,16 @@ export default function Trainers() {
         title="Formateurs"
         subtitle="Gérez vos formateurs et intervenants"
         actions={
-          <Button onClick={() => { setEditTrainer(undefined); setDialogOpen(true); }} data-testid="button-create-trainer">
-            <Plus className="w-4 h-4 mr-2" />
-            Ajouter un formateur
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Importer CSV
+            </Button>
+            <Button onClick={() => { setEditTrainer(undefined); setDialogOpen(true); }} data-testid="button-create-trainer">
+              <Plus className="w-4 h-4 mr-2" />
+              Ajouter un formateur
+            </Button>
+          </div>
         }
       />
 
@@ -1500,6 +1509,22 @@ export default function Trainers() {
           />
         </DialogContent>
       </Dialog>
+
+      <CSVImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityType="trainers"
+        entityLabel="formateurs"
+        queryKey="/api/trainers"
+        requiredFields={["Prénom", "Nom", "Email"]}
+        exampleColumns={[
+          { header: "Prénom", example: "Marie" },
+          { header: "Nom", example: "Martin" },
+          { header: "Email", example: "marie@example.com" },
+          { header: "Téléphone", example: "0612345678" },
+          { header: "Spécialité", example: "Sécurité incendie" },
+        ]}
+      />
     </PageLayout>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, uploadFile } from "@/lib/queryClient";
+import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ import {
   ExternalLink,
   LayoutGrid,
   List,
+  Upload,
 } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -771,6 +773,7 @@ export default function Trainees() {
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
   const [viewMode, setViewMode] = useState<"list" | "trombinoscope">("list");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editTrainee, setEditTrainee] = useState<Trainee | undefined>();
   const { toast } = useToast();
 
@@ -898,6 +901,10 @@ export default function Trainees() {
               columns={exportColumns}
               filename="stagiaires"
             />
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Importer CSV
+            </Button>
             <Button
               onClick={() => { setEditTrainee(undefined); setDialogOpen(true); }}
               data-testid="button-create-trainee"
@@ -1092,6 +1099,23 @@ export default function Trainees() {
           )}
         </DialogContent>
       </Dialog>
+
+      <CSVImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityType="trainees"
+        entityLabel="stagiaires"
+        queryKey="/api/trainees"
+        requiredFields={["Prénom", "Nom", "Email"]}
+        exampleColumns={[
+          { header: "Prénom", example: "Jean" },
+          { header: "Nom", example: "Dupont" },
+          { header: "Email", example: "jean@example.com" },
+          { header: "Téléphone", example: "0612345678" },
+          { header: "Entreprise", example: "ACME" },
+          { header: "Ville", example: "Paris" },
+        ]}
+      />
     </PageLayout>
   );
 }

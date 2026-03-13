@@ -9421,5 +9421,269 @@ Le contenu doit être en français, clair et bien structuré.`;
     }
   });
 
+  // ============================================================
+  // CSV IMPORT
+  // ============================================================
+
+  function parseCSV(text: string): Record<string, string>[] {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+
+    // Parse header - handle quoted fields
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if ((ch === ',' || ch === ';') && !inQuotes) {
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const headers = parseLine(lines[0]).map(h => h.replace(/^\uFEFF/, ""));
+    const rows: Record<string, string>[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseLine(lines[i]);
+      if (values.every(v => !v)) continue;
+      const row: Record<string, string> = {};
+      headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  // Column name mapping: Digiforma CSV headers -> our schema fields
+  const COLUMN_MAPPINGS: Record<string, Record<string, string>> = {
+    trainees: {
+      "prénom": "firstName", "prenom": "firstName", "firstname": "firstName", "first_name": "firstName", "nom de naissance": "firstName",
+      "nom": "lastName", "lastname": "lastName", "last_name": "lastName", "nom de famille": "lastName",
+      "email": "email", "e-mail": "email", "mail": "email", "courriel": "email",
+      "téléphone": "phone", "telephone": "phone", "phone": "phone", "tel": "phone", "portable": "phone",
+      "entreprise": "company", "société": "company", "societe": "company", "company": "company",
+      "civilité": "civility", "civilite": "civility", "civility": "civility",
+      "date de naissance": "dateOfBirth", "birthdate": "dateOfBirth", "date_of_birth": "dateOfBirth",
+      "adresse": "address", "address": "address",
+      "ville": "city", "city": "city",
+      "code postal": "postalCode", "cp": "postalCode", "postal_code": "postalCode", "zipcode": "postalCode",
+      "statut": "status", "status": "status",
+    },
+    trainers: {
+      "prénom": "firstName", "prenom": "firstName", "firstname": "firstName", "first_name": "firstName",
+      "nom": "lastName", "lastname": "lastName", "last_name": "lastName",
+      "email": "email", "e-mail": "email", "mail": "email",
+      "téléphone": "phone", "telephone": "phone", "phone": "phone", "tel": "phone",
+      "spécialité": "specialty", "specialite": "specialty", "specialty": "specialty", "domaine": "specialty",
+      "bio": "bio", "biographie": "bio",
+      "statut": "status", "status": "status",
+    },
+    programs: {
+      "titre": "title", "title": "title", "nom": "title", "intitulé": "title", "intitule": "title", "name": "title",
+      "description": "description",
+      "durée": "duration", "duree": "duration", "duration": "duration", "durée (heures)": "duration", "nombre d'heures": "duration",
+      "prix": "price", "price": "price", "tarif": "price", "coût": "price", "cout": "price",
+      "niveau": "level", "level": "level",
+      "objectifs": "objectives", "objectives": "objectives",
+      "prérequis": "prerequisites", "prerequis": "prerequisites", "prerequisites": "prerequisites",
+      "modalité": "modality", "modalite": "modality", "modality": "modality",
+      "statut": "status", "status": "status",
+      "public visé": "targetAudience", "public cible": "targetAudience", "target_audience": "targetAudience",
+      "contenu": "programContent", "contenu pédagogique": "programContent",
+    },
+    sessions: {
+      "titre": "title", "title": "title", "nom": "title", "intitulé": "title", "name": "title",
+      "date de début": "startDate", "date début": "startDate", "start_date": "startDate", "startdate": "startDate", "début": "startDate",
+      "date de fin": "endDate", "date fin": "endDate", "end_date": "endDate", "enddate": "endDate", "fin": "endDate",
+      "lieu": "location", "location": "location", "site": "location",
+      "adresse": "locationAddress", "address": "locationAddress",
+      "salle": "locationRoom", "room": "locationRoom",
+      "modalité": "modality", "modalite": "modality", "modality": "modality",
+      "max participants": "maxParticipants", "places": "maxParticipants", "capacité": "maxParticipants",
+      "statut": "status", "status": "status",
+      "notes": "notes",
+    },
+    enterprises: {
+      "nom": "name", "name": "name", "raison sociale": "name", "dénomination": "name",
+      "siret": "siret",
+      "adresse": "address", "address": "address",
+      "ville": "city", "city": "city",
+      "code postal": "postalCode", "cp": "postalCode", "postal_code": "postalCode", "zipcode": "postalCode",
+      "contact": "contactName", "nom du contact": "contactName", "contact_name": "contactName",
+      "email contact": "contactEmail", "contact_email": "contactEmail",
+      "téléphone contact": "contactPhone", "contact_phone": "contactPhone",
+      "email": "email", "e-mail": "email",
+      "téléphone": "phone", "telephone": "phone", "phone": "phone",
+      "secteur": "sector", "sector": "sector",
+      "forme juridique": "formatJuridique", "format_juridique": "formatJuridique",
+      "tva": "tvaNumber", "numéro tva": "tvaNumber",
+      "statut": "status", "status": "status",
+    },
+  };
+
+  function mapRow(row: Record<string, string>, entityType: string): Record<string, any> {
+    const mapping = COLUMN_MAPPINGS[entityType] || {};
+    const mapped: Record<string, any> = {};
+    for (const [csvCol, value] of Object.entries(row)) {
+      const normalizedCol = csvCol.toLowerCase().trim();
+      const schemaField = mapping[normalizedCol];
+      if (schemaField && value) {
+        mapped[schemaField] = value;
+      }
+    }
+    return mapped;
+  }
+
+  app.post("/api/import/preview", requireAuth, requireRole("admin"), (req, res) => {
+    let csvText = "";
+    let entityType = "";
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+
+    busboy.on("field", (name: string, val: string) => {
+      if (name === "entityType") entityType = val;
+    });
+
+    busboy.on("file", (_name: string, file: any) => {
+      const chunks: Buffer[] = [];
+      file.on("data", (chunk: Buffer) => chunks.push(chunk));
+      file.on("end", () => { csvText = Buffer.concat(chunks).toString("utf-8"); });
+    });
+
+    busboy.on("finish", () => {
+      try {
+        const rows = parseCSV(csvText);
+        if (rows.length === 0) {
+          res.status(400).json({ message: "Fichier CSV vide ou invalide" });
+          return;
+        }
+        const headers = Object.keys(rows[0]);
+        const mapping = COLUMN_MAPPINGS[entityType] || {};
+
+        // Show column mapping preview
+        const columnMapping = headers.map(h => ({
+          csvColumn: h,
+          mappedTo: mapping[h.toLowerCase().trim()] || null,
+        }));
+
+        const preview = rows.slice(0, 5).map(r => mapRow(r, entityType));
+        const totalRows = rows.length;
+
+        res.json({ headers, columnMapping, preview, totalRows });
+      } catch (error: any) {
+        res.status(400).json({ message: "Erreur de parsing CSV: " + error.message });
+      }
+    });
+
+    req.pipe(busboy);
+  });
+
+  app.post("/api/import/execute", requireAuth, requireRole("admin"), (req, res) => {
+    let csvText = "";
+    let entityType = "";
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+
+    busboy.on("field", (name: string, val: string) => {
+      if (name === "entityType") entityType = val;
+    });
+
+    busboy.on("file", (_name: string, file: any) => {
+      const chunks: Buffer[] = [];
+      file.on("data", (chunk: Buffer) => chunks.push(chunk));
+      file.on("end", () => { csvText = Buffer.concat(chunks).toString("utf-8"); });
+    });
+
+    busboy.on("finish", async () => {
+      try {
+        const rows = parseCSV(csvText);
+        if (rows.length === 0) {
+          res.status(400).json({ message: "Fichier CSV vide" });
+          return;
+        }
+
+        let imported = 0;
+        const errors: string[] = [];
+
+        for (let i = 0; i < rows.length; i++) {
+          const mapped = mapRow(rows[i], entityType);
+          try {
+            switch (entityType) {
+              case "trainees": {
+                if (!mapped.firstName || !mapped.lastName || !mapped.email) {
+                  errors.push(`Ligne ${i + 2}: prénom, nom et email requis`);
+                  continue;
+                }
+                mapped.status = mapped.status || "active";
+                await storage.createTrainee(mapped as any);
+                imported++;
+                break;
+              }
+              case "trainers": {
+                if (!mapped.firstName || !mapped.lastName || !mapped.email) {
+                  errors.push(`Ligne ${i + 2}: prénom, nom et email requis`);
+                  continue;
+                }
+                mapped.status = mapped.status || "active";
+                await storage.createTrainer(mapped as any);
+                imported++;
+                break;
+              }
+              case "programs": {
+                if (!mapped.title) {
+                  errors.push(`Ligne ${i + 2}: titre requis`);
+                  continue;
+                }
+                mapped.status = mapped.status || "active";
+                mapped.duration = mapped.duration ? parseInt(mapped.duration) || null : null;
+                mapped.price = mapped.price ? parseFloat(mapped.price.replace(/[^\d.,]/g, "").replace(",", ".")) || null : null;
+                await storage.createProgram(mapped as any);
+                imported++;
+                break;
+              }
+              case "sessions": {
+                if (!mapped.title || !mapped.startDate || !mapped.endDate) {
+                  errors.push(`Ligne ${i + 2}: titre, date début et date fin requis`);
+                  continue;
+                }
+                mapped.status = mapped.status || "scheduled";
+                mapped.maxParticipants = mapped.maxParticipants ? parseInt(mapped.maxParticipants) || 12 : 12;
+                await storage.createSession(mapped as any);
+                imported++;
+                break;
+              }
+              case "enterprises": {
+                if (!mapped.name) {
+                  errors.push(`Ligne ${i + 2}: nom requis`);
+                  continue;
+                }
+                mapped.status = mapped.status || "active";
+                await storage.createEnterprise(mapped as any);
+                imported++;
+                break;
+              }
+              default:
+                errors.push(`Type d'entité inconnu: ${entityType}`);
+            }
+          } catch (error: any) {
+            errors.push(`Ligne ${i + 2}: ${error.message || "Erreur inconnue"}`);
+          }
+        }
+
+        res.json({ imported, total: rows.length, errors });
+      } catch (error: any) {
+        res.status(500).json({ message: "Erreur lors de l'import: " + error.message });
+      }
+    });
+
+    req.pipe(busboy);
+  });
+
   return httpServer;
 }

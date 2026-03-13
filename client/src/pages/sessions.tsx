@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,6 +61,7 @@ import {
   Check,
   Copy,
   Clock,
+  Upload,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -819,6 +821,7 @@ export default function Sessions() {
   const [trombiSessionId, setTrombiSessionId] = useState<string | null>(null);
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
   const { toast } = useToast();
 
@@ -1096,6 +1099,10 @@ export default function Sessions() {
               ]}
               filename="sessions"
             />
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Importer CSV
+            </Button>
             <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
               <Plus className="w-4 h-4 mr-2" />
               Nouvelle session
@@ -1301,6 +1308,22 @@ export default function Sessions() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <CSVImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityType="sessions"
+        entityLabel="sessions"
+        queryKey="/api/sessions"
+        requiredFields={["Titre", "Date début", "Date fin"]}
+        exampleColumns={[
+          { header: "Titre", example: "SST - Mars 2026" },
+          { header: "Date de début", example: "2026-03-15" },
+          { header: "Date de fin", example: "2026-03-16" },
+          { header: "Lieu", example: "Paris" },
+          { header: "Max participants", example: "12" },
+          { header: "Modalité", example: "presentiel" },
+        ]}
+      />
     </PageLayout>
   );
 }
