@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import * as XLSX from "xlsx";
 import { storage } from "./storage";
 import { wrapWithBranding, applyBranding } from "./document-utils";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole, requirePermission } from "./auth";
@@ -9429,7 +9430,6 @@ Le contenu doit être en français, clair et bien structuré.`;
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
 
-    // Parse header - handle quoted fields
     const parseLine = (line: string): string[] => {
       const result: string[] = [];
       let current = "";
@@ -9460,6 +9460,31 @@ Le contenu doit être en français, clair et bien structuré.`;
       rows.push(row);
     }
     return rows;
+  }
+
+  function parseXLSX(buffer: Buffer): Record<string, string>[] {
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) return [];
+    const sheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+    // Convert all values to strings
+    return jsonData.map(row => {
+      const strRow: Record<string, string> = {};
+      for (const key of Object.keys(row)) {
+        strRow[key] = String(row[key] ?? "");
+      }
+      return strRow;
+    });
+  }
+
+  function parseFile(buffer: Buffer, filename: string): Record<string, string>[] {
+    const ext = (filename || "").toLowerCase();
+    if (ext.endsWith(".xlsx") || ext.endsWith(".xls")) {
+      return parseXLSX(buffer);
+    }
+    // CSV / TXT
+    return parseCSV(buffer.toString("utf-8"));
   }
 
   // Column name mapping: Digiforma CSV headers -> our schema fields
@@ -9543,31 +9568,32 @@ Le contenu doit être en français, clair et bien structuré.`;
   }
 
   app.post("/api/import/preview", requireAuth, requireRole("admin"), (req, res) => {
-    let csvText = "";
+    let fileBuffer: Buffer = Buffer.alloc(0);
+    let fileName = "";
     let entityType = "";
-    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 
     busboy.on("field", (name: string, val: string) => {
       if (name === "entityType") entityType = val;
     });
 
-    busboy.on("file", (_name: string, file: any) => {
+    busboy.on("file", (_name: string, file: any, info: any) => {
+      fileName = info?.filename || "";
       const chunks: Buffer[] = [];
       file.on("data", (chunk: Buffer) => chunks.push(chunk));
-      file.on("end", () => { csvText = Buffer.concat(chunks).toString("utf-8"); });
+      file.on("end", () => { fileBuffer = Buffer.concat(chunks); });
     });
 
     busboy.on("finish", () => {
       try {
-        const rows = parseCSV(csvText);
+        const rows = parseFile(fileBuffer, fileName);
         if (rows.length === 0) {
-          res.status(400).json({ message: "Fichier CSV vide ou invalide" });
+          res.status(400).json({ message: "Fichier vide ou invalide" });
           return;
         }
         const headers = Object.keys(rows[0]);
         const mapping = COLUMN_MAPPINGS[entityType] || {};
 
-        // Show column mapping preview
         const columnMapping = headers.map(h => ({
           csvColumn: h,
           mappedTo: mapping[h.toLowerCase().trim()] || null,
@@ -9578,7 +9604,7 @@ Le contenu doit être en français, clair et bien structuré.`;
 
         res.json({ headers, columnMapping, preview, totalRows });
       } catch (error: any) {
-        res.status(400).json({ message: "Erreur de parsing CSV: " + error.message });
+        res.status(400).json({ message: "Erreur de parsing: " + error.message });
       }
     });
 
@@ -9586,25 +9612,27 @@ Le contenu doit être en français, clair et bien structuré.`;
   });
 
   app.post("/api/import/execute", requireAuth, requireRole("admin"), (req, res) => {
-    let csvText = "";
+    let fileBuffer: Buffer = Buffer.alloc(0);
+    let fileName = "";
     let entityType = "";
-    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+    const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 
     busboy.on("field", (name: string, val: string) => {
       if (name === "entityType") entityType = val;
     });
 
-    busboy.on("file", (_name: string, file: any) => {
+    busboy.on("file", (_name: string, file: any, info: any) => {
+      fileName = info?.filename || "";
       const chunks: Buffer[] = [];
       file.on("data", (chunk: Buffer) => chunks.push(chunk));
-      file.on("end", () => { csvText = Buffer.concat(chunks).toString("utf-8"); });
+      file.on("end", () => { fileBuffer = Buffer.concat(chunks); });
     });
 
     busboy.on("finish", async () => {
       try {
-        const rows = parseCSV(csvText);
+        const rows = parseFile(fileBuffer, fileName);
         if (rows.length === 0) {
-          res.status(400).json({ message: "Fichier CSV vide" });
+          res.status(400).json({ message: "Fichier vide" });
           return;
         }
 

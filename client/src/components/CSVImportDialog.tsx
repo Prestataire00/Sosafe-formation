@@ -150,7 +150,7 @@ export function CSVImportDialog({
         {step === "upload" && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Importez vos {entityLabel} depuis un fichier CSV (séparateur virgule ou point-virgule).
+              Importez vos {entityLabel} depuis un fichier CSV ou Excel (.xlsx).
             </p>
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -176,12 +176,12 @@ export function CSVImportDialog({
                 {file ? file.name : "Cliquez pour sélectionner un fichier CSV"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Format CSV, max 5 Mo
+                Formats : CSV, Excel (.xlsx, .xls) — max 10 Mo
               </p>
               <input
                 ref={fileRef}
                 type="file"
-                accept=".csv,.txt"
+                accept=".csv,.txt,.xlsx,.xls"
                 className="hidden"
                 onChange={handleFileChange}
               />
