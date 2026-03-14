@@ -86,7 +86,7 @@ function buildBlockTypeInstructions(blockTypes: string[]): string {
   const instructions: string[] = [];
 
   if (blockTypes.includes("text")) {
-    instructions.push(`- Blocs "text" : reprends le contenu du document source de maniere TRES detaillee et pedagogique, SANS le resumer. Chaque bloc texte doit faire au MINIMUM 600 mots (1000+ mots pour l'introduction et les blocs principaux). Inclus : une introduction claire et substantielle, des explications approfondies avec contexte historique ou reglementaire quand pertinent, des exemples concrets et realistes issus du terrain, des analogies parlantes, des listes a puces detaillees (avec des tirets -, pas des asterisques), des encadres "A retenir" avec les points essentiels, des mises en garde "Attention" avec les erreurs courantes, des cas pratiques illustratifs. Structure avec des sous-titres en balises <h3> ou <h4> et des paragraphes bien developpes separes par <br/><br/>. Utilise <strong> pour le gras et <em> pour l'italique. Le champ "content" contient le texte complet en HTML. NE PAS faire de contenu superficiel ou trop court. NE PAS utiliser * ni #.`);
+    instructions.push(`- Blocs "text" : reprends le contenu du document source de maniere TRES detaillee et pedagogique, SANS le resumer. Chaque bloc texte doit faire au MINIMUM 600 mots (1000+ mots pour l'introduction et les blocs principaux). Ecris UNIQUEMENT des phrases et des paragraphes en texte brut. Pas de balises HTML, pas de caracteres speciaux de formatage. Separe les paragraphes par un simple saut de ligne. Inclus : une introduction claire et substantielle, des explications approfondies avec contexte historique ou reglementaire quand pertinent, des exemples concrets et realistes issus du terrain, des analogies parlantes, des cas pratiques illustratifs. Ecris de maniere fluide et naturelle, comme un cours magistral transcrit. Le champ "content" contient le texte complet en phrases. NE PAS faire de contenu superficiel ou trop court.`);
   }
   if (blockTypes.includes("quiz")) {
     instructions.push(`- Blocs "quiz" : genere 8 a 12 questions QCM a 4 options. Une seule bonne reponse par question. Varie les types : definitions, mises en situation professionnelle, analyse de cas, vrai/faux reformule en QCM, questions de reflexion, application pratique. Les questions doivent etre substantielles et pousser a la reflexion, pas juste de la memorisation. Chaque question doit avoir un contexte ou une mise en situation.`);
@@ -202,11 +202,11 @@ ${hasSimulation ? "- Les simulations doivent etre directement liees au contenu d
   return `Tu es un expert en ingenierie pedagogique. A partir du contenu de cours suivant, cree un parcours e-learning structure et interactif.
 
 IMPORTANT — MISE EN FORME :
-- N'utilise JAMAIS les caracteres * (asterisque) ni # (diese) dans le contenu genere
-- Pour mettre en valeur un mot ou une phrase, utilise des balises HTML : <strong>texte en gras</strong>, <em>texte en italique</em>
-- Pour les listes, utilise des tirets (-) ou des numeros (1. 2. 3.)
-- Pour les titres dans le contenu texte, utilise des balises <h3> ou <h4>
-- Separe les paragraphes par des retours a la ligne (<br/><br/>)
+- Ecris UNIQUEMENT du texte brut : des phrases et des paragraphes. Rien d'autre.
+- N'utilise JAMAIS de caracteres speciaux de formatage : pas de * (asterisque), pas de # (diese), pas de balises HTML (<strong>, <em>, <h3>, <br/>, etc.), pas de markdown
+- Separe les paragraphes par un simple saut de ligne (\\n\\n)
+- Pas de listes a puces, pas de tirets en debut de ligne, pas de numerotation. Ecris tout sous forme de phrases completes dans des paragraphes fluides
+- Le texte doit se lire comme un cours magistral : naturel, detaille, pedagogique
 
 IMPORTANT — NIVEAU DE DETAIL :
 - NE RESUME PAS et NE SYNTHETISE PAS le document source. Tu dois REPRENDRE et DEVELOPPER le contenu en detail
@@ -245,7 +245,7 @@ REGLES :
 - Les quiz doivent avoir exactement 4 options par question
 - correctAnswer est l'index (0-3) de la bonne reponse
 - Le contenu doit etre en francais
-- JAMAIS de caracteres * ni # dans le contenu — utilise HTML (<strong>, <em>, <h3>, <h4>, <br/>) pour la mise en forme
+- JAMAIS de caracteres * ni # ni balises HTML dans le contenu — uniquement du texte brut en phrases et paragraphes
 - Ne resume pas le document, reprends-le en detail et enrichis-le
 - Reponds UNIQUEMENT avec le JSON, sans texte avant ou apres`;
 }
