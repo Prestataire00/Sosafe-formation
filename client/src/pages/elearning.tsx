@@ -3612,8 +3612,8 @@ export default function Elearning() {
               <div className="grid grid-cols-3 gap-2">
                 {[
                   { value: "court", label: "Court", desc: "~15 min (3-5 blocs)", icon: <Zap className="w-5 h-5" /> },
-                  { value: "moyen", label: "Moyen", desc: "~30 min (5-8 blocs)", icon: <Timer className="w-5 h-5" /> },
-                  { value: "long", label: "Long", desc: "~1h (8-12 blocs)", icon: <Layers className="w-5 h-5" /> },
+                  { value: "moyen", label: "Moyen", desc: "~45-60 min (8-12 blocs)", icon: <Timer className="w-5 h-5" /> },
+                  { value: "long", label: "Long", desc: "~1h30-2h (12-18 blocs)", icon: <Layers className="w-5 h-5" /> },
                 ].map((opt) => (
                   <button
                     key={opt.value}

@@ -61,8 +61,8 @@ export type CourseDuration = "court" | "moyen" | "long";
 
 const DURATION_CONFIG: Record<CourseDuration, { min: number; max: number; label: string }> = {
   court: { min: 3, max: 5, label: "court (15 min)" },
-  moyen: { min: 5, max: 8, label: "moyen (30 min)" },
-  long: { min: 8, max: 12, label: "long (45-60 min)" },
+  moyen: { min: 8, max: 12, label: "moyen (45-60 min)" },
+  long: { min: 12, max: 18, label: "long (1h30-2h)" },
 };
 
 const ALL_BLOCK_TYPES = ["text", "quiz", "flashcard", "scenario", "simulation"] as const;
@@ -86,10 +86,10 @@ function buildBlockTypeInstructions(blockTypes: string[]): string {
   const instructions: string[] = [];
 
   if (blockTypes.includes("text")) {
-    instructions.push(`- Blocs "text" : reformule le contenu de maniere TRES detaillee et pedagogique. Chaque bloc texte doit faire au minimum 400 mots. Inclus : une introduction claire, des explications approfondies, des exemples concrets et realistes, des analogies, des listes a puces, des encadres "A retenir", des mises en garde "Attention". Structure avec des sous-titres en gras. Le champ "content" contient le texte complet.`);
+    instructions.push(`- Blocs "text" : reprends le contenu du document source de maniere TRES detaillee et pedagogique, SANS le resumer. Chaque bloc texte doit faire au MINIMUM 600 mots (1000+ mots pour l'introduction et les blocs principaux). Inclus : une introduction claire et substantielle, des explications approfondies avec contexte historique ou reglementaire quand pertinent, des exemples concrets et realistes issus du terrain, des analogies parlantes, des listes a puces detaillees (avec des tirets -, pas des asterisques), des encadres "A retenir" avec les points essentiels, des mises en garde "Attention" avec les erreurs courantes, des cas pratiques illustratifs. Structure avec des sous-titres en balises <h3> ou <h4> et des paragraphes bien developpes separes par <br/><br/>. Utilise <strong> pour le gras et <em> pour l'italique. Le champ "content" contient le texte complet en HTML. NE PAS faire de contenu superficiel ou trop court. NE PAS utiliser * ni #.`);
   }
   if (blockTypes.includes("quiz")) {
-    instructions.push(`- Blocs "quiz" : genere 5 a 8 questions QCM a 4 options. Une seule bonne reponse par question. Varie les types : definitions, mises en situation professionnelle, analyse de cas, vrai/faux reformule en QCM, questions de reflexion. Les questions doivent etre substantielles et pousser a la reflexion, pas juste de la memorisation.`);
+    instructions.push(`- Blocs "quiz" : genere 8 a 12 questions QCM a 4 options. Une seule bonne reponse par question. Varie les types : definitions, mises en situation professionnelle, analyse de cas, vrai/faux reformule en QCM, questions de reflexion, application pratique. Les questions doivent etre substantielles et pousser a la reflexion, pas juste de la memorisation. Chaque question doit avoir un contexte ou une mise en situation.`);
   }
   if (blockTypes.includes("flashcard")) {
     instructions.push(`- Blocs "flashcard" : genere 6 a 10 cartes recto/verso avec les concepts cles. Le recto pose une question ou donne un concept, le verso donne une explication detaillee (pas juste un mot). Utilise des formulations variees : definitions, exemples, cas pratiques, comparaisons.`);
@@ -201,7 +201,22 @@ ${hasSimulation ? "- Les simulations doivent etre directement liees au contenu d
 
   return `Tu es un expert en ingenierie pedagogique. A partir du contenu de cours suivant, cree un parcours e-learning structure et interactif.
 
-CONTENU DU COURS :
+IMPORTANT — MISE EN FORME :
+- N'utilise JAMAIS les caracteres * (asterisque) ni # (diese) dans le contenu genere
+- Pour mettre en valeur un mot ou une phrase, utilise des balises HTML : <strong>texte en gras</strong>, <em>texte en italique</em>
+- Pour les listes, utilise des tirets (-) ou des numeros (1. 2. 3.)
+- Pour les titres dans le contenu texte, utilise des balises <h3> ou <h4>
+- Separe les paragraphes par des retours a la ligne (<br/><br/>)
+
+IMPORTANT — NIVEAU DE DETAIL :
+- NE RESUME PAS et NE SYNTHETISE PAS le document source. Tu dois REPRENDRE et DEVELOPPER le contenu en detail
+- Chaque bloc texte doit etre un veritable cours complet, pas un resume
+- Reprends les explications, les definitions, les procedures, les exemples du document source DANS LEUR INTEGRALITE
+- Ajoute du contexte, des explications supplementaires, des exemples concrets pour enrichir le contenu
+- L'introduction doit etre longue et detaillee : presenter le sujet, le contexte, les enjeux, les objectifs d'apprentissage, le public concerne
+- Les blocs suivants doivent traiter chaque partie du document en profondeur, sans sauter de contenu
+
+CONTENU DU COURS (a reprendre en detail, sans resumer) :
 ---
 ${truncatedText}
 ---
@@ -215,10 +230,11 @@ INSTRUCTIONS PAR TYPE DE BLOC :
 ${blockInstructions}
 
 STRUCTURE DU PARCOURS :
-1. Commence toujours par un bloc "text" d'introduction (si "text" est dans les types autorises)
+1. Commence toujours par un bloc "text" d'introduction TRES DETAILLE (si "text" est dans les types autorises). Ce bloc doit faire au minimum 1000 mots et couvrir : presentation du sujet, contexte reglementaire ou professionnel, objectifs pedagogiques detailles, public vise, prerequis eventuels, plan du parcours
 2. Alterne les types de blocs pour maintenir l'engagement de l'apprenant
-3. Termine par un bloc d'evaluation ou de synthese (quiz, scenario, ou texte recapitulatif)
-4. Repartis les types de blocs de maniere equilibree sur tout le parcours
+3. Chaque bloc texte doit reprendre le contenu du document source en le developpant, pas en le resumant
+4. Termine par un bloc d'evaluation ou de synthese (quiz, scenario, ou texte recapitulatif)
+5. Repartis les types de blocs de maniere equilibree sur tout le parcours
 ${advancedNote}
 
 ${jsonFormat}
@@ -229,6 +245,8 @@ REGLES :
 - Les quiz doivent avoir exactement 4 options par question
 - correctAnswer est l'index (0-3) de la bonne reponse
 - Le contenu doit etre en francais
+- JAMAIS de caracteres * ni # dans le contenu — utilise HTML (<strong>, <em>, <h3>, <h4>, <br/>) pour la mise en forme
+- Ne resume pas le document, reprends-le en detail et enrichis-le
 - Reponds UNIQUEMENT avec le JSON, sans texte avant ou apres`;
 }
 
@@ -276,8 +294,9 @@ export async function generateCourseFromDocument(
     throw new Error("Le document ne contient pas assez de texte exploitable.");
   }
 
-  // Truncate to ~15000 chars to stay within token limits
-  const truncatedText = text.slice(0, 15000);
+  // Use more source material for longer courses
+  const maxChars = duration === "long" ? 40000 : duration === "moyen" ? 30000 : 15000;
+  const truncatedText = text.slice(0, maxChars);
 
   // 2. Send to OpenAI
   const OpenAI = (await import("openai")).default;
@@ -288,7 +307,7 @@ export async function generateCourseFromDocument(
 
   // Use higher max_tokens for richer content
   const hasAdvancedTypes = effectiveTypes?.some(t => t === "scenario" || t === "simulation");
-  const maxTokens = duration === "long" || hasAdvancedTypes ? 12000 : 8192;
+  const maxTokens = duration === "long" ? 16000 : duration === "moyen" ? 14000 : hasAdvancedTypes ? 12000 : 8192;
 
   let responseText: string;
   try {
