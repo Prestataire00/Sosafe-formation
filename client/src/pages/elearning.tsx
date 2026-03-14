@@ -2919,8 +2919,8 @@ function ModulePreview({ moduleId }: { moduleId: string }) {
         {activeBlock.type === "text" && (
           <div className="space-y-4">
             <div
-              className="prose prose-sm max-w-none dark:prose-invert leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: (activeBlock.content || "").replace(/\n/g, "<br/>") }}
+              className="prose prose-base max-w-none dark:prose-invert leading-loose text-[15px]"
+              dangerouslySetInnerHTML={{ __html: (activeBlock.content || "").replace(/\n/g, "<br/><br/>") }}
             />
             {!isCurrentCompleted && (
               <Button className="w-full" onClick={() => {

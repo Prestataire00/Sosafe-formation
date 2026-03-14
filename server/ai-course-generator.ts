@@ -86,7 +86,7 @@ function buildBlockTypeInstructions(blockTypes: string[]): string {
   const instructions: string[] = [];
 
   if (blockTypes.includes("text")) {
-    instructions.push(`- Blocs "text" : reprends le contenu du document source de maniere TRES detaillee et pedagogique, SANS le resumer. Chaque bloc texte doit faire au MINIMUM 600 mots (1000+ mots pour l'introduction et les blocs principaux). Ecris UNIQUEMENT des phrases et des paragraphes en texte brut. Pas de balises HTML, pas de caracteres speciaux de formatage. Separe les paragraphes par un simple saut de ligne. Inclus : une introduction claire et substantielle, des explications approfondies avec contexte historique ou reglementaire quand pertinent, des exemples concrets et realistes issus du terrain, des analogies parlantes, des cas pratiques illustratifs. Ecris de maniere fluide et naturelle, comme un cours magistral transcrit. Le champ "content" contient le texte complet en phrases. NE PAS faire de contenu superficiel ou trop court.`);
+    instructions.push(`- Blocs "text" : reprends le contenu du document source de maniere TRES detaillee et pedagogique, SANS le resumer ni le synthetiser. Chaque bloc texte doit faire au MINIMUM 800 mots (1500+ mots pour l'introduction et les blocs principaux). Ecris UNIQUEMENT des phrases et des paragraphes en texte brut. Pas de balises HTML, pas de caracteres speciaux de formatage. AERE bien le texte : fais des paragraphes courts de 3 a 5 phrases maximum, puis saute une ligne avant le paragraphe suivant. Chaque nouveau concept ou idee doit commencer un nouveau paragraphe. Inclus : une introduction claire et substantielle, des explications approfondies avec contexte historique ou reglementaire quand pertinent, des exemples concrets et realistes issus du terrain, des analogies parlantes, des cas pratiques illustratifs. Ecris de maniere fluide et naturelle, comme un cours magistral transcrit. Le champ "content" contient le texte complet en phrases. NE PAS faire de contenu superficiel ou trop court. ECRIS BEAUCOUP, ne te limite pas.`);
   }
   if (blockTypes.includes("quiz")) {
     instructions.push(`- Blocs "quiz" : genere 8 a 12 questions QCM a 4 options. Une seule bonne reponse par question. Varie les types : definitions, mises en situation professionnelle, analyse de cas, vrai/faux reformule en QCM, questions de reflexion, application pratique. Les questions doivent etre substantielles et pousser a la reflexion, pas juste de la memorisation. Chaque question doit avoir un contexte ou une mise en situation.`);
@@ -205,16 +205,17 @@ IMPORTANT — MISE EN FORME :
 - Ecris UNIQUEMENT du texte brut : des phrases et des paragraphes. Rien d'autre.
 - N'utilise JAMAIS de caracteres speciaux de formatage : pas de * (asterisque), pas de # (diese), pas de balises HTML (<strong>, <em>, <h3>, <br/>, etc.), pas de markdown
 - Separe les paragraphes par un simple saut de ligne (\\n\\n)
+- Fais des paragraphes COURTS et AERES : 3 a 5 phrases par paragraphe, puis une ligne vide. Le texte doit etre agreable a lire, pas un mur de texte compact
 - Pas de listes a puces, pas de tirets en debut de ligne, pas de numerotation. Ecris tout sous forme de phrases completes dans des paragraphes fluides
-- Le texte doit se lire comme un cours magistral : naturel, detaille, pedagogique
+- Le texte doit se lire comme un cours magistral : naturel, detaille, pedagogique, agreable
 
-IMPORTANT — NIVEAU DE DETAIL :
-- NE RESUME PAS et NE SYNTHETISE PAS le document source. Tu dois REPRENDRE et DEVELOPPER le contenu en detail
-- Chaque bloc texte doit etre un veritable cours complet, pas un resume
+IMPORTANT — NIVEAU DE DETAIL (TRES LONG) :
+- NE RESUME PAS et NE SYNTHETISE PAS le document source. Tu dois REPRENDRE et DEVELOPPER le contenu en detail, en ECRIVANT BEAUCOUP
+- Chaque bloc texte doit etre un veritable cours complet et tres long, pas un resume. Vise 800 a 1500 mots par bloc texte
 - Reprends les explications, les definitions, les procedures, les exemples du document source DANS LEUR INTEGRALITE
-- Ajoute du contexte, des explications supplementaires, des exemples concrets pour enrichir le contenu
-- L'introduction doit etre longue et detaillee : presenter le sujet, le contexte, les enjeux, les objectifs d'apprentissage, le public concerne
-- Les blocs suivants doivent traiter chaque partie du document en profondeur, sans sauter de contenu
+- Ajoute du contexte, des explications supplementaires, des exemples concrets pour enrichir le contenu. Developpe chaque notion sur plusieurs paragraphes
+- L'introduction doit etre tres longue et detaillee (1500+ mots) : presenter le sujet en profondeur, le contexte historique et reglementaire, les enjeux, les objectifs d'apprentissage, le public concerne, les prerequis
+- Les blocs suivants doivent traiter chaque partie du document en profondeur, sans sauter de contenu. Chaque concept merite plusieurs paragraphes d'explication
 
 CONTENU DU COURS (a reprendre en detail, sans resumer) :
 ---
@@ -230,7 +231,7 @@ INSTRUCTIONS PAR TYPE DE BLOC :
 ${blockInstructions}
 
 STRUCTURE DU PARCOURS :
-1. Commence toujours par un bloc "text" d'introduction TRES DETAILLE (si "text" est dans les types autorises). Ce bloc doit faire au minimum 1000 mots et couvrir : presentation du sujet, contexte reglementaire ou professionnel, objectifs pedagogiques detailles, public vise, prerequis eventuels, plan du parcours
+1. Commence toujours par un bloc "text" d'introduction TRES LONG ET DETAILLE (si "text" est dans les types autorises). Ce bloc doit faire au minimum 1500 mots et couvrir en profondeur : presentation du sujet, contexte historique et reglementaire, enjeux professionnels, objectifs pedagogiques detailles, public vise, prerequis eventuels, plan du parcours. Developpe chaque point sur plusieurs paragraphes aeres
 2. Alterne les types de blocs pour maintenir l'engagement de l'apprenant
 3. Chaque bloc texte doit reprendre le contenu du document source en le developpant, pas en le resumant
 4. Termine par un bloc d'evaluation ou de synthese (quiz, scenario, ou texte recapitulatif)
@@ -305,15 +306,17 @@ export async function generateCourseFromDocument(
   const effectiveTypes = blockTypes && blockTypes.length > 0 ? blockTypes : undefined;
   const prompt = buildPrompt(truncatedText, moduleTitle, pathType, duration, effectiveTypes);
 
-  // Use higher max_tokens for richer content
-  const hasAdvancedTypes = effectiveTypes?.some(t => t === "scenario" || t === "simulation");
-  const maxTokens = duration === "long" ? 16000 : duration === "moyen" ? 14000 : hasAdvancedTypes ? 12000 : 8192;
+  // Use gpt-4o for moyen/long to get much longer content (16k+ tokens)
+  // gpt-4o-mini is limited to ~16k output tokens which is not enough for detailed long courses
+  const useFullModel = duration === "long" || duration === "moyen";
+  const model = useFullModel ? "gpt-4o" : "gpt-4o-mini";
+  const maxTokens = duration === "long" ? 16000 : duration === "moyen" ? 14000 : 8192;
 
   let responseText: string;
   try {
-    console.log(`[AI Generate] Calling OpenAI GPT-4o-mini (pathType=${pathType}, duration=${duration}, blockTypes=${effectiveTypes?.join(",") || "default"})...`);
+    console.log(`[AI Generate] Calling OpenAI ${model} (pathType=${pathType}, duration=${duration}, blockTypes=${effectiveTypes?.join(",") || "default"})...`);
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
       max_tokens: maxTokens,
