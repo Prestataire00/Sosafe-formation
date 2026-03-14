@@ -256,7 +256,7 @@ function ContactsTab() {
 
   if (filterType === "all" || filterType === "trainee") {
     trainees?.forEach(t => allContacts.push({
-      id: t.id, name: `${t.firstName} ${t.lastName}`, email: t.email, phone: t.phone || "",
+      id: t.id, name: `${t.firstName} ${t.lastName}`, email: t.email || "", phone: t.phone || "",
       type: "trainee", extra: t.profession || t.company || "", tags: getContactTags("trainee", t.id),
     }));
   }
@@ -572,7 +572,7 @@ function CampaignsTab() {
   const manualContacts = useMemo(() => {
     if (targetType !== "manual") return [];
     const contacts: Array<{ email: string; name: string; type: string }> = [];
-    allTrainees?.filter(t => t.email).forEach(t => contacts.push({ email: t.email, name: `${t.firstName} ${t.lastName}`, type: "Apprenant" }));
+    allTrainees?.filter(t => t.email).forEach(t => contacts.push({ email: t.email!, name: `${t.firstName} ${t.lastName}`, type: "Apprenant" }));
     allEnterprises?.filter(e => e.contactEmail).forEach(e => contacts.push({ email: e.contactEmail!, name: e.name, type: "Entreprise" }));
     allProspects?.filter(p => p.contactEmail).forEach(p => contacts.push({ email: p.contactEmail!, name: `${p.companyName} (${p.contactName})`, type: "Prospect" }));
     if (!manualSearch) return contacts;

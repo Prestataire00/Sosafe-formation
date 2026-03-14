@@ -48,13 +48,29 @@ function MigrationTab() {
   const [parseError, setParseError] = useState("");
   const [importResult, setImportResult] = useState<any>(null);
   const [showResultDialog, setShowResultDialog] = useState(false);
+  const [xlsxFile, setXlsxFile] = useState<File | null>(null);
 
   const { data: imports = [] } = useQuery<any[]>({
     queryKey: ["/api/data-imports"],
   });
 
   const importMutation = useMutation({
-    mutationFn: async (data: { entityType: string; data: any[] }) => {
+    mutationFn: async (data: { entityType: string; data: any[]; xlsxFile?: File | null }) => {
+      // If we have an XLSX file, use the file-based import route
+      if (data.xlsxFile) {
+        const entityMap: Record<string, string> = { trainee: "trainees", trainer: "trainers", program: "programs", enterprise: "enterprises" };
+        const formData = new FormData();
+        formData.append("file", data.xlsxFile);
+        formData.append("entityType", entityMap[data.entityType] || data.entityType);
+        const res = await fetch("/api/import/execute", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Erreur");
+        const result = await res.json();
+        return { imported: result.imported, skipped: result.total - result.imported, errors: result.errors?.length || 0, errorDetails: result.errors?.map((e: string, i: number) => ({ row: i + 1, field: "", message: e })) };
+      }
       const res = await fetch("/api/data-imports/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -78,9 +94,49 @@ function MigrationTab() {
     },
   });
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+
+    if (isExcel) {
+      // Send to server for preview (binary format can't be parsed client-side)
+      setXlsxFile(file);
+      const formData = new FormData();
+      formData.append("file", file);
+      const entityMap: Record<string, string> = { trainee: "trainees", trainer: "trainers", program: "programs", enterprise: "enterprises" };
+      formData.append("entityType", entityMap[entityType] || entityType);
+      try {
+        const res = await fetch("/api/import/preview", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          setParseError(err.message || "Erreur de lecture du fichier Excel");
+          setXlsxFile(null);
+          return;
+        }
+        const data = await res.json();
+        const rows = data.preview || [];
+        // Build full-size array so the count display is correct (preview only has 5 rows)
+        const totalRows = data.totalRows || rows.length;
+        const fullArray = rows.length < totalRows
+          ? [...rows, ...Array(totalRows - rows.length).fill(rows[0] || {})]
+          : rows;
+        const jsonStr = JSON.stringify(rows, null, 2);
+        setJsonData(jsonStr);
+        setParsedData(fullArray);
+        setParseError("");
+      } catch {
+        setParseError("Erreur lors de la lecture du fichier Excel");
+        setXlsxFile(null);
+      }
+      return;
+    }
+    setXlsxFile(null);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -148,7 +204,7 @@ function MigrationTab() {
             Import de données Digiforma
           </CardTitle>
           <CardDescription>
-            Importez vos données existantes depuis Digiforma au format CSV ou JSON.
+            Importez vos données existantes depuis Digiforma au format CSV, Excel (.xlsx) ou JSON.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -158,7 +214,7 @@ function MigrationTab() {
               <div className="text-sm">
                 <p className="font-medium">Instructions</p>
                 <ol className="list-decimal list-inside text-muted-foreground space-y-1 mt-1">
-                  <li>Exportez vos données depuis Digiforma (CSV ou JSON)</li>
+                  <li>Exportez vos données depuis Digiforma (CSV, Excel ou JSON)</li>
                   <li>Sélectionnez le type d'entité à importer</li>
                   <li>Chargez le fichier ou collez les données JSON</li>
                   <li>Vérifiez l'aperçu puis lancez l'import</li>
@@ -189,12 +245,12 @@ function MigrationTab() {
             </div>
 
             <div>
-              <Label>Fichier CSV ou JSON</Label>
+              <Label>Fichier CSV, Excel ou JSON</Label>
               <div className="flex gap-2">
                 <Input
                   ref={fileRef}
                   type="file"
-                  accept=".csv,.json"
+                  accept=".csv,.json,.xlsx,.xls"
                   onChange={handleFileUpload}
                 />
               </div>
@@ -233,7 +289,7 @@ function MigrationTab() {
           )}
 
           <Button
-            onClick={() => importMutation.mutate({ entityType, data: parsedData! })}
+            onClick={() => importMutation.mutate({ entityType, data: parsedData!, xlsxFile })}
             disabled={!parsedData || parsedData.length === 0 || entityType === "none" || importMutation.isPending}
           >
             {importMutation.isPending ? (

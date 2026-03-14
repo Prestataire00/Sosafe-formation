@@ -815,7 +815,7 @@ function SessionCalendarView({
 
 export default function Sessions() {
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<"cards" | "calendar">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "calendar" | "kanban">("cards");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editSession, setEditSession] = useState<Session | undefined>();
   const [trombiSessionId, setTrombiSessionId] = useState<string | null>(null);
@@ -1063,11 +1063,15 @@ export default function Sessions() {
         subtitle="Planifiez et gérez vos sessions de formation"
         actions={
           <div className="flex items-center gap-3">
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "cards" | "calendar")}>
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "cards" | "calendar" | "kanban")}>
               <TabsList>
                 <TabsTrigger value="cards" className="gap-1.5">
                   <LayoutGrid className="w-4 h-4" />
                   Cartes
+                </TabsTrigger>
+                <TabsTrigger value="kanban" className="gap-1.5">
+                  <Layers className="w-4 h-4" />
+                  Kanban
                 </TabsTrigger>
                 <TabsTrigger value="calendar" className="gap-1.5">
                   <Calendar className="w-4 h-4" />
@@ -1130,6 +1134,75 @@ export default function Sessions() {
             <Card key={i}><CardContent className="p-5"><Skeleton className="h-5 w-3/4 mb-3" /><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-1/2 mb-4" /><Skeleton className="h-6 w-20" /></CardContent></Card>
           ))}
         </div>
+      ) : viewMode === "kanban" ? (
+        (() => {
+          const toplan = filtered.filter((s) => s.status === "planned" && (!s.trainerId || !s.startDate));
+          const planned = filtered.filter((s) => (s.status === "planned" && s.trainerId && s.startDate) || s.status === "ongoing");
+          const done = filtered.filter((s) => s.status === "completed" || s.status === "cancelled");
+
+          const renderKanbanCard = (session: Session) => {
+            const program = programs?.find((p) => p.id === session.programId);
+            const trainer = trainers?.find((t) => t.id === session.trainerId);
+            const enrolledCount = enrollmentCounts[session.id] || 0;
+            return (
+              <Card
+                key={session.id}
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => handleCardClick(session)}
+              >
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="font-medium text-sm leading-tight truncate flex-1">{session.title}</h4>
+                    <InlineStatusBadge session={session} onStatusChange={handleInlineStatusChange} />
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{program?.title}</p>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3 h-3 shrink-0" />
+                      {session.startDate
+                        ? `${new Date(session.startDate).toLocaleDateString("fr-FR")} - ${new Date(session.endDate).toLocaleDateString("fr-FR")}`
+                        : "Dates non définies"}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <UserCheck className="w-3 h-3 shrink-0" />
+                      {trainer ? `${trainer.firstName} ${trainer.lastName}` : <span className="text-amber-600">Non assigné</span>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3 h-3 shrink-0" />
+                      {enrolledCount}/{session.maxParticipants} inscrits
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          };
+
+          const columns = [
+            { title: "À planifier", items: toplan, color: "border-amber-400", bgColor: "bg-amber-50 dark:bg-amber-950/20" },
+            { title: "Planifiées", items: planned, color: "border-blue-400", bgColor: "bg-blue-50 dark:bg-blue-950/20" },
+            { title: "Terminées", items: done, color: "border-green-400", bgColor: "bg-green-50 dark:bg-green-950/20" },
+          ];
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {columns.map((col) => (
+                <div key={col.title} className={`rounded-lg border-t-4 ${col.color} ${col.bgColor} p-4 space-y-3`}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm">{col.title}</h3>
+                    <Badge variant="outline" className="text-xs">{col.items.length}</Badge>
+                  </div>
+                  <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                    {col.items.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-8">Aucune session</p>
+                    ) : (
+                      col.items.map(renderKanbanCard)
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()
       ) : viewMode === "calendar" ? (
         <SessionCalendarView
           sessions={filtered}

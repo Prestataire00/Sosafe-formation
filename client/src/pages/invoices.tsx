@@ -40,6 +40,8 @@ import {
   Link2,
   Ban,
   Percent,
+  Download,
+  FileCode,
 } from "lucide-react";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -1580,6 +1582,28 @@ export default function Invoices() {
                                     Echeancier
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    const link = document.createElement("a");
+                                    link.href = `/api/invoices/${invoice.id}/pdf`;
+                                    link.download = `Facture_${invoice.number}.pdf`;
+                                    link.click();
+                                  }}
+                                >
+                                  <Download className="w-4 h-4 mr-2" />
+                                  Télécharger PDF Factur-X
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    const link = document.createElement("a");
+                                    link.href = `/api/invoices/${invoice.id}/pdf?format=xml`;
+                                    link.download = `factur-x_${invoice.number}.xml`;
+                                    link.click();
+                                  }}
+                                >
+                                  <FileCode className="w-4 h-4 mr-2" />
+                                  Télécharger XML Factur-X
+                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-destructive"
                                   onClick={() => deleteMutation.mutate(invoice.id)}

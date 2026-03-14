@@ -1045,17 +1045,73 @@ function VeilleTab() {
     return true;
   });
 
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  const getDeadlineDays = (e: any) => {
+    if (!e.actionDeadline || e.status === "implemented" || e.status === "archived") return null;
+    const deadline = new Date(e.actionDeadline + "T00:00:00");
+    return Math.round((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const overdueEntries = entries.filter((e: any) => {
+    const d = getDeadlineDays(e);
+    return d !== null && d < 0;
+  });
+  const urgentEntries = entries.filter((e: any) => {
+    const d = getDeadlineDays(e);
+    return d !== null && d >= 0 && d <= 7;
+  });
+
   const stats = {
     total: entries.length,
     actionRequired: entries.filter((e: any) => e.status === "action_required").length,
     highImpact: entries.filter((e: any) => e.impactLevel === "high" || e.impactLevel === "critical").length,
     newEntries: entries.filter((e: any) => e.status === "new").length,
+    overdue: overdueEntries.length,
+    urgent: urgentEntries.length,
   };
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
 
   return (
     <div className="space-y-6">
+      {/* Deadline alerts */}
+      {stats.overdue > 0 && (
+        <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold text-red-700 dark:text-red-400">
+              {stats.overdue} action{stats.overdue > 1 ? "s" : ""} de veille en retard
+            </p>
+            <ul className="text-sm text-red-600 dark:text-red-400 mt-1 space-y-0.5">
+              {overdueEntries.slice(0, 5).map((e: any) => (
+                <li key={e.id}>
+                  &bull; <strong>{e.title}</strong> — échéance dépassée depuis {Math.abs(getDeadlineDays(e)!)} jour{Math.abs(getDeadlineDays(e)!) > 1 ? "s" : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+      {stats.urgent > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4 flex items-start gap-3">
+          <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold text-amber-700 dark:text-amber-400">
+              {stats.urgent} action{stats.urgent > 1 ? "s" : ""} de veille à traiter sous 7 jours
+            </p>
+            <ul className="text-sm text-amber-600 dark:text-amber-400 mt-1 space-y-0.5">
+              {urgentEntries.slice(0, 5).map((e: any) => (
+                <li key={e.id}>
+                  &bull; <strong>{e.title}</strong> — échéance dans {getDeadlineDays(e)} jour{getDeadlineDays(e)! > 1 ? "s" : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -1182,7 +1238,14 @@ function VeilleTab() {
                   </TableCell>
                   <TableCell className="text-sm">{e.assignedToName || "-"}</TableCell>
                   <TableCell className="text-sm">
-                    {e.actionDeadline ? new Date(e.actionDeadline).toLocaleDateString("fr-FR") : "-"}
+                    {e.actionDeadline ? (() => {
+                      const days = getDeadlineDays(e);
+                      const dateStr = new Date(e.actionDeadline + "T00:00:00").toLocaleDateString("fr-FR");
+                      if (days === null) return dateStr;
+                      if (days < 0) return <span className="text-red-600 font-semibold">{dateStr} (retard)</span>;
+                      if (days <= 7) return <span className="text-amber-600 font-semibold">{dateStr} (J-{days})</span>;
+                      return dateStr;
+                    })() : "-"}
                   </TableCell>
                   <TableCell className="text-sm">
                     {e.createdAt ? new Date(e.createdAt).toLocaleDateString("fr-FR") : "-"}

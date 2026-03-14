@@ -625,6 +625,11 @@ const pool = new pg.Pool({
 const db = drizzle(pool);
 
 export class DatabaseStorage implements IStorage {
+  async cleanPlaceholderEmails(): Promise<void> {
+    await db.execute(sql`UPDATE trainees SET email = NULL WHERE email LIKE '%@placeholder.local'`);
+    await db.execute(sql`UPDATE trainers SET email = NULL WHERE email LIKE '%@placeholder.local'`);
+  }
+
   // ---- Users ----
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));

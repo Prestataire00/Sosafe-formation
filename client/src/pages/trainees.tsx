@@ -857,7 +857,7 @@ export default function Trainees() {
       const q = search.toLowerCase();
       const matchesSearch =
         `${t.firstName} ${t.lastName}`.toLowerCase().includes(q) ||
-        t.email.toLowerCase().includes(q) ||
+        (t.email || "").toLowerCase().includes(q) ||
         (t.company || "").toLowerCase().includes(q) ||
         (t.proDenomination || "").toLowerCase().includes(q) ||
         (t.proSiret || "").toLowerCase().includes(q);

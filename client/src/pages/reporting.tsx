@@ -493,9 +493,9 @@ function ExportsTab() {
   const handleExport = async (type: string) => {
     try {
       let url = `/api/reporting/export/${type}`;
-      if (sessionFilter) url += `?sessionId=${sessionFilter}`;
-      const data = await apiRequest("GET", url);
-      const jsonData = data as unknown as Record<string, unknown>[];
+      if (sessionFilter && sessionFilter !== "all") url += `?sessionId=${sessionFilter}`;
+      const res = await apiRequest("GET", url);
+      const jsonData = await res.json() as Record<string, unknown>[];
 
       if (!jsonData || !Array.isArray(jsonData) || jsonData.length === 0) {
         alert("Aucune donnee a exporter");

@@ -56,6 +56,9 @@ export async function registerRoutes(
 
   setupAuth(app);
 
+  // Clean up placeholder emails from previous imports
+  storage.cleanPlaceholderEmails().catch(() => {});
+
   const ALLOWED_MIMETYPES = [
     "application/pdf",
     "image/jpeg", "image/png", "image/gif", "image/webp",
@@ -242,6 +245,72 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Check recycling error:", error);
       res.status(500).json({ message: "Erreur lors de la vérification" });
+    }
+  });
+
+  // POST /api/public/enterprise-registration — public enterprise self-registration
+  app.post("/api/public/enterprise-registration", async (req, res) => {
+    try {
+      const {
+        name, formatJuridique, siret, tvaNumber,
+        address, city, postalCode, email, phone, sector,
+        legalRepName, legalRepEmail, legalRepPhone,
+        contactFirstName, contactLastName, contactEmail, contactPhone, contactRole,
+      } = req.body;
+
+      if (!name || !siret) {
+        return res.status(400).json({ message: "Dénomination et SIRET sont obligatoires" });
+      }
+
+      // Check for duplicate SIRET
+      const allEnterprises = await storage.getEnterprises();
+      const duplicate = allEnterprises.find((e) => e.siret === siret.trim());
+      if (duplicate) {
+        return res.status(409).json({ message: "Une entreprise avec ce SIRET est déjà enregistrée" });
+      }
+
+      // Create the enterprise
+      const enterprise = await storage.createEnterprise({
+        name: name.trim(),
+        formatJuridique: formatJuridique || null,
+        siret: siret.trim(),
+        tvaNumber: tvaNumber || null,
+        address: address || null,
+        city: city || null,
+        postalCode: postalCode || null,
+        email: email || null,
+        phone: phone || null,
+        sector: sector || null,
+        legalRepName: legalRepName || null,
+        legalRepEmail: legalRepEmail || null,
+        legalRepPhone: legalRepPhone || null,
+        contactName: contactFirstName && contactLastName
+          ? `${contactFirstName.trim()} ${contactLastName.trim()}`
+          : null,
+        contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
+        status: "active",
+      });
+
+      // Create the contact if provided
+      if (contactFirstName && contactLastName) {
+        await storage.createEnterpriseContact({
+          enterpriseId: enterprise.id,
+          firstName: contactFirstName.trim(),
+          lastName: contactLastName.trim(),
+          email: contactEmail || null,
+          phone: contactPhone || null,
+          role: contactRole || "general",
+          department: null,
+          notes: null,
+          isPrimary: true,
+        });
+      }
+
+      res.status(201).json({ id: enterprise.id, message: "Inscription enregistrée" });
+    } catch (err: any) {
+      console.error("Enterprise registration error:", err);
+      res.status(500).json({ message: "Erreur lors de l'inscription" });
     }
   });
 
@@ -2218,7 +2287,7 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
             replacements["{nom_formateur}"] = `${trainer.firstName} ${trainer.lastName}`;
             replacements["{prenom_formateur}"] = trainer.firstName;
             replacements["{nom_famille_formateur}"] = trainer.lastName;
-            replacements["{email_formateur}"] = trainer.email;
+            replacements["{email_formateur}"] = trainer.email || "";
             replacements["{telephone_formateur}"] = trainer.phone || "";
             replacements["{specialite_formateur}"] = trainer.specialty || "";
           }
@@ -2245,7 +2314,7 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
         replacements["{nom_apprenant}"] = `${trainee.firstName} ${trainee.lastName}`;
         replacements["{prenom_apprenant}"] = trainee.firstName;
         replacements["{nom_famille_apprenant}"] = trainee.lastName;
-        replacements["{email_apprenant}"] = trainee.email;
+        replacements["{email_apprenant}"] = trainee.email || "";
         replacements["{entreprise_apprenant}"] = trainee.company || "";
         replacements["{civilite_apprenant}"] = trainee.civility || "";
         replacements["{date_naissance_apprenant}"] = trainee.dateOfBirth
@@ -2324,7 +2393,7 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
         const trainer = await storage.getTrainer(sessionForTrainer.trainerId);
         if (trainer) {
           replacements["{nom_sous_traitant}"] = `${trainer.firstName} ${trainer.lastName}`;
-          replacements["{email_sous_traitant}"] = trainer.email;
+          replacements["{email_sous_traitant}"] = trainer.email || "";
           replacements["{telephone_sous_traitant}"] = trainer.phone || "";
           replacements["{specialite_sous_traitant}"] = trainer.specialty || "";
         }
@@ -3264,6 +3333,35 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
   app.delete("/api/invoices/:id", async (req, res) => {
     await storage.deleteInvoice(req.params.id);
     res.status(204).send();
+  });
+
+  // GET /api/invoices/:id/pdf — Generate Factur-X compliant PDF
+  app.get("/api/invoices/:id/pdf", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ message: "Facture non trouvée" });
+
+      const enterprise = invoice.enterpriseId ? await storage.getEnterprise(invoice.enterpriseId) : null;
+      const settings = await storage.getOrganizationSettings();
+
+      const { generateInvoicePDF } = await import("./invoice-pdf");
+      const { pdfBuffer, xml } = generateInvoicePDF(invoice, enterprise || null, settings);
+
+      const format = req.query.format as string;
+      if (format === "xml") {
+        res.setHeader("Content-Type", "application/xml");
+        res.setHeader("Content-Disposition", `attachment; filename="factur-x_${invoice.number}.xml"`);
+        return res.send(xml);
+      }
+
+      const buffer = await pdfBuffer;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Facture_${invoice.number}.pdf"`);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Invoice PDF error:", err);
+      res.status(500).json({ message: "Erreur lors de la génération du PDF" });
+    }
   });
 
   // ============================================================
@@ -5342,9 +5440,9 @@ Le contenu doit être en français, clair et bien structuré.`;
       if (campaign.targetType === "tag" && campaign.targetTagIds && (campaign.targetTagIds as string[]).length > 0) {
         const assignments = await storage.getContactTagAssignments("trainee");
         const taggedIds = assignments.filter(a => (campaign.targetTagIds as string[]).includes(a.tagId)).map(a => a.contactId);
-        all.filter(t => taggedIds.includes(t.id) && t.email).forEach(t => recipients.push({ email: t.email, name: `${t.firstName} ${t.lastName}`, contactType: "trainee", contactId: t.id }));
+        all.filter(t => taggedIds.includes(t.id) && t.email).forEach(t => recipients.push({ email: t.email!, name: `${t.firstName} ${t.lastName}`, contactType: "trainee", contactId: t.id }));
       } else {
-        all.filter(t => t.email).forEach(t => recipients.push({ email: t.email, name: `${t.firstName} ${t.lastName}`, contactType: "trainee", contactId: t.id }));
+        all.filter(t => t.email).forEach(t => recipients.push({ email: t.email!, name: `${t.firstName} ${t.lastName}`, contactType: "trainee", contactId: t.id }));
       }
     };
 
@@ -5894,10 +5992,12 @@ Le contenu doit être en français, clair et bien structuré.`;
         || `http://localhost:${process.env.PORT || 3000}`;
 
       let sentCount = 0;
+      let skippedNoEmail = 0;
+      let skippedAlreadySigned = 0;
 
       for (const enrollment of activeEnrollments) {
         const trainee = await storage.getTrainee(enrollment.traineeId);
-        if (!trainee?.email) continue;
+        if (!trainee?.email) { skippedNoEmail++; continue; }
 
         // Find or create attendance record
         const records = await storage.getAttendanceRecords(sheetId);
@@ -5912,7 +6012,7 @@ Le contenu doit être en français, clair et bien structuré.`;
         }
 
         // Skip if already signed
-        if (record.signedAt) continue;
+        if (record.signedAt) { skippedAlreadySigned++; continue; }
 
         // Generate token if needed
         let token = record.emargementToken;
@@ -5955,7 +6055,7 @@ Le contenu doit être en français, clair et bien structuré.`;
         sentCount++;
       }
 
-      res.json({ success: true, sentCount });
+      res.json({ success: true, sentCount, skippedNoEmail, skippedAlreadySigned });
     } catch (err) {
       console.error("[emargement] send error:", err);
       res.status(500).json({ message: "Erreur lors de l'envoi" });
@@ -6388,8 +6488,8 @@ Le contenu doit être en français, clair et bien structuré.`;
       // Trainer fields
       "{nom_sous_traitant}": `${trainer.firstName} ${trainer.lastName}`,
       "{nom_formateur}": `${trainer.firstName} ${trainer.lastName}`,
-      "{email_sous_traitant}": trainer.email,
-      "{email_formateur}": trainer.email,
+      "{email_sous_traitant}": trainer.email || "",
+      "{email_formateur}": trainer.email || "",
       "{telephone_sous_traitant}": trainer.phone || "",
       "{specialite_sous_traitant}": trainer.specialty || "",
       "{statut_formateur}": (trainer as any).legalStatus || "",
@@ -6864,7 +6964,7 @@ Le contenu doit être en français, clair et bien structuré.`;
               replacements["{nom_apprenant}"] = `${traineeData.firstName} ${traineeData.lastName}`;
               replacements["{prenom_apprenant}"] = traineeData.firstName;
               replacements["{nom_famille_apprenant}"] = traineeData.lastName;
-              replacements["{email_apprenant}"] = traineeData.email;
+              replacements["{email_apprenant}"] = traineeData.email || "";
               replacements["{entreprise_apprenant}"] = traineeData.company || "";
               replacements["{civilite_apprenant}"] = traineeData.civility || "";
               replacements["{date_naissance_apprenant}"] = traineeData.dateOfBirth
@@ -9202,21 +9302,23 @@ Le contenu doit être en français, clair et bien structuré.`;
         const row = data[i];
         try {
           if (entityType === "trainee") {
-            if (!row.firstName || !row.lastName || !row.email) {
-              errors.push({ row: i + 1, field: "firstName/lastName/email", message: "Champs obligatoires manquants" });
+            if (!row.firstName || !row.lastName) {
+              errors.push({ row: i + 1, field: "firstName/lastName", message: "Prénom et nom obligatoires" });
               errorCount++;
               continue;
             }
-            // Check duplicate by email
-            const existing = await storage.getTrainees();
-            if (existing.find((t: any) => t.email === row.email)) {
-              skipped++;
-              continue;
+            // Check duplicate by email if provided
+            if (row.email) {
+              const existing = await storage.getTrainees();
+              if (existing.find((t: any) => t.email === row.email)) {
+                skipped++;
+                continue;
+              }
             }
             await storage.createTrainee({
               firstName: row.firstName,
               lastName: row.lastName,
-              email: row.email,
+              email: row.email || null,
               phone: row.phone || null,
               company: row.company || null,
               civility: row.civility || null,
@@ -9229,20 +9331,22 @@ Le contenu doit être en français, clair et bien structuré.`;
             });
             imported++;
           } else if (entityType === "trainer") {
-            if (!row.firstName || !row.lastName || !row.email) {
-              errors.push({ row: i + 1, field: "firstName/lastName/email", message: "Champs obligatoires manquants" });
+            if (!row.firstName || !row.lastName) {
+              errors.push({ row: i + 1, field: "firstName/lastName", message: "Prénom et nom obligatoires" });
               errorCount++;
               continue;
             }
-            const existing = await storage.getTrainers();
-            if (existing.find((t: any) => t.email === row.email)) {
-              skipped++;
-              continue;
+            if (row.email) {
+              const existing = await storage.getTrainers();
+              if (existing.find((t: any) => t.email === row.email)) {
+                skipped++;
+                continue;
+              }
             }
             await storage.createTrainer({
               firstName: row.firstName,
               lastName: row.lastName,
-              email: row.email,
+              email: row.email || null,
               phone: row.phone || null,
               specialty: row.specialty || null,
               bio: row.bio || null,
@@ -9491,9 +9595,13 @@ Le contenu doit être en français, clair et bien structuré.`;
   const COLUMN_MAPPINGS: Record<string, Record<string, string>> = {
     trainees: {
       "prénom": "firstName", "prenom": "firstName", "firstname": "firstName", "first_name": "firstName", "nom de naissance": "firstName",
+      "prénom de l'apprenant": "firstName", "prenom de l'apprenant": "firstName", "prénom apprenant": "firstName", "prenom apprenant": "firstName",
       "nom": "lastName", "lastname": "lastName", "last_name": "lastName", "nom de famille": "lastName",
+      "nom de l'apprenant": "lastName", "nom apprenant": "lastName",
       "email": "email", "e-mail": "email", "mail": "email", "courriel": "email",
+      "email de l'apprenant": "email", "mail de l'apprenant": "email", "email apprenant": "email",
       "téléphone": "phone", "telephone": "phone", "phone": "phone", "tel": "phone", "portable": "phone",
+      "téléphone de l'apprenant": "phone", "telephone de l'apprenant": "phone",
       "entreprise": "company", "société": "company", "societe": "company", "company": "company",
       "civilité": "civility", "civilite": "civility", "civility": "civility",
       "date de naissance": "dateOfBirth", "birthdate": "dateOfBirth", "date_of_birth": "dateOfBirth",
@@ -9558,10 +9666,14 @@ Le contenu doit être en français, clair et bien structuré.`;
     const mapping = COLUMN_MAPPINGS[entityType] || {};
     const mapped: Record<string, any> = {};
     for (const [csvCol, value] of Object.entries(row)) {
-      const normalizedCol = csvCol.toLowerCase().trim();
+      // Remove BOM, normalize whitespace/accents, lowercase
+      const normalizedCol = csvCol.replace(/^\uFEFF/, "").toLowerCase().trim();
       const schemaField = mapping[normalizedCol];
-      if (schemaField && value) {
-        mapped[schemaField] = value;
+      if (schemaField) {
+        mapped[schemaField] = value ?? "";
+      } else if (normalizedCol && value) {
+        // Passthrough: if the column name is already a valid schema field, keep it
+        mapped[normalizedCol] = value;
       }
     }
     return mapped;
@@ -9644,21 +9756,23 @@ Le contenu doit être en français, clair et bien structuré.`;
           try {
             switch (entityType) {
               case "trainees": {
-                if (!mapped.firstName || !mapped.lastName || !mapped.email) {
-                  errors.push(`Ligne ${i + 2}: prénom, nom et email requis`);
+                if (!mapped.firstName || !mapped.lastName) {
+                  errors.push(`Ligne ${i + 2}: prénom et nom requis`);
                   continue;
                 }
                 mapped.status = mapped.status || "active";
+                if (!mapped.email) mapped.email = null;
                 await storage.createTrainee(mapped as any);
                 imported++;
                 break;
               }
               case "trainers": {
-                if (!mapped.firstName || !mapped.lastName || !mapped.email) {
-                  errors.push(`Ligne ${i + 2}: prénom, nom et email requis`);
+                if (!mapped.firstName || !mapped.lastName) {
+                  errors.push(`Ligne ${i + 2}: prénom et nom requis`);
                   continue;
                 }
                 mapped.status = mapped.status || "active";
+                if (!mapped.email) mapped.email = null;
                 await storage.createTrainer(mapped as any);
                 imported++;
                 break;

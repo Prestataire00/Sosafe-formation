@@ -1397,7 +1397,7 @@ export default function Trainers() {
   const filtered = trainers?.filter(
     (t) =>
       `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-      t.email.toLowerCase().includes(search.toLowerCase()) ||
+      (t.email || "").toLowerCase().includes(search.toLowerCase()) ||
       (t.specialty || "").toLowerCase().includes(search.toLowerCase())
   ) || [];
 

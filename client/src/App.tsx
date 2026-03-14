@@ -88,6 +88,7 @@ import NotFound from "@/pages/not-found";
 import PublicEnrollment from "@/pages/public-enrollment";
 import AfgsuSimulator from "@/pages/afgsu-simulator";
 import PublicEmargement from "@/pages/public-emargement";
+import PublicEnterpriseRegistration from "@/pages/public-enterprise-registration";
 import PublicEvaluation from "@/pages/public-evaluation";
 import Messaging from "@/pages/messaging";
 import CrmPage from "@/pages/crm";
@@ -232,6 +233,7 @@ function App() {
             <Switch>
               <Route path="/inscription" component={PublicEnrollment} />
               <Route path="/simulateur-afgsu" component={AfgsuSimulator} />
+              <Route path="/inscription-entreprise" component={PublicEnterpriseRegistration} />
               <Route path="/emargement/:token" component={PublicEmargement} />
               <Route path="/evaluation/:token" component={PublicEvaluation} />
               <Route>

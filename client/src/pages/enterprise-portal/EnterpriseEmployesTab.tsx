@@ -211,7 +211,7 @@ export default function EnterpriseEmployesTab({
                                         <TableCell><EnrollmentStatusBadge status={enr.status} /></TableCell>
                                         <TableCell>
                                           {enr.status === "completed" && (
-                                            <a href={`/inscription?email=${encodeURIComponent(trainee.email)}`}>
+                                            <a href={`/inscription?email=${encodeURIComponent(trainee.email || "")}`}>
                                               <Badge variant="outline" className="cursor-pointer hover:bg-primary/10 gap-1">
                                                 <RefreshCw className="w-3 h-3" />
                                                 Réinscrire

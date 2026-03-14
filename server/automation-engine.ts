@@ -73,7 +73,7 @@ async function resolveVariables(
         const trainer = await storage.getTrainer(session.trainerId);
         if (trainer) {
           r["{nom_formateur}"] = `${trainer.firstName} ${trainer.lastName}`;
-          r["{email_formateur}"] = trainer.email;
+          r["{email_formateur}"] = trainer.email || "";
         }
       }
     }
@@ -87,7 +87,7 @@ async function resolveVariables(
       r["{nom_apprenant}"] = `${trainee.firstName} ${trainee.lastName}`;
       r["{prenom_apprenant}"] = trainee.firstName;
       r["{nom_famille_apprenant}"] = trainee.lastName;
-      r["{email_apprenant}"] = trainee.email;
+      r["{email_apprenant}"] = trainee.email || "";
       r["{entreprise_apprenant}"] = trainee.company || "";
       r["{profile_type_apprenant}"] = trainee.profileType || "";
       r["{profession_apprenant}"] = trainee.profession || "";
@@ -169,7 +169,7 @@ async function resolveVariables(
       const trainer = await storage.getTrainer(sessionForTrainer.trainerId);
       if (trainer) {
         r["{nom_sous_traitant}"] = `${trainer.firstName} ${trainer.lastName}`;
-        r["{email_sous_traitant}"] = trainer.email;
+        r["{email_sous_traitant}"] = trainer.email || "";
         r["{telephone_sous_traitant}"] = trainer.phone || "";
         r["{specialite_sous_traitant}"] = trainer.specialty || "";
       }
@@ -302,7 +302,7 @@ async function handleSendEmail(
   let recipient = "";
   if (ctx.traineeId) {
     const trainee = await storage.getTrainee(ctx.traineeId);
-    if (trainee) recipient = trainee.email;
+    if (trainee?.email) recipient = trainee.email;
   }
   if (!recipient) throw new Error("Aucun destinataire trouvable");
 
@@ -539,7 +539,7 @@ async function handleGenerateDocumentAndSend(
       let recipient = "";
       if (ctx.traineeId) {
         const trainee = await storage.getTrainee(ctx.traineeId);
-        if (trainee) recipient = trainee.email;
+        if (trainee?.email) recipient = trainee.email;
       }
       if (recipient) {
         const subject = await resolveVariables(emailTemplate.subject, ctx);

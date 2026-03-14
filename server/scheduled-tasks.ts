@@ -205,6 +205,71 @@ async function scanPendingEvaluations(): Promise<void> {
 }
 
 /**
+ * Scan veille entries with upcoming or overdue action deadlines.
+ * Sends notifications to admins at J-7, J-3, J-1 and when overdue.
+ */
+async function scanVeilleDeadlines(): Promise<void> {
+  try {
+    const entries = await storage.getVeilleEntries({});
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    // Get admin users to notify
+    const users = await storage.getUsers();
+    const admins = users.filter((u: any) => u.role === "admin");
+    if (admins.length === 0) return;
+
+    const alerts: Array<{ daysLabel: string; daysDiff: number }> = [
+      { daysLabel: "J-7", daysDiff: 7 },
+      { daysLabel: "J-3", daysDiff: 3 },
+      { daysLabel: "J-1", daysDiff: 1 },
+      { daysLabel: "overdue", daysDiff: 0 },
+    ];
+
+    for (const entry of entries) {
+      if (!entry.actionDeadline) continue;
+      if (entry.status === "implemented" || entry.status === "archived") continue;
+
+      const deadline = new Date(entry.actionDeadline + "T00:00:00");
+      const diffMs = deadline.getTime() - now.getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+      for (const { daysLabel, daysDiff } of alerts) {
+        const isMatch = daysLabel === "overdue" ? diffDays < 0 : diffDays === daysDiff;
+        if (!isMatch) continue;
+
+        const key = dedupKey(`veille_deadline_${daysLabel}`, entry.id);
+        if (processedKeys.has(key)) continue;
+        processedKeys.add(key);
+
+        const title = daysLabel === "overdue"
+          ? `Veille en retard : ${entry.title}`
+          : `Veille ${daysLabel} : ${entry.title}`;
+        const description = daysLabel === "overdue"
+          ? `L'action "${entry.actionRequired || entry.title}" a dépassé sa date limite du ${new Date(entry.actionDeadline + "T00:00:00").toLocaleDateString("fr-FR")}.`
+          : `L'action "${entry.actionRequired || entry.title}" est due le ${new Date(entry.actionDeadline + "T00:00:00").toLocaleDateString("fr-FR")} (${daysLabel}).`;
+
+        for (const admin of admins) {
+          await storage.createNotification({
+            userId: admin.id,
+            category: "reminder",
+            title,
+            description,
+            href: "/quality-improvement",
+            relatedId: entry.id,
+            relatedType: "veille",
+          });
+        }
+
+        log(`Alerte veille ${daysLabel} pour "${entry.title}" (deadline: ${entry.actionDeadline})`, "scheduled");
+      }
+    }
+  } catch (err: any) {
+    log(`Erreur scan veille deadlines: ${err.message}`, "scheduled");
+  }
+}
+
+/**
  * Run all scheduled scans.
  */
 async function runScheduledScans(): Promise<void> {
@@ -214,6 +279,7 @@ async function runScheduledScans(): Promise<void> {
     await scanExpiringCertifications();
     await scanRecyclingReminders();
     await scanPendingEvaluations();
+    await scanVeilleDeadlines();
   } catch (err: any) {
     log(`Erreur globale scheduled scans: ${err.message}`, "scheduled");
   }

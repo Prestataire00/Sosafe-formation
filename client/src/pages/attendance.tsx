@@ -727,7 +727,10 @@ function EmailEmargement({
       return resp.json();
     },
     onSuccess: (data) => {
-      toast({ title: `${data.sentCount} email(s) d'emargement envoye(s)` });
+      const parts = [`${data.sentCount} email(s) envoye(s)`];
+      if (data.skippedNoEmail > 0) parts.push(`${data.skippedNoEmail} sans email`);
+      if (data.skippedAlreadySigned > 0) parts.push(`${data.skippedAlreadySigned} deja signe(s)`);
+      toast({ title: parts.join(" — ") });
       queryClient.invalidateQueries({ queryKey: ["/api/attendance-records"] });
     },
     onError: () => toast({ title: "Erreur lors de l'envoi", variant: "destructive" }),
@@ -762,23 +765,38 @@ function EmailEmargement({
 
       {selectedSheetId && (
         <>
-          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 p-3">
-            <p className="text-sm text-blue-700 dark:text-blue-400">
-              Un email sera envoye a chaque stagiaire avec un lien personnel pour signer son emargement.
-            </p>
-          </div>
+          {(() => {
+            const withoutEmail = activeEnrollments.filter(e => !traineeMap.get(e.traineeId)?.email);
+            return (
+              <>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 p-3">
+                  <p className="text-sm text-blue-700 dark:text-blue-400">
+                    Un email sera envoye a chaque stagiaire avec un lien personnel pour signer son emargement.
+                  </p>
+                </div>
 
-          <Button
-            onClick={() => sendMutation.mutate(selectedSheetId)}
-            disabled={sendMutation.isPending}
-          >
-            {sendMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4 mr-2" />
-            )}
-            {sendMutation.isPending ? "Envoi en cours..." : "Envoyer les liens d'emargement"}
-          </Button>
+                {withoutEmail.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-3">
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                      {withoutEmail.length} stagiaire(s) sans adresse email — utilisez le mode QR Code ou Tablette pour ces stagiaires.
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={() => sendMutation.mutate(selectedSheetId)}
+                  disabled={sendMutation.isPending}
+                >
+                  {sendMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  {sendMutation.isPending ? "Envoi en cours..." : "Envoyer les liens d'emargement"}
+                </Button>
+              </>
+            );
+          })()}
 
           <div className="space-y-2">
             {activeEnrollments.map((enrollment) => {
@@ -786,16 +804,24 @@ function EmailEmargement({
               const record = records?.find((r) => r.traineeId === enrollment.traineeId);
               const isSigned = !!record?.signedAt;
               const hasToken = !!(record as any)?.emargementToken;
+              const hasEmail = !!trainee?.email;
 
               return (
-                <div key={enrollment.traineeId} className="flex items-center justify-between p-3 rounded-lg border">
+                <div key={enrollment.traineeId} className={`flex items-center justify-between p-3 rounded-lg border ${isSigned ? "bg-green-50 dark:bg-green-900/20 border-green-200" : !hasEmail ? "bg-amber-50/50 dark:bg-amber-900/10 border-amber-200" : ""}`}>
                   <div>
                     <p className="text-sm font-medium">
                       {trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}
                     </p>
-                    {trainee?.email ? <a href={`mailto:${trainee.email}`} className="text-xs text-primary hover:underline">{trainee.email}</a> : <p className="text-xs text-muted-foreground">Pas d'email</p>}
+                    {hasEmail ? (
+                      <a href={`mailto:${trainee!.email}`} className="text-xs text-primary hover:underline">{trainee!.email}</a>
+                    ) : (
+                      <p className="text-xs text-amber-600">Pas d'email — utiliser QR Code ou Tablette</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {!hasEmail && !isSigned && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Sans email</Badge>
+                    )}
                     {hasToken && !isSigned && (
                       <StatusBadge status="email_sent" label="Email envoye" />
                     )}
@@ -829,15 +855,59 @@ function VisioEmargement({
   const { toast } = useToast();
   const [selectedSheetId, setSelectedSheetId] = useState("");
 
+  const { data: enrollments } = useQuery<Enrollment[]>({
+    queryKey: ["/api/enrollments", `?sessionId=${sessionId}`],
+    enabled: !!sessionId,
+  });
+  const { data: trainees } = useQuery<Trainee[]>({ queryKey: ["/api/trainees"] });
+  const { data: records, refetch: refetchRecords } = useQuery<AttendanceRecord[]>({
+    queryKey: ["/api/attendance-records", `?sheetId=${selectedSheetId}`],
+    enabled: !!selectedSheetId,
+  });
+
+  const activeEnrollments = enrollments?.filter((e) => e.status !== "cancelled") || [];
+  const traineeMap = new Map(trainees?.map((t) => [t.id, t]) || []);
+
   const sendMutation = useMutation({
     mutationFn: async (sheetId: string) => {
       const resp = await apiRequest("POST", "/api/attendance-records/send-emargement", { sheetId });
       return resp.json();
     },
     onSuccess: (data) => {
-      toast({ title: `${data.sentCount} email(s) d'emargement envoye(s)` });
+      const parts = [`${data.sentCount} email(s) envoye(s)`];
+      if (data.skippedNoEmail > 0) parts.push(`${data.skippedNoEmail} sans email`);
+      if (data.skippedAlreadySigned > 0) parts.push(`${data.skippedAlreadySigned} deja confirme(s)`);
+      toast({ title: parts.join(" — ") });
+      refetchRecords();
     },
     onError: () => toast({ title: "Erreur lors de l'envoi", variant: "destructive" }),
+  });
+
+  // One-click confirm by admin for a trainee
+  const confirmMutation = useMutation({
+    mutationFn: async ({ traineeId }: { traineeId: string }) => {
+      const record = records?.find((r) => r.traineeId === traineeId);
+      if (record) {
+        return apiRequest("PATCH", `/api/attendance-records/${record.id}`, {
+          status: "present",
+          signedAt: new Date().toISOString(),
+          signatureData: "VISIO_ONE_CLICK",
+        });
+      }
+      return apiRequest("POST", "/api/attendance-records", {
+        sheetId: selectedSheetId,
+        traineeId,
+        status: "present",
+        signedAt: new Date().toISOString(),
+        signatureData: "VISIO_ONE_CLICK",
+      });
+    },
+    onSuccess: () => {
+      refetchRecords();
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance-records/report"] });
+      toast({ title: "Presence confirmee" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
 
   const isDistanciel = session?.modality === "distanciel";
@@ -869,7 +939,7 @@ function VisioEmargement({
     <div className="space-y-4">
       <div className="rounded-lg border border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800 p-3">
         <p className="text-sm text-purple-700 dark:text-purple-400">
-          Session en visioconference — les stagiaires recevront un lien pour confirmer leur presence en un clic (sans signature manuscrite).
+          Session en visioconference — confirmez la presence directement ou envoyez un lien de confirmation par email.
         </p>
       </div>
 
@@ -890,17 +960,64 @@ function VisioEmargement({
       </div>
 
       {selectedSheetId && (
-        <Button
-          onClick={() => sendMutation.mutate(selectedSheetId)}
-          disabled={sendMutation.isPending}
-        >
-          {sendMutation.isPending ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4 mr-2" />
-          )}
-          {sendMutation.isPending ? "Envoi en cours..." : "Envoyer les liens de confirmation"}
-        </Button>
+        <>
+          <Button
+            onClick={() => sendMutation.mutate(selectedSheetId)}
+            disabled={sendMutation.isPending}
+            variant="outline"
+          >
+            {sendMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4 mr-2" />
+            )}
+            {sendMutation.isPending ? "Envoi en cours..." : "Envoyer les liens par email"}
+          </Button>
+
+          <div className="space-y-2">
+            {activeEnrollments.map((enrollment) => {
+              const trainee = traineeMap.get(enrollment.traineeId);
+              const record = records?.find((r) => r.traineeId === enrollment.traineeId);
+              const isSigned = !!record?.signedAt;
+              const hasToken = !!(record as any)?.emargementToken;
+
+              return (
+                <div
+                  key={enrollment.traineeId}
+                  className={`flex items-center justify-between p-3 rounded-lg border ${isSigned ? "bg-green-50 dark:bg-green-900/20 border-green-200" : "bg-white dark:bg-gray-950"}`}
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}
+                    </p>
+                    {trainee?.email ? (
+                      <p className="text-xs text-muted-foreground">{trainee.email}</p>
+                    ) : (
+                      <p className="text-xs text-amber-600">Pas d'email</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasToken && !isSigned && (
+                      <StatusBadge status="email_sent" label="Email envoye" />
+                    )}
+                    {isSigned ? (
+                      <StatusBadge status="signed" label="Present" />
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => confirmMutation.mutate({ traineeId: enrollment.traineeId })}
+                        disabled={confirmMutation.isPending}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Confirmer
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
