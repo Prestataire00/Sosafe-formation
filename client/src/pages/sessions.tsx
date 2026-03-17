@@ -815,7 +815,7 @@ function SessionCalendarView({
 
 export default function Sessions() {
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<"cards" | "calendar" | "kanban">("cards");
+  const [viewMode, setViewMode] = useState<"list" | "calendar" | "kanban">("list");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editSession, setEditSession] = useState<Session | undefined>();
   const [trombiSessionId, setTrombiSessionId] = useState<string | null>(null);
@@ -1059,38 +1059,14 @@ export default function Sessions() {
   return (
     <PageLayout>
       <PageHeader
-        title="Sessions"
-        subtitle="Planifiez et gérez vos sessions de formation"
+        title="Sessions de formation"
+        subtitle="Planifiez et suivez vos sessions"
         actions={
           <div className="flex items-center gap-3">
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "cards" | "calendar" | "kanban")}>
-              <TabsList>
-                <TabsTrigger value="cards" className="gap-1.5">
-                  <LayoutGrid className="w-4 h-4" />
-                  Cartes
-                </TabsTrigger>
-                <TabsTrigger value="kanban" className="gap-1.5">
-                  <Layers className="w-4 h-4" />
-                  Kanban
-                </TabsTrigger>
-                <TabsTrigger value="calendar" className="gap-1.5">
-                  <Calendar className="w-4 h-4" />
-                  Calendrier
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" onClick={handleCopyLink} className="gap-2">
-                  <Link2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Lien d'inscription</span>
-                  {linkCopied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p className="text-xs">{publicEnrollmentUrl}</p>
-              </TooltipContent>
-            </Tooltip>
+            <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvelle session
+            </Button>
             <ExportButton
               data={filtered}
               columns={[
@@ -1103,37 +1079,47 @@ export default function Sessions() {
               ]}
               filename="sessions"
             />
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              Importer CSV
-            </Button>
-            <Button onClick={() => { setEditSession(undefined); setDialogOpen(true); }} data-testid="button-create-session">
-              <Plus className="w-4 h-4 mr-2" />
-              Nouvelle session
-            </Button>
           </div>
         }
       />
+
+      <div className="flex items-center justify-between gap-4">
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar" | "kanban")}>
+          <TabsList>
+            <TabsTrigger value="list" className="gap-1.5">
+              <LayoutGrid className="w-4 h-4" />
+              Liste
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-1.5">
+              <Calendar className="w-4 h-4" />
+              Calendrier
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
       <SearchInput
         value={search}
         onChange={setSearch}
         placeholder="Rechercher une session..."
-        className="max-w-sm"
-      />
-
-      <AdvancedFilters
-        filters={sessionFilters}
-        values={filterValues}
-        onChange={setFilterValues}
+        className="max-w-md"
       />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}><CardContent className="p-5"><Skeleton className="h-5 w-3/4 mb-3" /><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-1/2 mb-4" /><Skeleton className="h-6 w-20" /></CardContent></Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex gap-4">
+                <Skeleton className="h-5 w-1/4" />
+                <Skeleton className="h-5 w-1/6" />
+                <Skeleton className="h-5 w-1/6" />
+                <Skeleton className="h-5 w-1/6" />
+                <Skeleton className="h-5 w-1/12" />
+                <Skeleton className="h-5 w-1/12" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : viewMode === "kanban" ? (
         (() => {
           const toplan = filtered.filter((s) => s.status === "planned" && (!s.trainerId || !s.startDate));
@@ -1228,106 +1214,83 @@ export default function Sessions() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((session) => {
-            const program = programs?.find((p) => p.id === session.programId);
-            const trainer = trainers?.find((t) => t.id === session.trainerId);
-            const enrolledCount = enrollmentCounts[session.id] || 0;
-            const sessionTrainees = sessionTraineesMap[session.id] || [];
-            return (
-              <Card
-                key={session.id}
-                className="hover-elevate cursor-pointer transition-shadow hover:shadow-md"
-                data-testid={`card-session-${session.id}`}
-                onClick={() => handleCardClick(session)}
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold truncate">{session.title}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {program?.title || "Formation non trouvée"}
-                      </p>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          data-testid={`button-session-menu-${session.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenuItem onClick={() => { setEditSession(session); setDialogOpen(true); }} data-testid={`button-edit-session-${session.id}`}>
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Modifier
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setTrombiSessionId(session.id)} data-testid={`button-trombi-session-${session.id}`}>
-                          <Users className="w-4 h-4 mr-2" />
-                          Trombinoscope
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteSessionId(session.id)}
-                          data-testid={`button-delete-session-${session.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Supprimer
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <InlineStatusBadge session={session} onStatusChange={handleInlineStatusChange} />
-                    <CapacityBadge enrolled={enrolledCount} max={session.maxParticipants} waitlisted={waitlistCounts[session.id] || 0} />
-                  </div>
-                  <div className="space-y-1.5 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 shrink-0" />
-                      <span>
-                        {new Date(session.startDate).toLocaleDateString("fr-FR")} - {new Date(session.endDate).toLocaleDateString("fr-FR")}
-                      </span>
-                    </div>
-                    <ModalityIcon modality={session.modality} />
-                    {session.location && (
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">
-                          {session.location}{session.locationRoom ? ` - ${session.locationRoom}` : ""}
-                        </span>
-                      </div>
-                    )}
-                    {session.virtualClassUrl && (
-                      <div className="flex items-center gap-1.5">
-                        <Video className="w-3.5 h-3.5 shrink-0 text-blue-500" />
-                        <a href={session.virtualClassUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate text-sm">
-                          Classe virtuelle
-                        </a>
-                      </div>
-                    )}
-                    <InlineTrainerSelect
-                      session={session}
-                      trainers={trainers || []}
-                      currentTrainer={trainer}
-                      onTrainerChange={handleInlineTrainerChange}
-                    />
-                    <div className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 shrink-0" />
-                      <span>{enrolledCount}/{session.maxParticipants} inscrits</span>
-                    </div>
-                  </div>
-                  <TraineeAvatarStrip
-                    trainees={sessionTrainees}
-                    onClick={() => setTrombiSessionId(session.id)}
-                  />
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <>
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Formation</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Formateur</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Dates</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Lieu</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Participants</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Statut</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((session) => {
+                    const program = programs?.find((p) => p.id === session.programId);
+                    const trainer = trainers?.find((t) => t.id === session.trainerId);
+                    const enrolledCount = enrollmentCounts[session.id] || 0;
+                    return (
+                      <tr
+                        key={session.id}
+                        className="border-b last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
+                        data-testid={`row-session-${session.id}`}
+                        onClick={() => handleCardClick(session)}
+                      >
+                        <td className="px-4 py-3">
+                          <span className="font-medium text-sm">{program?.title || session.title}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm">{trainer ? `${trainer.firstName} ${trainer.lastName}` : <span className="text-muted-foreground">Non assigné</span>}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm">
+                            <div>{new Date(session.startDate).toLocaleDateString("fr-FR")}</div>
+                            <div className="text-muted-foreground">{"\u2192"} {new Date(session.endDate).toLocaleDateString("fr-FR")}</div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm">{session.location ? `${session.location}${session.locationRoom ? ` - ${session.locationRoom}` : ""}` : <span className="text-muted-foreground">Non défini</span>}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-muted-foreground">{enrolledCount}/{session.maxParticipants}</span>
+                        </td>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <InlineStatusBadge session={session} onStatusChange={handleInlineStatusChange} />
+                        </td>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`button-session-menu-${session.id}`}>
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { setEditSession(session); setDialogOpen(true); }}>
+                                <Pencil className="w-4 h-4 mr-2" /> Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setTrombiSessionId(session.id)}>
+                                <Users className="w-4 h-4 mr-2" /> Trombinoscope
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => setDeleteSessionId(session.id)}>
+                                <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          <p className="text-sm text-muted-foreground">{filtered.length} session{filtered.length > 1 ? "s" : ""}</p>
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditSession(undefined); }}>
