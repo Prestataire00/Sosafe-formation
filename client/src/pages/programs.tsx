@@ -801,6 +801,9 @@ export default function Programs() {
   const { data: programs, isLoading } = useQuery<Program[]>({
     queryKey: ["/api/programs"],
   });
+  const { data: allSessions } = useQuery<Session[]>({
+    queryKey: ["/api/sessions"],
+  });
 
   const createMutation = useMutation({
     mutationFn: (data: InsertProgram) => apiRequest("POST", "/api/programs", data),
@@ -908,9 +911,13 @@ export default function Programs() {
     <PageLayout>
       <PageHeader
         title="Formations"
-        subtitle="Catalogue des formations SO'SAFE"
+        subtitle="Catalogue des formations"
         actions={
           <div className="flex items-center gap-2">
+            <Button onClick={() => { setEditProgram(undefined); setDialogOpen(true); }} data-testid="button-create-program">
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvelle formation
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -921,94 +928,33 @@ export default function Programs() {
               <FileDown className="w-4 h-4 mr-2" />
               Catalogue PDF
             </Button>
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              Importer CSV
-            </Button>
-            <Button onClick={() => { setEditProgram(undefined); setDialogOpen(true); }} data-testid="button-create-program">
-              <Plus className="w-4 h-4 mr-2" />
-              Nouvelle formation
-            </Button>
           </div>
         }
       />
 
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Rechercher une formation..."
-            className="max-w-sm"
-          />
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Filter className="w-4 h-4" />
-                Catégories
-                {categoryFilter.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">{categoryFilter.length}</Badge>
-                )}
-                <ChevronDown className="w-3 h-3 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-72 max-h-80 overflow-y-auto p-3" align="start">
-              <div className="space-y-3">
-                {PROGRAM_CATEGORY_GROUPS.map((group) => (
-                  <div key={group.label}>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{group.label}</p>
-                    <div className="space-y-1.5">
-                      {group.categories.map((c) => (
-                        <label key={c} className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={categoryFilter.includes(c)}
-                            onCheckedChange={() => {
-                              setCategoryFilter((prev) =>
-                                prev.includes(c)
-                                  ? prev.filter((x) => x !== c)
-                                  : [...prev, c]
-                              );
-                            }}
-                          />
-                          <span className="text-sm">{c}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-          {(search || categoryFilter.length > 0) && (
-            <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setCategoryFilter([]); }} className="text-muted-foreground">
-              <X className="w-3 h-3 mr-1" />
-              Effacer les filtres
-            </Button>
-          )}
-        </div>
-        {categoryFilter.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {categoryFilter.map((cat) => (
-              <Badge
-                key={cat}
-                variant="secondary"
-                className="gap-1 cursor-pointer hover:bg-destructive/10"
-                onClick={() => setCategoryFilter((prev) => prev.filter((c) => c !== cat))}
-              >
-                {cat}
-                <X className="w-3 h-3" />
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Rechercher une formation..."
+        className="max-w-md"
+      />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Card key={i}><CardContent className="p-5"><Skeleton className="h-5 w-3/4 mb-3" /><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-2/3 mb-4" /><Skeleton className="h-6 w-20" /></CardContent></Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex gap-4">
+                <Skeleton className="h-5 w-1/4" />
+                <Skeleton className="h-5 w-1/6" />
+                <Skeleton className="h-5 w-1/12" />
+                <Skeleton className="h-5 w-1/6" />
+                <Skeleton className="h-5 w-1/12" />
+                <Skeleton className="h-5 w-1/12" />
+                <Skeleton className="h-5 w-1/12" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16">
           <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
@@ -1024,75 +970,87 @@ export default function Programs() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((program) => (
-            <Card key={program.id} className="hover-elevate cursor-pointer" data-testid={`card-program-${program.id}`} onClick={() => setViewProgram(program)}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold truncate hover:text-primary transition-colors">{program.title}</h3>
-                    <div className="flex flex-wrap gap-1 mt-0.5">{program.categories?.map((c) => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}</div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()} data-testid={`button-program-menu-${program.id}`}>
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setViewProgram(program); }}>
-                        <Eye className="w-4 h-4 mr-2" />
-                        Voir la fiche
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditProgram(program); setDialogOpen(true); }} data-testid={`button-edit-program-${program.id}`}>
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Modifier
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(program.id); }} data-testid={`button-delete-program-${program.id}`}>
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Supprimer
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                {program.description && (
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{program.description}</p>
-                )}
-                <div className="flex flex-wrap items-center gap-2 mb-3">
-                  <LevelBadge level={program.level} />
-                  <ProgramStatusBadge status={program.status} />
-                  <ModalityBadge modality={program.modality} />
-                  {program.certifying && (
-                    <Badge variant="outline" className="text-xs gap-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                      <Award className="w-3 h-3" />
-                      Certifiante
-                    </Badge>
-                  )}
-                  {program.fundingTypes?.map((f: string) => {
-                    const ft = FUNDING_TYPES.find((t) => t.value === f);
-                    return ft ? <Badge key={f} className={`text-xs ${ft.color}`}>{ft.label}</Badge> : null;
+        <>
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Formation</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Catégorie</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Durée</th>
+                    <th className="text-right text-sm font-medium text-muted-foreground px-4 py-3">Prix</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Niveau</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Sessions</th>
+                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Statut</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((program) => {
+                    const sessionCount = allSessions?.filter((s) => s.programId === program.id).length || 0;
+                    const levelLabel = levels.find((l) => l.value === program.level)?.label || program.level;
+                    const statusLabel = program.status === "published" ? "Active" : program.status === "draft" ? "Brouillon" : "Archivée";
+                    const durationDisplay = program.duration >= 7 ? `${Math.round(program.duration / 7)} jour${Math.round(program.duration / 7) > 1 ? "s" : ""}` : `${program.duration}h`;
+                    return (
+                      <tr
+                        key={program.id}
+                        className="border-b last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
+                        data-testid={`row-program-${program.id}`}
+                        onClick={() => setViewProgram(program)}
+                      >
+                        <td className="px-4 py-3">
+                          <span className="font-medium text-sm">{program.title}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-muted-foreground">{program.categories?.join(", ") || "-"}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm">{durationDisplay}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-sm">{program.price.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm">{levelLabel}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-muted-foreground">{sessionCount} session{sessionCount > 1 ? "s" : ""}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={program.status === "published" ? "default" : "secondary"} className="text-xs">
+                            {statusLabel}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`button-program-menu-${program.id}`}>
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setViewProgram(program)}>
+                                <Eye className="w-4 h-4 mr-2" /> Voir la fiche
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { setEditProgram(program); setDialogOpen(true); }}>
+                                <Pencil className="w-4 h-4 mr-2" /> Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
+                                <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    );
                   })}
-                </div>
-                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    {program.duration}h
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Euro className="w-3.5 h-3.5" />
-                    {program.price.toLocaleString("fr-FR")} EUR
-                  </span>
-                  {program.recyclingMonths && (
-                    <span className="flex items-center gap-1">
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      {program.recyclingMonths} mois
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          <p className="text-sm text-muted-foreground">{filtered.length} formation{filtered.length > 1 ? "s" : ""} au total</p>
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditProgram(undefined); }}>
