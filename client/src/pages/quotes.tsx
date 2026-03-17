@@ -600,256 +600,127 @@ export default function Quotes() {
         }
       />
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total devis
-            </CardTitle>
-            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-accent">
-              <FileText className="w-4 h-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold">{totalQuotes}</div>
-            )}
-          </CardContent>
-        </Card>
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Rechercher par numero ou titre..."
+        className="max-w-md"
+      />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Montant total
-            </CardTitle>
-            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-accent">
-              <Euro className="w-4 h-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <div className="text-2xl font-bold">{formatCents(totalAmount)} EUR</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Taux de conversion
-            </CardTitle>
-            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-accent">
-              <TrendingUp className="w-4 h-4 text-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{conversionRate}%</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {acceptedCount} accepte{acceptedCount > 1 ? "s" : ""} / {totalQuotes} devis
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Rechercher par numero ou titre..."
-          className="max-w-sm"
-        />
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Tous les statuts" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les statuts</SelectItem>
-            {QUOTE_STATUSES.map((s) => (
-              <SelectItem key={s.value} value={s.value}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
+      {/* Status-grouped sections */}
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-14 w-full" />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title="Aucun devis"
-          description={
-            search || statusFilter !== "all"
-              ? "Aucun resultat pour votre recherche"
-              : "Creez votre premier devis"
-          }
-          action={
-            !search && statusFilter === "all" ? (
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nouveau devis
-              </Button>
-            ) : undefined
-          }
-        />
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Numero</TableHead>
-                  <TableHead>Titre</TableHead>
-                  <TableHead>Entreprise / Prospect</TableHead>
-                  <TableHead className="text-right">Total TTC</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="w-[60px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((quote) => (
-                  <TableRow key={quote.id}>
-                    <TableCell className="font-mono text-sm">
-                      {quote.number}
-                    </TableCell>
-                    <TableCell className="font-medium max-w-[200px] truncate">
-                      {quote.title}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {quote.enterpriseId
-                        ? enterpriseName(quote.enterpriseId)
-                        : prospectName(quote.prospectId)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCents(quote.total)} EUR
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={quote.status} label={statusLabel(quote.status)} />
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {quote.createdAt
-                        ? new Date(quote.createdAt).toLocaleDateString("fr-FR")
-                        : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
+        <div className="space-y-6">
+          {(() => {
+            const statusConfig: Array<{ value: string; label: string; borderColor: string; bgColor: string; textColor: string }> = [
+              { value: "draft", label: "Brouillon", borderColor: "border-gray-400", bgColor: "bg-gray-50 dark:bg-gray-900/30", textColor: "text-gray-600 dark:text-gray-400" },
+              { value: "sent", label: "Envoyé", borderColor: "border-blue-400", bgColor: "bg-blue-50 dark:bg-blue-900/20", textColor: "text-blue-600 dark:text-blue-400" },
+              { value: "accepted", label: "Accepté", borderColor: "border-green-400", bgColor: "bg-green-50 dark:bg-green-900/20", textColor: "text-green-600 dark:text-green-400" },
+              { value: "rejected", label: "Refusé", borderColor: "border-red-400", bgColor: "bg-red-50 dark:bg-red-900/20", textColor: "text-red-600 dark:text-red-400" },
+              { value: "expired", label: "Expiré", borderColor: "border-orange-400", bgColor: "bg-orange-50 dark:bg-orange-900/20", textColor: "text-orange-600 dark:text-orange-400" },
+            ];
+
+            return statusConfig.map(({ value, label, borderColor, bgColor, textColor }) => {
+              const groupQuotes = filtered.filter((q) => q.status === value);
+              return (
+                <div key={value}>
+                  <div className={`flex items-center gap-3 px-4 py-2.5 rounded-t-lg border-l-4 ${borderColor} ${bgColor}`}>
+                    <span className={`font-semibold text-sm ${textColor}`}>{label}</span>
+                    <span className={`text-xs ${textColor} opacity-70`}>{groupQuotes.length}</span>
+                  </div>
+                  {groupQuotes.length === 0 ? (
+                    <div className="border border-t-0 rounded-b-lg px-4 py-6 text-center text-sm text-muted-foreground">
+                      Aucun devis
+                    </div>
+                  ) : (
+                    <Card className="rounded-t-none border-t-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left text-sm font-medium text-muted-foreground px-4 py-2.5">Numéro</th>
+                              <th className="text-left text-sm font-medium text-muted-foreground px-4 py-2.5">Titre</th>
+                              <th className="text-left text-sm font-medium text-muted-foreground px-4 py-2.5">Entreprise / Prospect</th>
+                              <th className="text-right text-sm font-medium text-muted-foreground px-4 py-2.5">Total TTC</th>
+                              <th className="w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {groupQuotes.map((quote) => (
+                              <tr key={quote.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                                <td className="px-4 py-3 font-mono text-sm">{quote.number}</td>
+                                <td className="px-4 py-3">
+                                  <span className="font-medium text-sm">{quote.title}</span>
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  {quote.enterpriseId
+                                    ? enterpriseName(quote.enterpriseId)
+                                    : prospectName(quote.prospectId)}
+                                </td>
+                                <td className="px-4 py-3 text-right font-medium text-sm">
+                                  {formatCents(quote.total)} €
+                                </td>
+                                <td className="px-4 py-3">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                                        <MoreHorizontal className="w-4 h-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditQuote(quote);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="w-4 h-4 mr-2" />
-                            Modifier
-                          </DropdownMenuItem>
-
-                          <DropdownMenuSeparator />
-
-                          {quote.status !== "sent" && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                changeStatusMutation.mutate({
-                                  id: quote.id,
-                                  status: "sent",
-                                })
-                              }
-                            >
-                              <Send className="w-4 h-4 mr-2" />
-                              Marquer comme envoye
-                            </DropdownMenuItem>
-                          )}
-                          {quote.status !== "accepted" && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                changeStatusMutation.mutate({
-                                  id: quote.id,
-                                  status: "accepted",
-                                })
-                              }
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Marquer comme accepte
-                            </DropdownMenuItem>
-                          )}
-                          {quote.status !== "rejected" && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                changeStatusMutation.mutate({
-                                  id: quote.id,
-                                  status: "rejected",
-                                })
-                              }
-                            >
-                              <XCircle className="w-4 h-4 mr-2" />
-                              Marquer comme refuse
-                            </DropdownMenuItem>
-                          )}
-                          {quote.status !== "expired" && (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                changeStatusMutation.mutate({
-                                  id: quote.id,
-                                  status: "expired",
-                                })
-                              }
-                            >
-                              <Clock className="w-4 h-4 mr-2" />
-                              Marquer comme expire
-                            </DropdownMenuItem>
-                          )}
-
-                          <DropdownMenuSeparator />
-
-                          {quote.status === "accepted" && (
-                            <DropdownMenuItem
-                              onClick={() => convertMutation.mutate(quote.id)}
-                            >
-                              <ArrowRightLeft className="w-4 h-4 mr-2" />
-                              Convertir en facture
-                            </DropdownMenuItem>
-                          )}
-
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => deleteMutation.mutate(quote.id)}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Supprimer
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                                      <DropdownMenuItem onClick={() => { setEditQuote(quote); setDialogOpen(true); }}>
+                                        <Pencil className="w-4 h-4 mr-2" /> Modifier
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      {quote.status !== "sent" && (
+                                        <DropdownMenuItem onClick={() => changeStatusMutation.mutate({ id: quote.id, status: "sent" })}>
+                                          <Send className="w-4 h-4 mr-2" /> Marquer envoyé
+                                        </DropdownMenuItem>
+                                      )}
+                                      {quote.status !== "accepted" && (
+                                        <DropdownMenuItem onClick={() => changeStatusMutation.mutate({ id: quote.id, status: "accepted" })}>
+                                          <CheckCircle className="w-4 h-4 mr-2" /> Marquer accepté
+                                        </DropdownMenuItem>
+                                      )}
+                                      {quote.status !== "rejected" && (
+                                        <DropdownMenuItem onClick={() => changeStatusMutation.mutate({ id: quote.id, status: "rejected" })}>
+                                          <XCircle className="w-4 h-4 mr-2" /> Marquer refusé
+                                        </DropdownMenuItem>
+                                      )}
+                                      {quote.status !== "expired" && (
+                                        <DropdownMenuItem onClick={() => changeStatusMutation.mutate({ id: quote.id, status: "expired" })}>
+                                          <Clock className="w-4 h-4 mr-2" /> Marquer expiré
+                                        </DropdownMenuItem>
+                                      )}
+                                      <DropdownMenuSeparator />
+                                      {quote.status === "accepted" && (
+                                        <DropdownMenuItem onClick={() => convertMutation.mutate(quote.id)}>
+                                          <ArrowRightLeft className="w-4 h-4 mr-2" /> Convertir en facture
+                                        </DropdownMenuItem>
+                                      )}
+                                      <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(quote.id)}>
+                                        <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+              );
+            });
+          })()}
+        </div>
       )}
 
       {/* Create / Edit dialog */}
