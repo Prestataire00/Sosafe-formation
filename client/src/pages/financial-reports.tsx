@@ -1,51 +1,40 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ExportButton } from "@/components/shared/ExportButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Calendar,
+  Users,
+  Clock,
   Euro,
-  TrendingUp,
-  AlertTriangle,
-  BarChart3,
   Download,
+  Award,
+  BarChart3,
+  BookOpen,
+  Wallet,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from "recharts";
-import type { Invoice, Session, Program } from "@shared/schema";
-import { INVOICE_STATUSES } from "@shared/schema";
+import type { Invoice, Session, Program, Enrollment } from "@shared/schema";
 
 // --- Helpers ---
 
 function formatEuros(centimes: number): string {
   return (centimes / 100).toLocaleString("fr-FR", {
-    style: "currency",
-    currency: "EUR",
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -54,468 +43,376 @@ const MONTHS_FR = [
   "Jul", "Aou", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "#94a3b8",
-  sent: "#3b82f6",
-  paid: "#22c55e",
-  partial: "#eab308",
-  overdue: "#ef4444",
-  cancelled: "#6b7280",
-};
-
-const PIE_COLORS = ["#94a3b8", "#3b82f6", "#22c55e", "#eab308", "#ef4444", "#6b7280"];
-
-// --- Stat card ---
-
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  subtitle,
-  loading,
-}: {
-  title: string;
-  value: string;
-  icon: typeof Euro;
-  subtitle?: string;
-  loading?: boolean;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-accent">
-          <Icon className="w-4 h-4 text-foreground" />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-8 w-24" />
-        ) : (
-          <>
-            <div className="text-2xl font-bold">{value}</div>
-            {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // --- Main component ---
 
 export default function FinancialReports() {
   const { data: invoices, isLoading: loadingInvoices } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices"],
   });
-
-  const { data: stats, isLoading: loadingStats } = useQuery<{
-    total: number;
-    paid: number;
-    pending: number;
-    overdue: number;
-    count: number;
-  }>({
-    queryKey: ["/api/invoices/stats"],
-  });
-
   const { data: sessions, isLoading: loadingSessions } = useQuery<Session[]>({
     queryKey: ["/api/sessions"],
   });
-
   const { data: programs, isLoading: loadingPrograms } = useQuery<Program[]>({
     queryKey: ["/api/programs"],
   });
+  const { data: enrollments, isLoading: loadingEnrollments } = useQuery<Enrollment[]>({
+    queryKey: ["/api/enrollments"],
+  });
 
-  const loading = loadingInvoices || loadingStats || loadingSessions || loadingPrograms;
+  const loading = loadingInvoices || loadingSessions || loadingPrograms || loadingEnrollments;
 
   const { toast } = useToast();
   const currentYear = new Date().getFullYear();
-  const [bpfYear, setBpfYear] = useState(currentYear);
+  const [bpfYear, setBpfYear] = useState(currentYear.toString());
 
   const generateBpfMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/documents/generate-bpf", { year: bpfYear }),
+    mutationFn: () => apiRequest("POST", "/api/documents/generate-bpf", { year: parseInt(bpfYear) }),
     onSuccess: () =>
       toast({ title: `BPF ${bpfYear} exporté dans la GED` }),
     onError: () =>
       toast({ title: "Erreur lors de la génération du BPF", variant: "destructive" }),
   });
 
-  // --- Computed data ---
+  // --- Filter by year ---
+  const yearSessions = useMemo(() => {
+    if (!sessions) return [];
+    return sessions.filter((s) => {
+      const start = new Date(s.startDate);
+      return start.getFullYear() === parseInt(bpfYear);
+    });
+  }, [sessions, bpfYear]);
 
-  // 1. Stats cards
-  const chiffreAffaires = stats?.total ?? 0;
-  const impaye = (stats?.overdue ?? 0) + (stats?.pending ?? 0);
-  const sessionCount = sessions?.length || 1;
-  const valeurMoyenneSession = sessionCount > 0 ? Math.round(chiffreAffaires / sessionCount) : 0;
+  const yearEnrollments = useMemo(() => {
+    if (!enrollments || !yearSessions) return [];
+    const sessionIds = new Set(yearSessions.map((s) => s.id));
+    return enrollments.filter((e) => sessionIds.has(e.sessionId));
+  }, [enrollments, yearSessions]);
 
-  // 2. Monthly revenue bar chart data
-  const monthlyRevenue = (() => {
+  const yearInvoices = useMemo(() => {
     if (!invoices) return [];
-    const byMonth: Record<string, number> = {};
-    for (const inv of invoices) {
-      if (inv.status === "cancelled") continue;
+    return invoices.filter((inv) => {
+      if (inv.status === "cancelled") return false;
       const d = inv.createdAt ? new Date(inv.createdAt) : null;
-      if (!d) continue;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      byMonth[key] = (byMonth[key] || 0) + inv.total;
-    }
-    return Object.entries(byMonth)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, total]) => {
-        const [year, month] = key.split("-");
-        return {
-          name: `${MONTHS_FR[parseInt(month, 10) - 1]} ${year}`,
-          ca: total / 100,
-        };
-      });
-  })();
+      return d && d.getFullYear() === parseInt(bpfYear);
+    });
+  }, [invoices, bpfYear]);
 
-  // 3. Invoice status pie chart data
-  const statusData = (() => {
-    if (!invoices) return [];
-    const counts: Record<string, number> = {};
-    for (const inv of invoices) {
-      counts[inv.status] = (counts[inv.status] || 0) + 1;
-    }
-    return INVOICE_STATUSES.map((s) => ({
-      name: s.label,
-      value: counts[s.value] || 0,
-      status: s.value,
-    })).filter((d) => d.value > 0);
-  })();
+  // --- 1. Stats cards ---
+  const sessionsRealisees = yearSessions.filter((s) => s.status === "completed" || s.status === "ongoing").length;
+  const stagiairesFormes = new Set(yearEnrollments.map((e) => e.traineeId)).size;
+  const heuresFormation = yearSessions.reduce((sum, s) => {
+    const program = programs?.find((p) => p.id === s.programId);
+    return sum + (program?.duration || 0);
+  }, 0);
+  const caRealise = yearInvoices.reduce((sum, inv) => sum + inv.total, 0);
 
-  // 4. Top formations par CA
-  const topFormations = (() => {
-    if (!invoices || !sessions || !programs) return [];
-    const caByProgram: Record<string, number> = {};
-    for (const inv of invoices) {
-      if (inv.status === "cancelled" || !inv.sessionId) continue;
+  // --- 2. Sessions par mois ---
+  const sessionsByMonth = useMemo(() => {
+    const counts = new Array(12).fill(0);
+    for (const s of yearSessions) {
+      const month = new Date(s.startDate).getMonth();
+      counts[month]++;
+    }
+    return counts;
+  }, [yearSessions]);
+
+  // --- 3. Par catégorie ---
+  const byCategory = useMemo(() => {
+    if (!programs) return [];
+    const cats: Record<string, { sessions: number; stagiaires: number }> = {};
+    for (const s of yearSessions) {
+      const program = programs.find((p) => p.id === s.programId);
+      const categories = program?.categories || ["Autre"];
+      const sessionEnrollments = yearEnrollments.filter((e) => e.sessionId === s.id);
+      for (const cat of categories) {
+        if (!cats[cat]) cats[cat] = { sessions: 0, stagiaires: 0 };
+        cats[cat].sessions++;
+        cats[cat].stagiaires += sessionEnrollments.length;
+      }
+    }
+    return Object.entries(cats)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.sessions - a.sessions);
+  }, [yearSessions, yearEnrollments, programs]);
+
+  // --- 4. Provenance des financements ---
+  const fundingData = useMemo(() => {
+    if (!programs || !yearInvoices || !sessions) return [];
+    const byFunding: Record<string, number> = {};
+    for (const inv of yearInvoices) {
+      if (!inv.sessionId) continue;
       const session = sessions.find((s) => s.id === inv.sessionId);
       if (!session) continue;
-      const programId = session.programId;
-      caByProgram[programId] = (caByProgram[programId] || 0) + inv.total;
+      const program = programs.find((p) => p.id === session.programId);
+      const fundingTypes = program?.fundingTypes || ["entreprise"];
+      const perFunding = Math.round(inv.total / fundingTypes.length);
+      for (const ft of fundingTypes) {
+        const label = ft.charAt(0).toUpperCase() + ft.slice(1);
+        byFunding[label] = (byFunding[label] || 0) + perFunding;
+      }
     }
-    return Object.entries(caByProgram)
-      .map(([programId, total]) => {
-        const program = programs.find((p) => p.id === programId);
-        return {
-          name: program?.title || "Inconnu",
-          ca: total / 100,
-        };
+    return Object.entries(byFunding)
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [yearInvoices, sessions, programs]);
+
+  const fundingTotal = fundingData.reduce((sum, f) => sum + f.amount, 0);
+
+  // --- 5. Formations certifiantes ---
+  const certifyingPrograms = useMemo(() => {
+    if (!programs) return [];
+    return programs
+      .filter((p) => p.certifying)
+      .map((p) => {
+        const pSessions = yearSessions.filter((s) => s.programId === p.id);
+        const sessionIds = new Set(pSessions.map((s) => s.id));
+        const stag = yearEnrollments.filter((e) => sessionIds.has(e.sessionId)).length;
+        return { title: p.title, stagiaires: stag, program: p };
       })
-      .sort((a, b) => b.ca - a.ca)
-      .slice(0, 10);
-  })();
+      .filter((p) => p.stagiaires > 0 || yearSessions.some((s) => s.programId === p.program.id));
+  }, [programs, yearSessions, yearEnrollments]);
 
-  // 5. BPF summary data
-  const bpfData = (() => {
-    if (!invoices || !sessions || !programs) return [];
-    const byProgram: Record<string, { program: string; sessions: number; ca: number; paid: number; pending: number }> = {};
-    for (const inv of invoices) {
-      if (inv.status === "cancelled") continue;
-      let programTitle = "Hors session";
-      let programId = "__none__";
-      if (inv.sessionId) {
-        const session = sessions.find((s) => s.id === inv.sessionId);
-        if (session) {
-          programId = session.programId;
-          const program = programs.find((p) => p.id === programId);
-          programTitle = program?.title || "Inconnu";
-        }
-      }
-      if (!byProgram[programId]) {
-        byProgram[programId] = { program: programTitle, sessions: 0, ca: 0, paid: 0, pending: 0 };
-      }
-      byProgram[programId].ca += inv.total;
-      byProgram[programId].paid += inv.paidAmount;
-      byProgram[programId].pending += inv.total - inv.paidAmount;
-    }
-    // Count sessions per program
-    if (sessions) {
-      for (const session of sessions) {
-        if (byProgram[session.programId]) {
-          byProgram[session.programId].sessions += 1;
-        }
-      }
-    }
-    return Object.values(byProgram).sort((a, b) => b.ca - a.ca);
-  })();
-
-  const bpfTotals = bpfData.reduce(
-    (acc, row) => ({
-      sessions: acc.sessions + row.sessions,
-      ca: acc.ca + row.ca,
-      paid: acc.paid + row.paid,
-      pending: acc.pending + row.pending,
-    }),
-    { sessions: 0, ca: 0, paid: 0, pending: 0 },
-  );
+  // Export data for CSV
+  const exportData = yearSessions.map((s) => {
+    const program = programs?.find((p) => p.id === s.programId);
+    const enrolled = yearEnrollments.filter((e) => e.sessionId === s.id).length;
+    return {
+      session: s.title,
+      formation: program?.title || "",
+      debut: s.startDate,
+      fin: s.endDate,
+      lieu: s.location || "",
+      statut: s.status,
+      inscrits: enrolled,
+      duree_h: program?.duration || 0,
+    };
+  });
 
   return (
     <PageLayout>
       <PageHeader
-        title="Rapports financiers"
-        subtitle="Analyses et bilans financiers"
-      />
-
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard
-          title="Chiffre d'affaires"
-          value={formatEuros(chiffreAffaires)}
-          icon={Euro}
-          subtitle={`${stats?.count ?? 0} facture${(stats?.count ?? 0) > 1 ? "s" : ""} au total`}
-          loading={loading}
-        />
-        <StatCard
-          title="Impayé"
-          value={formatEuros(impaye)}
-          icon={AlertTriangle}
-          subtitle="En retard + en attente"
-          loading={loading}
-        />
-        <StatCard
-          title="Valeur moyenne / session"
-          value={formatEuros(valeurMoyenneSession)}
-          icon={TrendingUp}
-          subtitle={`${sessionCount} session${sessionCount > 1 ? "s" : ""}`}
-          loading={loading}
-        />
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Monthly revenue bar chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-muted-foreground" />
-              CA mensuel
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-[300px] w-full" />
-            ) : monthlyRevenue.length === 0 ? (
-              <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground">
-                Aucune donnée de facturation disponible
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyRevenue}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 12 }}
-                    className="text-muted-foreground"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    className="text-muted-foreground"
-                    tickFormatter={(v: number) =>
-                      v.toLocaleString("fr-FR", { maximumFractionDigits: 0 })
-                    }
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [
-                      `${value.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €`,
-                      "CA",
-                    ]}
-                    labelStyle={{ fontWeight: 600 }}
-                  />
-                  <Bar dataKey="ca" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Invoice status pie chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Euro className="w-4 h-4 text-muted-foreground" />
-              Statut des factures
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-[300px] w-full" />
-            ) : statusData.length === 0 ? (
-              <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground">
-                Aucune facture
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={statusData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={3}
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, value }: { name: string; value: number }) => `${name} (${value})`}
-                  >
-                    {statusData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={STATUS_COLORS[entry.status] || PIE_COLORS[index % PIE_COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string) => [`${value} facture${value > 1 ? "s" : ""}`, name]}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Top formations bar chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-muted-foreground" />
-            Top formations par CA
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <Skeleton className="h-[300px] w-full" />
-          ) : topFormations.length === 0 ? (
-            <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground">
-              Aucune donnée disponible
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topFormations} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 12 }}
-                  className="text-muted-foreground"
-                  tickFormatter={(v: number) =>
-                    v.toLocaleString("fr-FR", { maximumFractionDigits: 0 })
-                  }
-                />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  width={180}
-                  tick={{ fontSize: 12 }}
-                  className="text-muted-foreground"
-                />
-                <Tooltip
-                  formatter={(value: number) => [
-                    `${value.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €`,
-                    "CA",
-                  ]}
-                  labelStyle={{ fontWeight: 600 }}
-                />
-                <Bar dataKey="ca" fill="#22c55e" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* BPF Summary Table */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-muted-foreground" />
-            Bilan Pédagogique et Financier (BPF)
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <select
-              value={bpfYear}
-              onChange={(e) => setBpfYear(Number(e.target.value))}
-              className="text-sm border rounded px-2 py-1 bg-background"
-            >
-              {[currentYear, currentYear - 1, currentYear - 2].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+        title="Bilan Pédagogique et Financier"
+        subtitle="Données annuelles pour le BPF"
+        actions={
+          <div className="flex items-center gap-3">
+            <Select value={bpfYear} onValueChange={setBpfYear}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[currentYear, currentYear - 1, currentYear - 2, currentYear - 3].map((y) => (
+                  <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <ExportButton
+              data={exportData}
+              columns={[
+                { key: "session", label: "Session" },
+                { key: "formation", label: "Formation" },
+                { key: "debut", label: "Début" },
+                { key: "fin", label: "Fin" },
+                { key: "lieu", label: "Lieu" },
+                { key: "statut", label: "Statut" },
+                { key: "inscrits", label: "Inscrits" },
+                { key: "duree_h", label: "Durée (h)" },
+              ]}
+              filename={`BPF_${bpfYear}`}
+            />
             <Button
-              size="sm"
               variant="outline"
               onClick={() => generateBpfMutation.mutate()}
               disabled={generateBpfMutation.isPending}
             >
-              <Download className="w-4 h-4 mr-1.5" />
-              {generateBpfMutation.isPending ? "Generation..." : "Exporter vers GED"}
+              <Download className="w-4 h-4 mr-2" />
+              {generateBpfMutation.isPending ? "Génération..." : "Exporter PDF"}
             </Button>
           </div>
+        }
+      />
+
+      {/* Stats cards */}
+      {loading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}><CardContent className="p-5"><Skeleton className="h-8 w-20 mb-2" /><Skeleton className="h-4 w-28" /></CardContent></Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <Calendar className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="text-sm text-muted-foreground">Sessions réalisées</span>
+              </div>
+              <div className="text-3xl font-bold">{sessionsRealisees}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/30">
+                  <Users className="w-4.5 h-4.5 text-green-600 dark:text-green-400" />
+                </div>
+                <span className="text-sm text-muted-foreground">Stagiaires formés</span>
+              </div>
+              <div className="text-3xl font-bold">{stagiairesFormes}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                  <Clock className="w-4.5 h-4.5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <span className="text-sm text-muted-foreground">Heures de formation</span>
+              </div>
+              <div className="text-3xl font-bold">{heuresFormation}h</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                  <Euro className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <span className="text-sm text-muted-foreground">CA Réalisé HT</span>
+              </div>
+              <div className="text-3xl font-bold">{formatEuros(caRealise)} €</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Sessions par mois */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-muted-foreground" />
+            Sessions par mois
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <Skeleton className="h-48 w-full" />
-          ) : bpfData.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              Aucune donnée disponible pour le BPF
-            </div>
+            <Skeleton className="h-20 w-full" />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Formation</TableHead>
-                  <TableHead className="text-right">Sessions</TableHead>
-                  <TableHead className="text-right">CA total</TableHead>
-                  <TableHead className="text-right">Encaissé</TableHead>
-                  <TableHead className="text-right">Restant dû</TableHead>
-                  <TableHead className="text-right">Taux encaissement</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bpfData.map((row, idx) => {
-                  const taux = row.ca > 0 ? Math.round((row.paid / row.ca) * 100) : 0;
-                  return (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium">{row.program}</TableCell>
-                      <TableCell className="text-right">{row.sessions}</TableCell>
-                      <TableCell className="text-right">{formatEuros(row.ca)}</TableCell>
-                      <TableCell className="text-right">{formatEuros(row.paid)}</TableCell>
-                      <TableCell className="text-right">{formatEuros(row.pending)}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge
-                          variant="outline"
-                          className={
-                            taux >= 80
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                              : taux >= 50
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          }
-                        >
-                          {taux}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-              <TableHeader>
-                <TableRow className="bg-muted/50 font-semibold">
-                  <TableHead className="font-semibold">Total</TableHead>
-                  <TableHead className="text-right font-semibold">{bpfTotals.sessions}</TableHead>
-                  <TableHead className="text-right font-semibold">{formatEuros(bpfTotals.ca)}</TableHead>
-                  <TableHead className="text-right font-semibold">{formatEuros(bpfTotals.paid)}</TableHead>
-                  <TableHead className="text-right font-semibold">{formatEuros(bpfTotals.pending)}</TableHead>
-                  <TableHead className="text-right font-semibold">
-                    <Badge variant="outline">
-                      {bpfTotals.ca > 0 ? Math.round((bpfTotals.paid / bpfTotals.ca) * 100) : 0}%
-                    </Badge>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-            </Table>
+            <div className="grid grid-cols-12 gap-2">
+              {MONTHS_FR.map((month, i) => (
+                <div key={month} className="text-center">
+                  <div className={`text-xs font-medium mb-1 ${sessionsByMonth[i] > 0 ? "text-foreground" : "text-muted-foreground"}`}>
+                    {month}
+                  </div>
+                  <div className={`rounded-lg py-2 px-1 text-sm font-bold ${
+                    sessionsByMonth[i] > 0
+                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                      : "bg-muted/50 text-muted-foreground"
+                  }`}>
+                    {sessionsByMonth[i] || ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Par catégorie */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-muted-foreground" />
+              Par catégorie
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : byCategory.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Aucune donnée</p>
+            ) : (
+              <div className="space-y-3">
+                {byCategory.map((cat) => (
+                  <div key={cat.name} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <div>
+                      <span className="font-medium text-sm">{cat.name}</span>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {cat.sessions} session{cat.sessions > 1 ? "s" : ""} - {cat.stagiaires} stag.
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Provenance des financements */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-muted-foreground" />
+              Provenance des financements
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : fundingData.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Aucune donnée</p>
+            ) : (
+              <div className="space-y-3">
+                {fundingData.map((f) => (
+                  <div key={f.name} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <span className="font-medium text-sm">{f.name}</span>
+                    <span className="text-sm font-medium">{formatEuros(f.amount)} €</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-2 border-t-2">
+                  <span className="font-semibold text-sm">Total</span>
+                  <span className="font-semibold text-sm">{formatEuros(fundingTotal)} €</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Formations certifiantes */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Award className="w-4 h-4 text-muted-foreground" />
+            Formations certifiantes
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : certifyingPrograms.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Aucune formation certifiante cette année</p>
+          ) : (
+            <div className="space-y-3">
+              {certifyingPrograms.map((cp) => (
+                <div key={cp.program.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div>
+                    <span className="font-medium text-sm">{cp.title}</span>
+                    {cp.program.recyclingMonths && (
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        Recyclage {cp.program.recyclingMonths} mois
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-sm text-muted-foreground">{cp.stagiaires} stag.</span>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
