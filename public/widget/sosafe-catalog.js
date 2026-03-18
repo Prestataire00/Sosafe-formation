@@ -40,18 +40,16 @@
       ":host{display:block}" +
       ".sosafe-widget{font-family:" + t.fontFamily + ";color:#1f2937;max-width:1200px;margin:0 auto;padding:0 1rem 2rem}" +
 
-      // Banner
-      ".sosafe-banner{width:100%;height:320px;border-radius:0 0 " + t.borderRadius + " " + t.borderRadius + ";overflow:hidden;margin-bottom:2rem;position:relative}" +
+      // Banner with KPIs overlaid
+      ".sosafe-banner{width:100%;height:350px;overflow:hidden;margin-bottom:2rem;position:relative}" +
       ".sosafe-banner img{width:100%;height:100%;object-fit:cover;display:block}" +
-      ".sosafe-banner-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,80,159,.4),rgba(0,80,159,.7));display:flex;flex-direction:column;justify-content:center;align-items:center;color:#fff;text-align:center;padding:2rem}" +
-      ".sosafe-banner-title{font-size:2.2rem;font-weight:700;margin-bottom:.5rem;text-shadow:0 2px 8px rgba(0,0,0,.3)}" +
-      ".sosafe-banner-sub{font-size:1.1rem;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.3)}" +
-
-      // Stats bar
-      ".sosafe-stats{display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;margin-bottom:1.5rem;padding:1.2rem 1.5rem;background:#fff;border-radius:" + t.borderRadius + ";box-shadow:0 2px 12px rgba(0,0,0,.06)}" +
-      ".sosafe-stat{text-align:center;min-width:100px}" +
-      ".sosafe-stat-value{font-size:1.6rem;font-weight:700;color:" + t.accentColor + "}" +
-      ".sosafe-stat-label{font-size:.75rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}" +
+      ".sosafe-banner-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,80,159,.3),rgba(0,80,159,.7));display:flex;flex-direction:column;justify-content:center;align-items:center;color:#fff;text-align:center;padding:2rem}" +
+      ".sosafe-banner-title{font-size:2.2rem;font-weight:700;margin-bottom:.3rem;text-shadow:0 2px 8px rgba(0,0,0,.3)}" +
+      ".sosafe-banner-sub{font-size:1.1rem;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.3);margin-bottom:1.5rem}" +
+      ".sosafe-stats{display:flex;justify-content:center;gap:2.5rem;flex-wrap:wrap}" +
+      ".sosafe-stat{text-align:center;min-width:90px}" +
+      ".sosafe-stat-value{font-size:1.8rem;font-weight:700;color:" + t.primaryColor + "}" +
+      ".sosafe-stat-label{font-size:.75rem;color:rgba(255,255,255,.9);text-transform:uppercase;letter-spacing:.04em}" +
 
       // Search & Filters
       ".sosafe-search-bar{display:flex;gap:.8rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center}" +
@@ -136,7 +134,7 @@
       ".sosafe-error{text-align:center;padding:3rem;color:#dc2626;font-size:.9rem}" +
 
       // Responsive
-      "@media(max-width:700px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{height:200px}.sosafe-banner-title{font-size:1.5rem}.sosafe-stats{flex-direction:row;gap:1rem;margin-top:-1.5rem;padding:.8rem}.sosafe-stat-value{font-size:1.2rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
+      "@media(max-width:700px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{height:280px}.sosafe-banner-title{font-size:1.4rem}.sosafe-stats{gap:1rem}.sosafe-stat-value{font-size:1.2rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
@@ -184,22 +182,20 @@
     var t = Object.assign({}, defaultTheme, theme || {});
     var html = '<div class="sosafe-widget">';
 
-    // Stats bar (above banner)
-    html += '<div class="sosafe-stats">';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes</div></div>';
+    // Banner with KPIs overlaid
     var totalSessions = 0;
     programs.forEach(function (p) { totalSessions += (p.sessions || []).length; });
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + totalSessions + '</div><div class="sosafe-stat-label">Sessions</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">R\u00E9ussite</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">Satisfaction</div></div>';
-    html += '</div>';
-
-    // Banner with overlay (replaces breadcrumb area)
     html += '<div class="sosafe-banner">';
     html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
     html += '<div class="sosafe-banner-overlay">';
     html += '<div class="sosafe-banner-title">Nos formations</div>';
     html += '<div class="sosafe-banner-sub">Sant\u00E9, secours et pr\u00E9vention des risques</div>';
+    html += '<div class="sosafe-stats">';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + totalSessions + '</div><div class="sosafe-stat-label">Sessions</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">R\u00E9ussite</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">Satisfaction</div></div>';
+    html += '</div>';
     html += '</div></div>';
 
     // Collect categories
