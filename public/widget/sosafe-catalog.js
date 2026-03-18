@@ -48,7 +48,7 @@
       ".sosafe-banner-sub{font-size:1.1rem;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.3)}" +
 
       // Stats bar
-      ".sosafe-stats{display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;margin-bottom:2rem;padding:1.2rem;background:#fff;border-radius:" + t.borderRadius + ";box-shadow:0 2px 12px rgba(0,0,0,.06);margin-top:-2rem;position:relative;z-index:1}" +
+      ".sosafe-stats{display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;margin-bottom:1.5rem;padding:1.2rem 1.5rem;background:#fff;border-radius:" + t.borderRadius + ";box-shadow:0 2px 12px rgba(0,0,0,.06)}" +
       ".sosafe-stat{text-align:center;min-width:100px}" +
       ".sosafe-stat-value{font-size:1.6rem;font-weight:700;color:" + t.accentColor + "}" +
       ".sosafe-stat-label{font-size:.75rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}" +
@@ -184,15 +184,7 @@
     var t = Object.assign({}, defaultTheme, theme || {});
     var html = '<div class="sosafe-widget">';
 
-    // Banner with overlay
-    html += '<div class="sosafe-banner">';
-    html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
-    html += '<div class="sosafe-banner-overlay">';
-    html += '<div class="sosafe-banner-title">Nos formations</div>';
-    html += '<div class="sosafe-banner-sub">Sant\u00E9, secours et pr\u00E9vention des risques</div>';
-    html += '</div></div>';
-
-    // Stats bar
+    // Stats bar (above banner)
     html += '<div class="sosafe-stats">';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes</div></div>';
     var totalSessions = 0;
@@ -201,6 +193,14 @@
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">R\u00E9ussite</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">Satisfaction</div></div>';
     html += '</div>';
+
+    // Banner with overlay (replaces breadcrumb area)
+    html += '<div class="sosafe-banner">';
+    html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
+    html += '<div class="sosafe-banner-overlay">';
+    html += '<div class="sosafe-banner-title">Nos formations</div>';
+    html += '<div class="sosafe-banner-sub">Sant\u00E9, secours et pr\u00E9vention des risques</div>';
+    html += '</div></div>';
 
     // Collect categories
     var categories = [];
@@ -366,23 +366,14 @@
       html += '<div class="sosafe-no-session-modal">Aucune session pr\u00E9vue pour le moment</div>';
     }
 
-    // Footer: price + CTA
+    // Footer: price only (detail page, no inscription)
     html += '<div class="sosafe-modal-footer">';
     if (p.price) {
       html += '<div class="sosafe-modal-price">' + formatPrice(p.price) + ' <small>HT</small></div>';
     } else {
       html += '<div class="sosafe-modal-price"><small>Prix sur demande</small></div>';
     }
-    if (p.sessions && p.sessions.length > 0) {
-      var firstAvailable = p.sessions.find(function (s) { return !s.isFull; });
-      if (firstAvailable) {
-        html += '<a class="sosafe-modal-cta" href="' + enrollUrl + '?sessionId=' + firstAvailable.id + '" target="_blank" rel="noopener">S\'inscrire \u00E0 cette formation</a>';
-      } else {
-        html += '<span class="sosafe-modal-cta sosafe-modal-cta-outline">Toutes les sessions sont compl\u00E8tes</span>';
-      }
-    } else {
-      html += '<a class="sosafe-modal-cta sosafe-modal-cta-outline" href="' + enrollUrl + '" target="_blank" rel="noopener">Nous contacter</a>';
-    }
+    html += '<a class="sosafe-modal-cta" href="https://www.so-safe.fr/contact/" target="_blank" rel="noopener">Nous contacter</a>';
     html += '</div></div></div></div>';
     return html;
   }
