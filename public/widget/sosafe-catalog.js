@@ -47,6 +47,10 @@
       ".sosafe-stat-value{font-size:1.8rem;font-weight:700;color:" + t.accentColor + "}" +
       ".sosafe-stat-label{font-size:.78rem;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}" +
 
+      // Banner image
+      ".sosafe-banner{width:100%;border-radius:" + t.borderRadius + ";overflow:hidden;margin-bottom:2rem}" +
+      ".sosafe-banner img{width:100%;height:300px;object-fit:cover;display:block}" +
+
       // Search & Filters bar
       ".sosafe-search-bar{display:flex;gap:.8rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center}" +
       ".sosafe-search-input{flex:1;min-width:200px;padding:.65rem 1rem;border:2px solid #e5e7eb;border-radius:100px;font-size:.9rem;font-family:" + t.fontFamily + ";outline:none;transition:border-color .2s}" +
@@ -179,7 +183,12 @@
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + totalSessions + '</div><div class="sosafe-stat-label">Sessions \u00E0 venir</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">Taux de r\u00E9ussite</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">Satisfaction</div></div>';
-    html += '</div></div>';
+    html += '</div>';
+
+    // Banner image
+    html += '<div class="sosafe-banner"><img src="https://www.so-safe.fr/wp-content/uploads/2024/05/HD-11-scaled.jpg" alt="SO\'SAFE Formations"></div>';
+
+    html += '</div>';
 
     // Collect categories
     var categories = [];
