@@ -366,14 +366,22 @@
       html += '<div class="sosafe-no-session-modal">Aucune session pr\u00E9vue pour le moment</div>';
     }
 
-    // Footer: price only (detail page, no inscription)
+    // Footer: price + CTA
     html += '<div class="sosafe-modal-footer">';
     if (p.price) {
       html += '<div class="sosafe-modal-price">' + formatPrice(p.price) + ' <small>HT</small></div>';
     } else {
       html += '<div class="sosafe-modal-price"><small>Prix sur demande</small></div>';
     }
-    html += '<a class="sosafe-modal-cta" href="https://www.so-safe.fr/contact/" target="_blank" rel="noopener">Nous contacter</a>';
+    html += '<div style="display:flex;gap:.6rem;flex-wrap:wrap">';
+    if (p.sessions && p.sessions.length > 0) {
+      var firstAvailable = p.sessions.find(function (s) { return !s.isFull; });
+      if (firstAvailable) {
+        html += '<a class="sosafe-modal-cta" href="' + enrollUrl + '?sessionId=' + firstAvailable.id + '" target="_blank" rel="noopener">S\'inscrire</a>';
+      }
+    }
+    html += '<a class="sosafe-modal-cta sosafe-modal-cta-outline" href="https://www.so-safe.fr/contact/" target="_blank" rel="noopener">Nous contacter</a>';
+    html += '</div>';
     html += '</div></div></div></div>';
     return html;
   }
