@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, uploadFile } from "@/lib/queryClient";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -156,6 +156,7 @@ function ProgramForm({
   const [referentContact, setReferentContact] = useState(program?.referentContact || "");
   const [referentHandicap, setReferentHandicap] = useState(program?.referentHandicap || "");
   const [selectedFunding, setSelectedFunding] = useState<string[]>(program?.fundingTypes || []);
+  const [imageUrl, setImageUrl] = useState(program?.imageUrl || "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,6 +184,7 @@ function ProgramForm({
       referentContact: referentContact || null,
       referentHandicap: referentHandicap || null,
       fundingTypes: selectedFunding,
+      imageUrl: imageUrl || null,
     });
   };
 
@@ -199,6 +201,41 @@ function ProgramForm({
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description de la formation..." className="resize-none" data-testid="input-program-description" />
+          </div>
+          <div className="space-y-2">
+            <Label>Image de la formation</Label>
+            {imageUrl && (
+              <div className="relative w-full max-w-md">
+                <img src={imageUrl} alt="Image formation" className="w-full h-48 object-cover rounded-lg border" />
+                <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={() => setImageUrl("")}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="URL de l'image ou uploader ci-dessous" className="flex-1" />
+              <Button type="button" variant="outline" onClick={async () => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = "image/png,image/jpeg,image/webp";
+                input.onchange = async () => {
+                  const file = input.files?.[0];
+                  if (file) {
+                    try {
+                      const result = await uploadFile(file);
+                      setImageUrl(result.fileUrl);
+                    } catch (err) {
+                      console.error("Upload failed:", err);
+                    }
+                  }
+                };
+                input.click();
+              }}>
+                <Upload className="h-4 w-4 mr-2" />
+                Uploader
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Cette image sera visible sur le site internet (widget catalogue)</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

@@ -128,6 +128,7 @@ export const programs = pgTable("programs", {
   referentContact: text("referent_contact"),
   referentHandicap: text("referent_handicap"),
   fundingTypes: jsonb("funding_types").$type<string[]>().default([]),
+  imageUrl: text("image_url"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
