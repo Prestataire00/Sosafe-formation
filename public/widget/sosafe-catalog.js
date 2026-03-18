@@ -27,8 +27,10 @@
     borderRadius: "12px",
   };
 
-  // Default placeholder image
-  var defaultImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='220' fill='%23f3f4f6'%3E%3Crect width='400' height='220'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%239ca3af'%3EFormation%3C/text%3E%3C/svg%3E";
+  var defaultImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='250' fill='%23e5e7eb'%3E%3Crect width='400' height='250'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='18' fill='%239ca3af'%3EFormation SO'SAFE%3C/text%3E%3C/svg%3E";
+  var bannerImage = "https://www.so-safe.fr/wp-content/uploads/2024/05/HD-11-scaled.jpg";
+
+  var allPrograms = [];
 
   function buildStyles(theme) {
     var t = Object.assign({}, defaultTheme, theme || {});
@@ -36,117 +38,118 @@
       "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');" +
       "*{box-sizing:border-box;margin:0;padding:0}" +
       ":host{display:block}" +
-      ".sosafe-widget{font-family:" + t.fontFamily + ";color:#1f2937;max-width:1200px;margin:0 auto;padding:2rem 1rem}" +
+      ".sosafe-widget{font-family:" + t.fontFamily + ";color:#1f2937;max-width:1200px;margin:0 auto;padding:0 1rem 2rem}" +
 
-      // Header stats
-      ".sosafe-header{text-align:center;margin-bottom:2rem}" +
-      ".sosafe-header h2{font-size:2rem;font-weight:700;color:#111827;margin-bottom:.3rem}" +
-      ".sosafe-header p{font-size:1rem;color:#6b7280;margin-bottom:1.5rem}" +
-      ".sosafe-stats{display:flex;justify-content:center;gap:2.5rem;flex-wrap:wrap;margin-bottom:1.5rem}" +
-      ".sosafe-stat{text-align:center}" +
-      ".sosafe-stat-value{font-size:1.8rem;font-weight:700;color:" + t.accentColor + "}" +
-      ".sosafe-stat-label{font-size:.78rem;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}" +
+      // Banner
+      ".sosafe-banner{width:100%;height:320px;border-radius:0 0 " + t.borderRadius + " " + t.borderRadius + ";overflow:hidden;margin-bottom:2rem;position:relative}" +
+      ".sosafe-banner img{width:100%;height:100%;object-fit:cover;display:block}" +
+      ".sosafe-banner-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,80,159,.4),rgba(0,80,159,.7));display:flex;flex-direction:column;justify-content:center;align-items:center;color:#fff;text-align:center;padding:2rem}" +
+      ".sosafe-banner-title{font-size:2.2rem;font-weight:700;margin-bottom:.5rem;text-shadow:0 2px 8px rgba(0,0,0,.3)}" +
+      ".sosafe-banner-sub{font-size:1.1rem;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.3)}" +
 
-      // Banner image
-      ".sosafe-banner{width:100%;border-radius:" + t.borderRadius + ";overflow:hidden;margin-bottom:2rem}" +
-      ".sosafe-banner img{width:100%;height:300px;object-fit:cover;display:block}" +
+      // Stats bar
+      ".sosafe-stats{display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;margin-bottom:2rem;padding:1.2rem;background:#fff;border-radius:" + t.borderRadius + ";box-shadow:0 2px 12px rgba(0,0,0,.06);margin-top:-2rem;position:relative;z-index:1}" +
+      ".sosafe-stat{text-align:center;min-width:100px}" +
+      ".sosafe-stat-value{font-size:1.6rem;font-weight:700;color:" + t.accentColor + "}" +
+      ".sosafe-stat-label{font-size:.75rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}" +
 
-      // Search & Filters bar
-      ".sosafe-search-bar{display:flex;gap:.8rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center}" +
-      ".sosafe-search-input{flex:1;min-width:200px;padding:.65rem 1rem;border:2px solid #e5e7eb;border-radius:100px;font-size:.9rem;font-family:" + t.fontFamily + ";outline:none;transition:border-color .2s}" +
+      // Search & Filters
+      ".sosafe-search-bar{display:flex;gap:.8rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center}" +
+      ".sosafe-search-input{flex:1;min-width:200px;padding:.6rem 1rem .6rem 2.5rem;border:1px solid #e5e7eb;border-radius:8px;font-size:.9rem;font-family:" + t.fontFamily + ";outline:none;transition:border-color .2s;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:10px center}" +
       ".sosafe-search-input:focus{border-color:" + t.primaryColor + "}" +
       ".sosafe-search-input::placeholder{color:#9ca3af}" +
-      ".sosafe-select{padding:.65rem 1rem;border:2px solid #e5e7eb;border-radius:100px;font-size:.85rem;font-family:" + t.fontFamily + ";background:#fff;cursor:pointer;outline:none;min-width:160px;-webkit-appearance:none;appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 12px center;padding-right:2rem}" +
+      ".sosafe-select{padding:.6rem .8rem;border:1px solid #e5e7eb;border-radius:8px;font-size:.85rem;font-family:" + t.fontFamily + ";background:#fff;cursor:pointer;outline:none;min-width:160px}" +
       ".sosafe-select:focus{border-color:" + t.primaryColor + "}" +
-      ".sosafe-filter-actions{display:flex;gap:.5rem}" +
-      ".sosafe-filter-reset{padding:.65rem 1.2rem;border:2px solid #e5e7eb;border-radius:100px;background:#fff;cursor:pointer;font-size:.85rem;font-family:" + t.fontFamily + ";color:#6b7280;transition:all .2s}" +
+      ".sosafe-filter-reset{padding:.6rem 1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-size:.85rem;font-family:" + t.fontFamily + ";color:#6b7280;transition:all .2s}" +
       ".sosafe-filter-reset:hover{border-color:#d1d5db;color:#374151}" +
-      ".sosafe-filter-apply{padding:.65rem 1.2rem;border:none;border-radius:100px;background:" + t.primaryColor + ";cursor:pointer;font-size:.85rem;font-weight:600;font-family:" + t.fontFamily + ";color:#111827;transition:all .2s}" +
-      ".sosafe-filter-apply:hover{opacity:.9}" +
 
-      // Category pill filters
-      ".sosafe-filters{display:flex;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap;justify-content:center}" +
-      ".sosafe-filter-btn{padding:.5rem 1.1rem;border:2px solid #e5e7eb;border-radius:100px;background:#fff;cursor:pointer;font-size:.82rem;font-weight:500;transition:all .2s;font-family:" + t.fontFamily + "}" +
-      ".sosafe-filter-btn:hover{border-color:" + t.primaryColor + "}" +
-      ".sosafe-filter-btn.active{background:" + t.primaryColor + ";color:#111827;border-color:" + t.primaryColor + ";font-weight:600}" +
-
-      // View toggle
+      // Toolbar
       ".sosafe-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem}" +
       ".sosafe-count{font-size:.9rem;color:#6b7280}" +
       ".sosafe-view-toggle{display:flex;gap:.3rem}" +
       ".sosafe-view-btn{padding:.4rem .6rem;border:1px solid #e5e7eb;background:#fff;cursor:pointer;border-radius:6px;color:#9ca3af;transition:all .2s}" +
-      ".sosafe-view-btn.active{background:" + t.primaryColor + ";border-color:" + t.primaryColor + ";color:#111827}" +
+      ".sosafe-view-btn.active{background:" + t.accentColor + ";border-color:" + t.accentColor + ";color:#fff}" +
       ".sosafe-view-btn svg{width:18px;height:18px;display:block}" +
 
-      // Grid view
-      ".sosafe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1.5rem}" +
+      // Grid
+      ".sosafe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.5rem}" +
       ".sosafe-grid.list-view{grid-template-columns:1fr}" +
 
-      // Cards
-      ".sosafe-card{border:none;border-radius:" + t.borderRadius + ";background:#fff;overflow:hidden;transition:box-shadow .3s,transform .2s;box-shadow:0 2px 8px rgba(0,0,0,.08)}" +
-      ".sosafe-card:hover{box-shadow:0 12px 32px rgba(0,0,0,.12);transform:translateY(-3px)}" +
+      // Cards (simple: image + badge + title + duration + button)
+      ".sosafe-card{border:none;border-radius:" + t.borderRadius + ";background:#fff;overflow:hidden;transition:box-shadow .3s,transform .2s;box-shadow:0 2px 8px rgba(0,0,0,.08);cursor:pointer}" +
+      ".sosafe-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.12);transform:translateY(-3px)}" +
+      ".sosafe-card-img-wrap{position:relative;overflow:hidden}" +
+      ".sosafe-card-img{width:100%;height:220px;object-fit:cover;display:block;transition:transform .3s}" +
+      ".sosafe-card:hover .sosafe-card-img{transform:scale(1.03)}" +
+      ".sosafe-card-modality{position:absolute;top:12px;left:12px;background:#fff;color:#374151;font-size:.75rem;font-weight:600;padding:.3rem .8rem;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15)}" +
+      ".sosafe-card-body{padding:1rem 1.2rem 1.2rem}" +
+      ".sosafe-card-title{font-size:1rem;font-weight:700;color:#111827;margin-bottom:.5rem;line-height:1.3}" +
+      ".sosafe-card-duration{font-size:.85rem;color:#6b7280;margin-bottom:.6rem}" +
+      ".sosafe-card-date{font-size:.8rem;color:" + t.accentColor + ";font-weight:600;margin-bottom:.8rem}" +
+      ".sosafe-card-btn{display:block;text-align:center;padding:.6rem;background:" + t.primaryColor + ";color:#111827;text-decoration:none;border-radius:8px;font-size:.85rem;font-weight:600;border:none;cursor:pointer;transition:opacity .2s;font-family:" + t.fontFamily + ";width:100%}" +
+      ".sosafe-card-btn:hover{opacity:.85}" +
 
-      // Card image
-      ".sosafe-card-img{width:100%;height:200px;object-fit:cover;display:block}" +
-
-      // List view card
+      // List view
       ".list-view .sosafe-card{display:flex;flex-direction:row}" +
-      ".list-view .sosafe-card-img{width:280px;height:auto;min-height:180px}" +
-      ".list-view .sosafe-card-body{flex:1}" +
+      ".list-view .sosafe-card-img-wrap{width:260px;flex-shrink:0}" +
+      ".list-view .sosafe-card-img{height:100%;min-height:180px}" +
+      ".list-view .sosafe-card-body{flex:1;display:flex;flex-direction:column;justify-content:center}" +
 
-      // Card body
-      ".sosafe-card-body{padding:1.2rem}" +
-
-      // Badges
-      ".sosafe-card-badges{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem}" +
-      ".sosafe-badge{font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;padding:.25rem .7rem;border-radius:100px;font-weight:600}" +
-      ".sosafe-badge-cat{background:" + t.accentColor + "12;color:" + t.accentColor + "}" +
-      ".sosafe-badge-modality{background:#f3f4f6;color:#6b7280}" +
-      ".sosafe-badge-cert{background:#fef3c7;color:#b45309}" +
-
-      // Title
-      ".sosafe-card-title{font-size:1.05rem;font-weight:700;color:#111827;margin-bottom:.5rem;line-height:1.3}" +
-
-      // Meta
-      ".sosafe-card-meta{display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:.8rem;font-size:.85rem;color:#6b7280}" +
-      ".sosafe-card-meta span{display:flex;align-items:center;gap:.3rem}" +
-
-      // Description
-      ".sosafe-card-desc{font-size:.85rem;color:#4b5563;line-height:1.6;margin-bottom:.8rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}" +
-
-      // Sessions
-      ".sosafe-sessions-label{font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.4rem}" +
-      ".sosafe-session-list{list-style:none;padding:0;margin:0 0 .8rem}" +
-      ".sosafe-session-item{display:flex;justify-content:space-between;align-items:center;padding:.45rem .6rem;border-radius:8px;font-size:.83rem;margin-bottom:.3rem;background:#f9fafb}" +
-      ".sosafe-session-date{color:#374151;font-weight:500}" +
-      ".sosafe-session-loc{color:#6b7280;font-size:.8rem}" +
-      ".sosafe-spots{font-size:.78rem;font-weight:600;white-space:nowrap;padding:.2rem .5rem;border-radius:100px}" +
-      ".sosafe-spots.available{color:#059669;background:#ecfdf5}" +
-      ".sosafe-spots.full{color:#dc2626;background:#fef2f2}" +
-      ".sosafe-no-session{font-size:.83rem;color:#9ca3af;font-style:italic;margin-bottom:.8rem;padding:.4rem;background:#f9fafb;border-radius:8px;text-align:center}" +
-
-      // Footer
-      ".sosafe-card-footer{display:flex;justify-content:space-between;align-items:center;padding-top:.8rem;border-top:1px solid #f3f4f6}" +
-      ".sosafe-price{font-size:1.1rem;font-weight:700;color:#111827}" +
-      ".sosafe-price small{font-size:.75rem;font-weight:400;color:#6b7280}" +
-      ".sosafe-btn{display:inline-block;padding:.6rem 1.3rem;background:" + t.primaryColor + ";color:#111827;text-decoration:none;border-radius:100px;font-size:.85rem;font-weight:600;border:none;cursor:pointer;transition:all .2s;font-family:" + t.fontFamily + "}" +
-      ".sosafe-btn:hover{opacity:.9;transform:scale(1.02)}" +
-      ".sosafe-btn-outline{background:transparent;color:" + t.accentColor + ";border:2px solid " + t.accentColor + "}" +
-      ".sosafe-btn-outline:hover{background:" + t.accentColor + ";color:#fff}" +
+      // Modal (detail view)
+      ".sosafe-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;justify-content:center;align-items:flex-start;padding:2rem;overflow-y:auto}" +
+      ".sosafe-modal{background:#fff;border-radius:" + t.borderRadius + ";max-width:800px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative}" +
+      ".sosafe-modal-close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:background .2s}" +
+      ".sosafe-modal-close:hover{background:rgba(0,0,0,.8)}" +
+      ".sosafe-modal-img{width:100%;height:280px;object-fit:cover;display:block;border-radius:" + t.borderRadius + " " + t.borderRadius + " 0 0}" +
+      ".sosafe-modal-body{padding:2rem}" +
+      ".sosafe-modal-badges{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}" +
+      ".sosafe-modal-badge{font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;padding:.3rem .8rem;border-radius:100px;font-weight:600}" +
+      ".sosafe-modal-badge-cat{background:" + t.accentColor + "15;color:" + t.accentColor + "}" +
+      ".sosafe-modal-badge-modality{background:#f3f4f6;color:#6b7280}" +
+      ".sosafe-modal-badge-cert{background:#fef3c7;color:#b45309}" +
+      ".sosafe-modal-title{font-size:1.5rem;font-weight:700;color:#111827;margin-bottom:.8rem;line-height:1.3}" +
+      ".sosafe-modal-meta{display:flex;flex-wrap:wrap;gap:1.5rem;margin-bottom:1.2rem;font-size:.9rem;color:#6b7280}" +
+      ".sosafe-modal-meta span{display:flex;align-items:center;gap:.3rem}" +
+      ".sosafe-modal-section{margin-bottom:1.5rem}" +
+      ".sosafe-modal-section h3{font-size:1rem;font-weight:600;color:#111827;margin-bottom:.6rem;padding-bottom:.4rem;border-bottom:2px solid " + t.primaryColor + "}" +
+      ".sosafe-modal-section p,.sosafe-modal-section ul{font-size:.9rem;color:#4b5563;line-height:1.7}" +
+      ".sosafe-modal-section ul{padding-left:1.2rem}" +
+      ".sosafe-modal-section li{margin-bottom:.3rem}" +
+      ".sosafe-modal-sessions{margin-bottom:1.5rem}" +
+      ".sosafe-modal-session{display:flex;justify-content:space-between;align-items:center;padding:.7rem 1rem;background:#f9fafb;border-radius:8px;margin-bottom:.4rem;font-size:.9rem}" +
+      ".sosafe-modal-session-date{font-weight:600;color:#111827}" +
+      ".sosafe-modal-session-loc{color:#6b7280;font-size:.85rem}" +
+      ".sosafe-modal-session-spots{font-size:.85rem;font-weight:600;padding:.2rem .6rem;border-radius:100px}" +
+      ".sosafe-modal-session-spots.available{color:#059669;background:#ecfdf5}" +
+      ".sosafe-modal-session-spots.full{color:#dc2626;background:#fef2f2}" +
+      ".sosafe-modal-footer{display:flex;justify-content:space-between;align-items:center;padding-top:1.2rem;border-top:2px solid #f3f4f6;margin-top:1rem}" +
+      ".sosafe-modal-price{font-size:1.3rem;font-weight:700;color:#111827}" +
+      ".sosafe-modal-price small{font-size:.8rem;font-weight:400;color:#6b7280}" +
+      ".sosafe-modal-cta{display:inline-block;padding:.7rem 2rem;background:" + t.primaryColor + ";color:#111827;text-decoration:none;border-radius:8px;font-size:.95rem;font-weight:700;border:none;cursor:pointer;transition:opacity .2s;font-family:" + t.fontFamily + "}" +
+      ".sosafe-modal-cta:hover{opacity:.85}" +
+      ".sosafe-modal-cta-outline{background:transparent;color:" + t.accentColor + ";border:2px solid " + t.accentColor + "}" +
+      ".sosafe-modal-cta-outline:hover{background:" + t.accentColor + ";color:#fff}" +
+      ".sosafe-no-session-modal{font-size:.9rem;color:#9ca3af;font-style:italic;padding:.8rem;background:#f9fafb;border-radius:8px;text-align:center}" +
 
       // States
       ".sosafe-loading{text-align:center;padding:3rem;color:#9ca3af;font-size:.9rem}" +
       ".sosafe-error{text-align:center;padding:3rem;color:#dc2626;font-size:.9rem}" +
 
       // Responsive
-      "@media(max-width:700px){.sosafe-grid{grid-template-columns:1fr}.sosafe-stats{gap:1.5rem}.sosafe-header h2{font-size:1.5rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img{width:100%;height:200px}}"
+      "@media(max-width:700px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{height:200px}.sosafe-banner-title{font-size:1.5rem}.sosafe-stats{flex-direction:row;gap:1rem;margin-top:-1.5rem;padding:.8rem}.sosafe-stat-value{font-size:1.2rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
   function formatDate(dateStr) {
     if (!dateStr) return "";
     var d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+    return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
+  }
+
+  function formatDateLong(dateStr) {
+    if (!dateStr) return "";
+    var d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
   }
 
   function formatDuration(hours) {
@@ -154,6 +157,15 @@
     if (hours >= 7) {
       var days = Math.round(hours / 7);
       return hours + " heures sur " + days + " jour" + (days > 1 ? "s" : "");
+    }
+    return hours + "h";
+  }
+
+  function formatDurationShort(hours) {
+    if (!hours) return "";
+    if (hours >= 7) {
+      var days = Math.round(hours / 7);
+      return days + " jour" + (days > 1 ? "s" : "");
     }
     return hours + "h";
   }
@@ -168,26 +180,26 @@
     return labels[m] || m || "";
   }
 
-  function render(programs, theme, config) {
+  function renderCatalog(programs, theme, config) {
     var t = Object.assign({}, defaultTheme, theme || {});
     var html = '<div class="sosafe-widget">';
 
-    // Header with stats
-    html += '<div class="sosafe-header">';
-    html += '<h2>Nos formations</h2>';
-    html += '<p>Retrouvez nos formations en sant\u00E9 et gestes de premiers secours</p>';
+    // Banner with overlay
+    html += '<div class="sosafe-banner">';
+    html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
+    html += '<div class="sosafe-banner-overlay">';
+    html += '<div class="sosafe-banner-title">Nos formations</div>';
+    html += '<div class="sosafe-banner-sub">Sant\u00E9, secours et pr\u00E9vention des risques</div>';
+    html += '</div></div>';
+
+    // Stats bar
     html += '<div class="sosafe-stats">';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes</div></div>';
     var totalSessions = 0;
     programs.forEach(function (p) { totalSessions += (p.sessions || []).length; });
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + totalSessions + '</div><div class="sosafe-stat-label">Sessions \u00E0 venir</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">Taux de r\u00E9ussite</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + totalSessions + '</div><div class="sosafe-stat-label">Sessions</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">R\u00E9ussite</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">Satisfaction</div></div>';
-    html += '</div>';
-
-    // Banner image
-    html += '<div class="sosafe-banner"><img src="https://www.so-safe.fr/wp-content/uploads/2024/05/HD-11-scaled.jpg" alt="SO\'SAFE Formations"></div>';
-
     html += '</div>';
 
     // Collect categories
@@ -198,31 +210,19 @@
       });
     });
 
-    // Search bar + dropdown filter
+    // Search + dropdown + reset
     html += '<div class="sosafe-search-bar">';
-    html += '<input type="text" class="sosafe-search-input" placeholder="Rechercher une formation..." data-role="search">';
+    html += '<input type="text" class="sosafe-search-input" placeholder="Saisissez au moins 3 caract\u00E8res pour filtrer..." data-role="search">';
     html += '<select class="sosafe-select" data-role="cat-select">';
     html += '<option value="all">Toutes les cat\u00E9gories</option>';
     categories.forEach(function (cat) {
       html += '<option value="' + cat + '">' + cat + '</option>';
     });
     html += '</select>';
-    html += '<div class="sosafe-filter-actions">';
     html += '<button class="sosafe-filter-reset" data-role="reset">R\u00E9initialiser</button>';
-    html += '<button class="sosafe-filter-apply" data-role="apply">Filtrer</button>';
-    html += '</div></div>';
+    html += '</div>';
 
-    // Category pill filters
-    if (categories.length > 1) {
-      html += '<div class="sosafe-filters">';
-      html += '<button class="sosafe-filter-btn active" data-cat="all">Toutes</button>';
-      categories.forEach(function (cat) {
-        html += '<button class="sosafe-filter-btn" data-cat="' + cat + '">' + cat + '</button>';
-      });
-      html += '</div>';
-    }
-
-    // Toolbar: count + view toggle
+    // Toolbar
     var maxItems = config.maxItems || 50;
     var displayed = programs.slice(0, maxItems);
     html += '<div class="sosafe-toolbar">';
@@ -232,158 +232,222 @@
     html += '<button class="sosafe-view-btn" data-view="list" title="Vue liste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>';
     html += '</div></div>';
 
-    // Grid
+    // Grid - simple cards
     html += '<div class="sosafe-grid" data-role="grid">';
-
-    displayed.forEach(function (p) {
+    displayed.forEach(function (p, index) {
       var cats = (p.categories || []).join(",");
       var searchText = ((p.title || "") + " " + (p.objectives || "") + " " + (p.description || "") + " " + cats).toLowerCase();
-      html += '<div class="sosafe-card" data-category="' + cats + '" data-search="' + searchText.replace(/"/g, '') + '">';
+      html += '<div class="sosafe-card" data-category="' + cats + '" data-search="' + searchText.replace(/"/g, "") + '" data-index="' + index + '">';
 
-      // Image
+      // Image with modality badge
+      html += '<div class="sosafe-card-img-wrap">';
       var img = p.imageUrl || defaultImage;
-      html += '<img class="sosafe-card-img" src="' + img + '" alt="' + (p.title || 'Formation') + '" onerror="this.src=\'' + defaultImage + '\'">';
-
-      html += '<div class="sosafe-card-body">';
-
-      // Badges
-      html += '<div class="sosafe-card-badges">';
+      html += '<img class="sosafe-card-img" src="' + img + '" alt="' + (p.title || "Formation") + '" onerror="this.src=\'' + defaultImage + '\'">';
       if (p.modality) {
-        html += '<span class="sosafe-badge sosafe-badge-modality">' + modalityLabel(p.modality) + '</span>';
-      }
-      (p.categories || []).forEach(function (c) {
-        html += '<span class="sosafe-badge sosafe-badge-cat">' + c + '</span>';
-      });
-      if (p.certifying) {
-        html += '<span class="sosafe-badge sosafe-badge-cert">Certifiante</span>';
+        html += '<div class="sosafe-card-modality">' + modalityLabel(p.modality) + '</div>';
       }
       html += '</div>';
 
-      // Title
+      // Body: title + duration + next date + button
+      html += '<div class="sosafe-card-body">';
       html += '<div class="sosafe-card-title">' + (p.title || "Formation") + '</div>';
-
-      // Meta
-      html += '<div class="sosafe-card-meta">';
       if (p.duration) {
-        html += '<span>\u23F0 ' + formatDuration(p.duration) + '</span>';
+        html += '<div class="sosafe-card-duration">' + formatDuration(p.duration) + '</div>';
       }
       if (p.sessions && p.sessions.length > 0) {
-        var nextDate = p.sessions[0].startDate;
-        if (nextDate) {
-          html += '<span>\uD83D\uDCC5 ' + formatDate(nextDate) + '</span>';
-        }
+        html += '<div class="sosafe-card-date">' + formatDate(p.sessions[0].startDate) + '</div>';
       }
-      html += '</div>';
-
-      // Description
-      if (p.objectives) {
-        html += '<div class="sosafe-card-desc">' + p.objectives + '</div>';
-      } else if (p.description) {
-        html += '<div class="sosafe-card-desc">' + p.description + '</div>';
-      }
-
-      // Sessions
-      if (p.sessions && p.sessions.length > 0) {
-        html += '<div class="sosafe-sessions-label">Prochaines sessions :</div>';
-        html += '<ul class="sosafe-session-list">';
-        p.sessions.slice(0, 3).forEach(function (s) {
-          html += '<li class="sosafe-session-item">';
-          html += '<div>';
-          html += '<span class="sosafe-session-date">' + formatDate(s.startDate);
-          if (s.endDate && s.endDate !== s.startDate) {
-            html += ' \u2192 ' + formatDate(s.endDate);
-          }
-          html += '</span>';
-          if (s.location) {
-            html += ' <span class="sosafe-session-loc">\u2022 ' + s.location + '</span>';
-          }
-          html += '</div>';
-          if (s.isFull) {
-            html += '<span class="sosafe-spots full">Complet</span>';
-          } else {
-            html += '<span class="sosafe-spots available">' + s.remainingSpots + ' place' + (s.remainingSpots > 1 ? 's' : '') + '</span>';
-          }
-          html += '</li>';
-        });
-        html += '</ul>';
-      } else {
-        html += '<div class="sosafe-no-session">Aucune session pr\u00E9vue pour le moment</div>';
-      }
-
-      // Footer
-      html += '<div class="sosafe-card-footer">';
-      if (p.price) {
-        html += '<div class="sosafe-price">' + formatPrice(p.price) + ' <small>HT</small></div>';
-      } else {
-        html += '<div class="sosafe-price"><small>Prix sur demande</small></div>';
-      }
-      if (p.sessions && p.sessions.length > 0) {
-        var firstAvailable = p.sessions.find(function (s) { return !s.isFull; });
-        if (firstAvailable) {
-          html += '<a class="sosafe-btn" href="' + enrollUrl + '?sessionId=' + firstAvailable.id + '" target="_blank" rel="noopener">S\'inscrire</a>';
-        } else {
-          html += '<a class="sosafe-btn sosafe-btn-outline" href="' + enrollUrl + '" target="_blank" rel="noopener">Voir le programme</a>';
-        }
-      } else {
-        html += '<a class="sosafe-btn sosafe-btn-outline" href="' + enrollUrl + '" target="_blank" rel="noopener">Voir le programme</a>';
-      }
-      html += '</div></div></div>';
+      html += '<button class="sosafe-card-btn" data-index="' + index + '">Voir le programme</button>';
+      html += '</div></div>';
     });
-
     html += '</div></div>';
     return html;
   }
 
+  function renderModal(p) {
+    var html = '<div class="sosafe-modal-overlay" data-role="modal-overlay">';
+    html += '<div class="sosafe-modal">';
+    html += '<button class="sosafe-modal-close" data-role="modal-close">\u00D7</button>';
+
+    // Image
+    var img = p.imageUrl || defaultImage;
+    html += '<img class="sosafe-modal-img" src="' + img + '" alt="' + (p.title || "") + '" onerror="this.src=\'' + defaultImage + '\'">';
+
+    html += '<div class="sosafe-modal-body">';
+
+    // Badges
+    html += '<div class="sosafe-modal-badges">';
+    if (p.modality) {
+      html += '<span class="sosafe-modal-badge sosafe-modal-badge-modality">' + modalityLabel(p.modality) + '</span>';
+    }
+    (p.categories || []).forEach(function (c) {
+      html += '<span class="sosafe-modal-badge sosafe-modal-badge-cat">' + c + '</span>';
+    });
+    if (p.certifying) {
+      html += '<span class="sosafe-modal-badge sosafe-modal-badge-cert">Certifiante</span>';
+    }
+    html += '</div>';
+
+    // Title
+    html += '<h2 class="sosafe-modal-title">' + (p.title || "Formation") + '</h2>';
+
+    // Meta
+    html += '<div class="sosafe-modal-meta">';
+    if (p.duration) html += '<span>\u23F0 ' + formatDuration(p.duration) + '</span>';
+    if (p.modality) html += '<span>\uD83D\uDCCD ' + modalityLabel(p.modality) + '</span>';
+    if (p.certifying) html += '<span>\uD83C\uDF93 Certifiante</span>';
+    html += '</div>';
+
+    // Objectives
+    if (p.objectives) {
+      html += '<div class="sosafe-modal-section"><h3>Objectifs</h3><p>' + p.objectives + '</p></div>';
+    }
+
+    // Description
+    if (p.description) {
+      html += '<div class="sosafe-modal-section"><h3>Description</h3><p>' + p.description + '</p></div>';
+    }
+
+    // Programme content
+    if (p.programContent) {
+      html += '<div class="sosafe-modal-section"><h3>Programme</h3><p>' + p.programContent + '</p></div>';
+    }
+
+    // Prerequisites
+    if (p.prerequisites) {
+      html += '<div class="sosafe-modal-section"><h3>Pr\u00E9requis</h3><p>' + p.prerequisites + '</p></div>';
+    }
+
+    // Target audience
+    if (p.targetAudience) {
+      html += '<div class="sosafe-modal-section"><h3>Public vis\u00E9</h3><p>' + p.targetAudience + '</p></div>';
+    }
+
+    // Teaching methods
+    if (p.teachingMethods) {
+      html += '<div class="sosafe-modal-section"><h3>M\u00E9thodes p\u00E9dagogiques</h3><p>' + p.teachingMethods + '</p></div>';
+    }
+
+    // Evaluation
+    if (p.evaluationMethods) {
+      html += '<div class="sosafe-modal-section"><h3>\u00C9valuation</h3><p>' + p.evaluationMethods + '</p></div>';
+    }
+
+    // Accessibility
+    if (p.accessibilityInfo) {
+      html += '<div class="sosafe-modal-section"><h3>Accessibilit\u00E9</h3><p>' + p.accessibilityInfo + '</p></div>';
+    }
+
+    // Sessions
+    if (p.sessions && p.sessions.length > 0) {
+      html += '<div class="sosafe-modal-section"><h3>Sessions \u00E0 venir</h3></div>';
+      html += '<div class="sosafe-modal-sessions">';
+      p.sessions.forEach(function (s) {
+        html += '<div class="sosafe-modal-session">';
+        html += '<div>';
+        html += '<div class="sosafe-modal-session-date">' + formatDateLong(s.startDate);
+        if (s.endDate && s.endDate !== s.startDate) {
+          html += ' \u2192 ' + formatDateLong(s.endDate);
+        }
+        html += '</div>';
+        if (s.location) {
+          html += '<div class="sosafe-modal-session-loc">\uD83D\uDCCD ' + s.location + '</div>';
+        }
+        html += '</div>';
+        if (s.isFull) {
+          html += '<span class="sosafe-modal-session-spots full">Complet</span>';
+        } else {
+          html += '<span class="sosafe-modal-session-spots available">' + s.remainingSpots + ' place' + (s.remainingSpots > 1 ? 's' : '') + '</span>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="sosafe-no-session-modal">Aucune session pr\u00E9vue pour le moment</div>';
+    }
+
+    // Footer: price + CTA
+    html += '<div class="sosafe-modal-footer">';
+    if (p.price) {
+      html += '<div class="sosafe-modal-price">' + formatPrice(p.price) + ' <small>HT</small></div>';
+    } else {
+      html += '<div class="sosafe-modal-price"><small>Prix sur demande</small></div>';
+    }
+    if (p.sessions && p.sessions.length > 0) {
+      var firstAvailable = p.sessions.find(function (s) { return !s.isFull; });
+      if (firstAvailable) {
+        html += '<a class="sosafe-modal-cta" href="' + enrollUrl + '?sessionId=' + firstAvailable.id + '" target="_blank" rel="noopener">S\'inscrire \u00E0 cette formation</a>';
+      } else {
+        html += '<span class="sosafe-modal-cta sosafe-modal-cta-outline">Toutes les sessions sont compl\u00E8tes</span>';
+      }
+    } else {
+      html += '<a class="sosafe-modal-cta sosafe-modal-cta-outline" href="' + enrollUrl + '" target="_blank" rel="noopener">Nous contacter</a>';
+    }
+    html += '</div></div></div></div>';
+    return html;
+  }
+
+  function openModal(root, index) {
+    var p = allPrograms[index];
+    if (!p) return;
+    var existing = root.querySelector('[data-role="modal-overlay"]');
+    if (existing) existing.remove();
+    var modalDiv = document.createElement("div");
+    modalDiv.innerHTML = renderModal(p);
+    root.appendChild(modalDiv.firstChild);
+
+    // Close events
+    var overlay = root.querySelector('[data-role="modal-overlay"]');
+    var closeBtn = root.querySelector('[data-role="modal-close"]');
+    if (closeBtn) {
+      closeBtn.addEventListener("click", function () { overlay.remove(); });
+    }
+    if (overlay) {
+      overlay.addEventListener("click", function (e) {
+        if (e.target === overlay) overlay.remove();
+      });
+    }
+  }
+
   function setupInteractions(root) {
-    // Category pill filters
-    var btns = root.querySelectorAll(".sosafe-filter-btn");
-    btns.forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        btns.forEach(function (b) { b.classList.remove("active"); });
-        btn.classList.add("active");
-        var select = root.querySelector('[data-role="cat-select"]');
-        if (select) select.value = btn.getAttribute("data-cat");
-        applyFilters(root);
+    // Card clicks → open modal
+    var cards = root.querySelectorAll(".sosafe-card");
+    cards.forEach(function (card) {
+      card.addEventListener("click", function (e) {
+        if (e.target.tagName === "A") return;
+        var idx = parseInt(card.getAttribute("data-index"));
+        openModal(root, idx);
       });
     });
 
-    // Search input
+    // "Voir le programme" buttons
+    var btns = root.querySelectorAll(".sosafe-card-btn");
+    btns.forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var idx = parseInt(btn.getAttribute("data-index"));
+        openModal(root, idx);
+      });
+    });
+
+    // Search
     var searchInput = root.querySelector('[data-role="search"]');
     if (searchInput) {
-      searchInput.addEventListener("input", function () {
-        applyFilters(root);
-      });
+      searchInput.addEventListener("input", function () { applyFilters(root); });
     }
 
-    // Category select dropdown
+    // Category dropdown
     var catSelect = root.querySelector('[data-role="cat-select"]');
     if (catSelect) {
-      catSelect.addEventListener("change", function () {
-        var val = catSelect.value;
-        btns.forEach(function (b) {
-          b.classList.toggle("active", b.getAttribute("data-cat") === val);
-        });
-        applyFilters(root);
-      });
+      catSelect.addEventListener("change", function () { applyFilters(root); });
     }
 
-    // Reset button
+    // Reset
     var resetBtn = root.querySelector('[data-role="reset"]');
     if (resetBtn) {
       resetBtn.addEventListener("click", function () {
         if (searchInput) searchInput.value = "";
         if (catSelect) catSelect.value = "all";
-        btns.forEach(function (b) {
-          b.classList.toggle("active", b.getAttribute("data-cat") === "all");
-        });
-        applyFilters(root);
-      });
-    }
-
-    // Apply button
-    var applyBtn = root.querySelector('[data-role="apply"]');
-    if (applyBtn) {
-      applyBtn.addEventListener("click", function () {
         applyFilters(root);
       });
     }
@@ -446,12 +510,13 @@
       .then(function (results) {
         var config = results[0];
         var programs = results[1];
+        allPrograms = programs;
         var style = document.createElement("style");
         style.textContent = buildStyles(config.theme);
         shadow.innerHTML = "";
         shadow.appendChild(style);
         var wrapper = document.createElement("div");
-        wrapper.innerHTML = render(programs, config.theme, config);
+        wrapper.innerHTML = renderCatalog(programs, config.theme, config);
         shadow.appendChild(wrapper);
         setupInteractions(shadow);
       })
