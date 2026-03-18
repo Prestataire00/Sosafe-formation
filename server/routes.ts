@@ -8757,26 +8757,13 @@ Le contenu doit être en français, clair et bien structuré.`;
     next();
   }
 
-  // CORS middleware for /api/v1/ routes
-  app.use("/api/v1", async (req: any, res, next) => {
+  // CORS middleware for /api/v1/ routes — public API protected by API key
+  app.use("/api/v1", (req: any, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
-      // Check if the API key's associated widget config allows this origin
-      const key = req.headers["x-api-key"] as string;
-      if (key) {
-        const apiKey = await storage.getApiKeyByKey(key);
-        if (apiKey) {
-          const configs = await storage.getWidgetConfigurations();
-          const matchingConfig = configs.find(
-            (c) => c.apiKeyId === apiKey.id && c.active && c.allowedOrigins?.includes(origin)
-          );
-          if (matchingConfig) {
-            res.setHeader("Access-Control-Allow-Origin", origin);
-            res.setHeader("Access-Control-Allow-Headers", "X-API-Key, Content-Type");
-            res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-          }
-        }
-      }
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Headers", "X-API-Key, Content-Type");
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
     }
     if (req.method === "OPTIONS") {
       return res.status(204).end();
