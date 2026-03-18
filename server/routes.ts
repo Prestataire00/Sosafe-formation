@@ -8808,6 +8808,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           evaluationMethods: p.evaluationMethods,
           accessibilityInfo: p.accessibilityInfo,
           programContent: p.programContent,
+          imageUrl: p.imageUrl || null,
           sessions: upcomingSessions,
         };
       })));
