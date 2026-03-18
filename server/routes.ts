@@ -8789,16 +8789,40 @@ Le contenu doit être en français, clair et bien structuré.`;
   app.get("/api/v1/catalog/programs", requireApiKey, async (_req, res) => {
     try {
       const programs = await storage.getPrograms();
-      const activePrograms = programs.filter((p: any) => p.status === "active");
-      res.json(activePrograms.map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        categories: p.categories,
-        duration: p.duration,
-        objectives: p.objectives,
-        prerequisites: p.prerequisites,
-        modality: p.modality,
-        price: p.price,
+      const sessions = await storage.getSessions();
+      const activePrograms = programs.filter((p: any) => p.status === "published");
+      res.json(await Promise.all(activePrograms.map(async (p: any) => {
+        const programSessions = sessions.filter((s: any) => s.programId === p.id && (s.status === "planned" || s.status === "ongoing"));
+        const upcomingSessions = [];
+        for (const s of programSessions) {
+          const enrollmentCount = await storage.getEnrollmentCount(s.id);
+          upcomingSessions.push({
+            id: s.id,
+            startDate: s.startDate,
+            endDate: s.endDate,
+            location: s.location,
+            remainingSpots: (s.maxParticipants || 12) - enrollmentCount,
+            isFull: ((s.maxParticipants || 12) - enrollmentCount) <= 0,
+          });
+        }
+        return {
+          id: p.id,
+          title: p.title,
+          description: p.description,
+          categories: p.categories,
+          duration: p.duration,
+          objectives: p.objectives,
+          prerequisites: p.prerequisites,
+          modality: p.modality,
+          price: p.price,
+          certifying: p.certifying || false,
+          targetAudience: p.targetAudience,
+          teachingMethods: p.teachingMethods,
+          evaluationMethods: p.evaluationMethods,
+          accessibilityInfo: p.accessibilityInfo,
+          programContent: p.programContent,
+          sessions: upcomingSessions,
+        };
       })));
     } catch (error) {
       res.status(500).json({ message: "Erreur serveur" });
