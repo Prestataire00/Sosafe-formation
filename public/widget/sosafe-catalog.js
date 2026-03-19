@@ -40,15 +40,12 @@
       ":host{display:block}" +
       ".sosafe-widget{font-family:" + t.fontFamily + ";color:#000;margin:0;padding:0}" +
 
-      // KPI stats bar with yellow gradient — full width
-      ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:1.5rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap;margin-bottom:0}" +
+      // Banner with background image + KPIs overlaid at bottom
+      ".sosafe-banner{width:100%;min-height:400px;background-size:cover;background-position:center center;background-repeat:no-repeat;display:flex;flex-direction:column;justify-content:flex-end;margin-bottom:0}" +
+      ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:1.5rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}" +
       ".sosafe-stat{text-align:center;min-width:120px}" +
       ".sosafe-stat-value{font-size:2rem;font-weight:700;color:#000}" +
       ".sosafe-stat-label{font-size:.8rem;color:#000;text-transform:uppercase;letter-spacing:.04em;font-weight:500}" +
-
-      // Banner image — full width, no overlay
-      ".sosafe-banner{width:100%;height:350px;overflow:hidden;margin-bottom:1.5rem}" +
-      ".sosafe-banner img{width:100%;height:100%;object-fit:cover;display:block}" +
 
       // Content wrapper (centered below banner)
       ".sosafe-content{max-width:1200px;margin:0 auto;padding:0 1rem 2rem}" +
@@ -147,7 +144,7 @@
 
       // Responsive
       "@media(max-width:900px){.sosafe-grid{grid-template-columns:repeat(2,1fr)}}" +
-      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{height:200px}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
+      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{min-height:250px}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
@@ -195,23 +192,22 @@
     var t = Object.assign({}, defaultTheme, theme || {});
     var html = '<div class="sosafe-widget">';
 
-    // KPI stats bar with yellow gradient
-    var totalSessions = 0;
-    programs.forEach(function (p) { totalSessions += (p.sessions || []).length; });
+    // Banner with background image + KPIs at bottom
+    html += '<div class="sosafe-banner" style="background-image:url(\'' + bannerImage + '\')">';
     html += '<div class="sosafe-stats-bar">';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">668</div><div class="sosafe-stat-label">Stagiaires form\u00E9s</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">R\u00E9ussite</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">Satisfaction</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes de formation</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">de taux de r\u00E9ussite</div></div>';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">de taux de satisfaction</div></div>';
     html += '</div>';
-
-    // Banner image (no overlay)
-    html += '<div class="sosafe-banner">';
-    html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
     html += '</div>';
 
     // Content wrapper
     html += '<div class="sosafe-content">';
+
+    // Breadcrumb
+    html += '<div style="font-size:.85rem;color:#6b7280;margin:1rem 0 .5rem"><a href="https://www.so-safe.fr/" style="color:#6b7280;text-decoration:none" target="_top">Accueil</a> &gt; <span style="color:#000">Formation</span></div>';
+    html += '<h1 style="font-size:1.8rem;font-weight:700;color:#000;margin-bottom:1.2rem">Formation</h1>';
 
     // Collect categories
     var categories = [];
