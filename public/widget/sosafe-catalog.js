@@ -88,7 +88,14 @@
       ".sosafe-card-body{padding:1rem}" +
       ".sosafe-card-title{font-size:.95rem;font-weight:700;color:#000;margin-bottom:.4rem;line-height:1.3}" +
       ".sosafe-card-duration{font-size:.85rem;color:#6b7280;margin-bottom:.5rem}" +
-      ".sosafe-card-date{font-size:.8rem;color:#32373c;font-weight:600;margin-bottom:.8rem}" +
+      ".sosafe-card-dates-title{font-size:.8rem;font-weight:700;color:#000;margin-bottom:.3rem}" +
+      ".sosafe-card-dates{margin-bottom:.8rem}" +
+      ".sosafe-card-date-row{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem}" +
+      ".sosafe-card-date-icon{width:16px;height:16px;flex-shrink:0;cursor:pointer;color:#32373c;transition:color .2s}" +
+      ".sosafe-card-date-icon:hover{color:#F7B136}" +
+      ".sosafe-card-date-text{font-size:.8rem;color:#32373c;font-weight:500}" +
+      ".sosafe-card-date-link{font-size:.75rem;color:#F7B136;font-weight:600;text-decoration:none;margin-left:auto;cursor:pointer}" +
+      ".sosafe-card-date-link:hover{text-decoration:underline}" +
       ".sosafe-card-btn{display:block;text-align:center;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#32373c;color:#fff;text-decoration:none;border-radius:9999px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + ";width:100%}" +
       ".sosafe-card-btn:hover{background:#23272b}" +
 
@@ -265,7 +272,20 @@
         html += '<div class="sosafe-card-duration">' + formatDuration(p.duration) + '</div>';
       }
       if (p.sessions && p.sessions.length > 0) {
-        html += '<div class="sosafe-card-date">' + formatDate(p.sessions[0].startDate) + '</div>';
+        html += '<div class="sosafe-card-dates-title">Prochaines dates</div>';
+        html += '<div class="sosafe-card-dates">';
+        var maxDates = Math.min(p.sessions.length, 3);
+        for (var si = 0; si < maxDates; si++) {
+          var sess = p.sessions[si];
+          html += '<div class="sosafe-card-date-row">';
+          html += '<svg class="sosafe-card-date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+          html += '<span class="sosafe-card-date-text">' + formatDate(sess.startDate) + '</span>';
+          if (!sess.isFull) {
+            html += '<a class="sosafe-card-date-link" href="' + enrollUrl + '?sessionId=' + sess.id + '" target="_blank" rel="noopener" data-enroll="true">S\'inscrire</a>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
       }
       html += '<button class="sosafe-card-btn" data-index="' + index + '">Voir le programme</button>';
       html += '</div></div>';
@@ -424,7 +444,7 @@
     var cards = root.querySelectorAll(".sosafe-card");
     cards.forEach(function (card) {
       card.addEventListener("click", function (e) {
-        if (e.target.tagName === "A") return;
+        if (e.target.tagName === "A" || e.target.closest("[data-enroll]")) return;
         var idx = parseInt(card.getAttribute("data-index"));
         openModal(root, idx);
       });
