@@ -38,20 +38,23 @@
       "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');" +
       "*{box-sizing:border-box;margin:0;padding:0}" +
       ":host{display:block}" +
-      ".sosafe-widget{font-family:" + t.fontFamily + ";color:#000;max-width:1200px;margin:0 auto;padding:0 0 40px}" +
+      ".sosafe-widget{font-family:" + t.fontFamily + ";color:#000;margin:0;padding:0}" +
 
-      // KPI stats bar with yellow gradient
+      // KPI stats bar with yellow gradient — full width
       ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:1.5rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap;margin-bottom:0}" +
       ".sosafe-stat{text-align:center;min-width:120px}" +
       ".sosafe-stat-value{font-size:2rem;font-weight:700;color:#000}" +
       ".sosafe-stat-label{font-size:.8rem;color:#000;text-transform:uppercase;letter-spacing:.04em;font-weight:500}" +
 
-      // Banner image (no overlay)
-      ".sosafe-banner{width:100%;height:300px;overflow:hidden;margin-bottom:1.5rem}" +
+      // Banner image — full width, no overlay
+      ".sosafe-banner{width:100%;height:350px;overflow:hidden;margin-bottom:1.5rem}" +
       ".sosafe-banner img{width:100%;height:100%;object-fit:cover;display:block}" +
 
+      // Content wrapper (centered below banner)
+      ".sosafe-content{max-width:1200px;margin:0 auto;padding:0 1rem 2rem}" +
+
       // Search & Filters
-      ".sosafe-search-bar{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center;padding:0 .5rem}" +
+      ".sosafe-search-bar{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center}" +
       ".sosafe-search-input{flex:1;min-width:200px;padding:.5rem .8rem .5rem 2.2rem;border:1px solid #ddd;border-radius:4px;font-size:.9rem;font-family:" + t.fontFamily + ";outline:none;transition:border-color .2s;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:8px center}" +
       ".sosafe-search-input:focus{border-color:" + t.primaryColor + "}" +
       ".sosafe-search-input::placeholder{color:#9ca3af}" +
@@ -64,7 +67,7 @@
       ".sosafe-filter-submit:hover{background:#23272b}" +
 
       // Toolbar
-      ".sosafe-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding:0 .5rem}" +
+      ".sosafe-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}" +
       ".sosafe-count{font-size:.9rem;color:#6b7280}" +
       ".sosafe-view-toggle{display:flex;gap:.3rem}" +
       ".sosafe-view-btn{padding:.4rem .6rem;border:1px solid #ddd;background:#fff;cursor:pointer;border-radius:4px;color:#9ca3af;transition:all .2s}" +
@@ -72,7 +75,7 @@
       ".sosafe-view-btn svg{width:18px;height:18px;display:block}" +
 
       // Grid — 3 columns
-      ".sosafe-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;padding:0 .5rem}" +
+      ".sosafe-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}" +
       ".sosafe-grid.list-view{grid-template-columns:1fr}" +
 
       // Cards
@@ -200,6 +203,9 @@
     html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
     html += '</div>';
 
+    // Content wrapper
+    html += '<div class="sosafe-content">';
+
     // Collect categories
     var categories = [];
     programs.forEach(function (p) {
@@ -264,6 +270,7 @@
       html += '<button class="sosafe-card-btn" data-index="' + index + '">Voir le programme</button>';
       html += '</div></div>';
     });
+    html += '</div>';
     html += '</div></div>';
     return html;
   }
