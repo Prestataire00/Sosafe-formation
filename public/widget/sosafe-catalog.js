@@ -40,12 +40,20 @@
       ":host{display:block}" +
       ".sosafe-widget{font-family:" + t.fontFamily + ";color:#000;margin:0;padding:0}" +
 
-      // Banner with background image + KPIs overlaid at bottom
-      ".sosafe-banner{width:100%;min-height:400px;background-size:cover;background-position:center center;background-repeat:no-repeat;display:flex;flex-direction:column;justify-content:flex-end;margin-bottom:0}" +
-      ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:1.5rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}" +
+      // Page header: banner image + overlay content + KPI bar
+      ".sosafe-page-header{position:relative;width:100%;margin-bottom:0}" +
+      ".sosafe-banner-img{width:100%;height:400px;object-fit:cover;display:block}" +
+      ".sosafe-header-overlay{position:absolute;top:0;left:0;right:0;bottom:auto;padding:2rem;display:flex;flex-direction:column;justify-content:flex-end;height:calc(100% - 80px)}" +
+      ".sosafe-breadcrumb{font-size:.9rem;color:#fff;margin-bottom:.5rem}" +
+      ".sosafe-breadcrumb a{color:#fff;text-decoration:none}" +
+      ".sosafe-breadcrumb a:hover{text-decoration:underline}" +
+      ".sosafe-breadcrumb-sep{margin:0 .3rem}" +
+      ".sosafe-page-title{font-size:2rem;font-weight:700;color:#fff;margin-bottom:.3rem;text-shadow:0 1px 4px rgba(0,0,0,.3)}" +
+      ".sosafe-page-results{font-size:.9rem;color:rgba(255,255,255,.9)}" +
+      ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:1.2rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}" +
       ".sosafe-stat{text-align:center;min-width:120px}" +
       ".sosafe-stat-value{font-size:2rem;font-weight:700;color:#000}" +
-      ".sosafe-stat-label{font-size:.8rem;color:#000;text-transform:uppercase;letter-spacing:.04em;font-weight:500}" +
+      ".sosafe-stat-label{font-size:.75rem;color:#000;text-transform:uppercase;letter-spacing:.03em;font-weight:500}" +
 
       // Content wrapper (centered below banner)
       ".sosafe-content{max-width:1200px;margin:0 auto;padding:0 1rem 2rem}" +
@@ -144,7 +152,7 @@
 
       // Responsive
       "@media(max-width:900px){.sosafe-grid{grid-template-columns:repeat(2,1fr)}}" +
-      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{min-height:250px}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
+      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner-img{height:250px}.sosafe-header-overlay{padding:1rem}.sosafe-page-title{font-size:1.4rem}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
@@ -192,22 +200,24 @@
     var t = Object.assign({}, defaultTheme, theme || {});
     var html = '<div class="sosafe-widget">';
 
-    // Banner with background image + KPIs at bottom
-    html += '<div class="sosafe-banner" style="background-image:url(\'' + bannerImage + '\')">';
+    // Page header: banner image + breadcrumb/title overlay + KPI bar
+    html += '<header class="sosafe-page-header">';
+    html += '<img class="sosafe-banner-img" src="' + bannerImage + '" alt="SO\'SAFE Formations">';
+    html += '<div class="sosafe-header-overlay">';
+    html += '<nav class="sosafe-breadcrumb"><a href="https://www.so-safe.fr/" target="_top">Accueil</a><span class="sosafe-breadcrumb-sep">&gt;</span> Formation</nav>';
+    html += '<h1 class="sosafe-page-title">Formation</h1>';
+    html += '<p class="sosafe-page-results">' + programs.length + ' r\u00E9sultats</p>';
+    html += '</div>';
     html += '<div class="sosafe-stats-bar">';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">668</div><div class="sosafe-stat-label">Stagiaires form\u00E9s</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes de formation</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">de taux de r\u00E9ussite</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">de taux de satisfaction</div></div>';
     html += '</div>';
-    html += '</div>';
+    html += '</header>';
 
     // Content wrapper
     html += '<div class="sosafe-content">';
-
-    // Breadcrumb
-    html += '<div style="font-size:.85rem;color:#6b7280;margin:1rem 0 .5rem"><a href="https://www.so-safe.fr/" style="color:#6b7280;text-decoration:none" target="_top">Accueil</a> &gt; <span style="color:#000">Formation</span></div>';
-    html += '<h1 style="font-size:1.8rem;font-weight:700;color:#000;margin-bottom:1.2rem">Formation</h1>';
 
     // Collect categories
     var categories = [];
