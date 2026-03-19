@@ -38,54 +38,56 @@
       "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');" +
       "*{box-sizing:border-box;margin:0;padding:0}" +
       ":host{display:block}" +
-      ".sosafe-widget{font-family:" + t.fontFamily + ";color:#1f2937;max-width:1200px;margin:0 auto;padding:0 1rem 2rem}" +
+      ".sosafe-widget{font-family:" + t.fontFamily + ";color:#000;max-width:1200px;margin:0 auto;padding:0 0 40px}" +
 
-      // Banner with KPIs overlaid
-      ".sosafe-banner{width:100%;height:350px;overflow:hidden;margin-bottom:2rem;position:relative}" +
+      // KPI stats bar with yellow gradient
+      ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:1.5rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap;margin-bottom:0}" +
+      ".sosafe-stat{text-align:center;min-width:120px}" +
+      ".sosafe-stat-value{font-size:2rem;font-weight:700;color:#000}" +
+      ".sosafe-stat-label{font-size:.8rem;color:#000;text-transform:uppercase;letter-spacing:.04em;font-weight:500}" +
+
+      // Banner image (no overlay)
+      ".sosafe-banner{width:100%;height:300px;overflow:hidden;margin-bottom:1.5rem}" +
       ".sosafe-banner img{width:100%;height:100%;object-fit:cover;display:block}" +
-      ".sosafe-banner-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,80,159,.3),rgba(0,80,159,.7));display:flex;flex-direction:column;justify-content:center;align-items:center;color:#fff;text-align:center;padding:2rem}" +
-      ".sosafe-banner-title{font-size:2.2rem;font-weight:700;margin-bottom:.3rem;text-shadow:0 2px 8px rgba(0,0,0,.3)}" +
-      ".sosafe-banner-sub{font-size:1.1rem;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.3);margin-bottom:1.5rem}" +
-      ".sosafe-stats{display:flex;justify-content:center;gap:2.5rem;flex-wrap:wrap}" +
-      ".sosafe-stat{text-align:center;min-width:90px}" +
-      ".sosafe-stat-value{font-size:1.8rem;font-weight:700;color:" + t.primaryColor + "}" +
-      ".sosafe-stat-label{font-size:.75rem;color:rgba(255,255,255,.9);text-transform:uppercase;letter-spacing:.04em}" +
 
       // Search & Filters
-      ".sosafe-search-bar{display:flex;gap:.8rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center}" +
-      ".sosafe-search-input{flex:1;min-width:200px;padding:.6rem 1rem .6rem 2.5rem;border:1px solid #e5e7eb;border-radius:8px;font-size:.9rem;font-family:" + t.fontFamily + ";outline:none;transition:border-color .2s;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:10px center}" +
+      ".sosafe-search-bar{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center;padding:0 .5rem}" +
+      ".sosafe-search-input{flex:1;min-width:200px;padding:.5rem .8rem .5rem 2.2rem;border:1px solid #ddd;border-radius:4px;font-size:.9rem;font-family:" + t.fontFamily + ";outline:none;transition:border-color .2s;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:8px center}" +
       ".sosafe-search-input:focus{border-color:" + t.primaryColor + "}" +
       ".sosafe-search-input::placeholder{color:#9ca3af}" +
-      ".sosafe-select{padding:.6rem .8rem;border:1px solid #e5e7eb;border-radius:8px;font-size:.85rem;font-family:" + t.fontFamily + ";background:#fff;cursor:pointer;outline:none;min-width:160px}" +
+      ".sosafe-select{padding:.5rem .6rem;border:1px solid #ddd;border-radius:4px;font-size:.85rem;font-family:" + t.fontFamily + ";background:#fff;cursor:pointer;outline:none;min-width:150px}" +
       ".sosafe-select:focus{border-color:" + t.primaryColor + "}" +
-      ".sosafe-filter-reset{padding:.6rem 1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-size:.85rem;font-family:" + t.fontFamily + ";color:#6b7280;transition:all .2s}" +
-      ".sosafe-filter-reset:hover{border-color:#d1d5db;color:#374151}" +
+      ".sosafe-filter-btn{padding:.5rem 1.2rem;border:none;border-radius:9999px;cursor:pointer;font-size:.85rem;font-family:" + t.fontFamily + ";transition:all .2s;font-weight:500}" +
+      ".sosafe-filter-reset{background:#fff;border:1px solid #ddd;color:#6b7280}" +
+      ".sosafe-filter-reset:hover{border-color:#999;color:#333}" +
+      ".sosafe-filter-submit{background:#32373c;color:#fff}" +
+      ".sosafe-filter-submit:hover{background:#23272b}" +
 
       // Toolbar
-      ".sosafe-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem}" +
+      ".sosafe-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding:0 .5rem}" +
       ".sosafe-count{font-size:.9rem;color:#6b7280}" +
       ".sosafe-view-toggle{display:flex;gap:.3rem}" +
-      ".sosafe-view-btn{padding:.4rem .6rem;border:1px solid #e5e7eb;background:#fff;cursor:pointer;border-radius:6px;color:#9ca3af;transition:all .2s}" +
-      ".sosafe-view-btn.active{background:" + t.accentColor + ";border-color:" + t.accentColor + ";color:#fff}" +
+      ".sosafe-view-btn{padding:.4rem .6rem;border:1px solid #ddd;background:#fff;cursor:pointer;border-radius:4px;color:#9ca3af;transition:all .2s}" +
+      ".sosafe-view-btn.active{background:#32373c;border-color:#32373c;color:#fff}" +
       ".sosafe-view-btn svg{width:18px;height:18px;display:block}" +
 
-      // Grid
-      ".sosafe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.5rem}" +
+      // Grid — 3 columns
+      ".sosafe-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;padding:0 .5rem}" +
       ".sosafe-grid.list-view{grid-template-columns:1fr}" +
 
-      // Cards (simple: image + badge + title + duration + button)
-      ".sosafe-card{border:none;border-radius:" + t.borderRadius + ";background:#fff;overflow:hidden;transition:box-shadow .3s,transform .2s;box-shadow:0 2px 8px rgba(0,0,0,.08);cursor:pointer}" +
-      ".sosafe-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.12);transform:translateY(-3px)}" +
+      // Cards
+      ".sosafe-card{border:none;border-radius:0;background:#fff;overflow:hidden;transition:box-shadow .3s,transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.08);cursor:pointer}" +
+      ".sosafe-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12);transform:translateY(-2px)}" +
       ".sosafe-card-img-wrap{position:relative;overflow:hidden}" +
       ".sosafe-card-img{width:100%;height:220px;object-fit:cover;display:block;transition:transform .3s}" +
       ".sosafe-card:hover .sosafe-card-img{transform:scale(1.03)}" +
-      ".sosafe-card-modality{position:absolute;top:12px;left:12px;background:#fff;color:#374151;font-size:.75rem;font-weight:600;padding:.3rem .8rem;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15)}" +
-      ".sosafe-card-body{padding:1rem 1.2rem 1.2rem}" +
-      ".sosafe-card-title{font-size:1rem;font-weight:700;color:#111827;margin-bottom:.5rem;line-height:1.3}" +
-      ".sosafe-card-duration{font-size:.85rem;color:#6b7280;margin-bottom:.6rem}" +
-      ".sosafe-card-date{font-size:.8rem;color:" + t.accentColor + ";font-weight:600;margin-bottom:.8rem}" +
-      ".sosafe-card-btn{display:block;text-align:center;padding:.6rem;background:" + t.primaryColor + ";color:#111827;text-decoration:none;border-radius:8px;font-size:.85rem;font-weight:600;border:none;cursor:pointer;transition:opacity .2s;font-family:" + t.fontFamily + ";width:100%}" +
-      ".sosafe-card-btn:hover{opacity:.85}" +
+      ".sosafe-card-modality{position:absolute;top:10px;left:10px;background:#32373c;color:#fff;font-size:.7rem;font-weight:600;padding:.25rem .7rem;border-radius:9999px}" +
+      ".sosafe-card-body{padding:1rem}" +
+      ".sosafe-card-title{font-size:.95rem;font-weight:700;color:#000;margin-bottom:.4rem;line-height:1.3}" +
+      ".sosafe-card-duration{font-size:.85rem;color:#6b7280;margin-bottom:.5rem}" +
+      ".sosafe-card-date{font-size:.8rem;color:#32373c;font-weight:600;margin-bottom:.8rem}" +
+      ".sosafe-card-btn{display:block;text-align:center;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#32373c;color:#fff;text-decoration:none;border-radius:9999px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + ";width:100%}" +
+      ".sosafe-card-btn:hover{background:#23272b}" +
 
       // List view
       ".list-view .sosafe-card{display:flex;flex-direction:row}" +
@@ -95,46 +97,47 @@
 
       // Modal (detail view)
       ".sosafe-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;justify-content:center;align-items:flex-start;padding:2rem;overflow-y:auto}" +
-      ".sosafe-modal{background:#fff;border-radius:" + t.borderRadius + ";max-width:800px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative}" +
+      ".sosafe-modal{background:#fff;border-radius:0;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative}" +
       ".sosafe-modal-close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:background .2s}" +
       ".sosafe-modal-close:hover{background:rgba(0,0,0,.8)}" +
-      ".sosafe-modal-img{width:100%;height:280px;object-fit:cover;display:block;border-radius:" + t.borderRadius + " " + t.borderRadius + " 0 0}" +
+      ".sosafe-modal-img{width:100%;height:280px;object-fit:cover;display:block}" +
       ".sosafe-modal-body{padding:2rem}" +
       ".sosafe-modal-badges{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}" +
-      ".sosafe-modal-badge{font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;padding:.3rem .8rem;border-radius:100px;font-weight:600}" +
-      ".sosafe-modal-badge-cat{background:" + t.accentColor + "15;color:" + t.accentColor + "}" +
-      ".sosafe-modal-badge-modality{background:#f3f4f6;color:#6b7280}" +
+      ".sosafe-modal-badge{font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;padding:.25rem .7rem;border-radius:9999px;font-weight:600}" +
+      ".sosafe-modal-badge-cat{background:#F6DE1430;color:#8B6914}" +
+      ".sosafe-modal-badge-modality{background:#32373c;color:#fff}" +
       ".sosafe-modal-badge-cert{background:#fef3c7;color:#b45309}" +
-      ".sosafe-modal-title{font-size:1.5rem;font-weight:700;color:#111827;margin-bottom:.8rem;line-height:1.3}" +
+      ".sosafe-modal-title{font-size:1.5rem;font-weight:700;color:#000;margin-bottom:.8rem;line-height:1.3}" +
       ".sosafe-modal-meta{display:flex;flex-wrap:wrap;gap:1.5rem;margin-bottom:1.2rem;font-size:.9rem;color:#6b7280}" +
       ".sosafe-modal-meta span{display:flex;align-items:center;gap:.3rem}" +
       ".sosafe-modal-section{margin-bottom:1.5rem}" +
-      ".sosafe-modal-section h3{font-size:1rem;font-weight:600;color:#111827;margin-bottom:.6rem;padding-bottom:.4rem;border-bottom:2px solid " + t.primaryColor + "}" +
+      ".sosafe-modal-section h3{font-size:1rem;font-weight:600;color:#000;margin-bottom:.6rem;padding-bottom:.4rem;border-bottom:2px solid " + t.primaryColor + "}" +
       ".sosafe-modal-section p,.sosafe-modal-section ul{font-size:.9rem;color:#4b5563;line-height:1.7}" +
       ".sosafe-modal-section ul{padding-left:1.2rem}" +
       ".sosafe-modal-section li{margin-bottom:.3rem}" +
       ".sosafe-modal-sessions{margin-bottom:1.5rem}" +
-      ".sosafe-modal-session{display:flex;justify-content:space-between;align-items:center;padding:.7rem 1rem;background:#f9fafb;border-radius:8px;margin-bottom:.4rem;font-size:.9rem}" +
-      ".sosafe-modal-session-date{font-weight:600;color:#111827}" +
+      ".sosafe-modal-session{display:flex;justify-content:space-between;align-items:center;padding:.7rem 1rem;background:#f9fafb;border-radius:4px;margin-bottom:.4rem;font-size:.9rem}" +
+      ".sosafe-modal-session-date{font-weight:600;color:#000}" +
       ".sosafe-modal-session-loc{color:#6b7280;font-size:.85rem}" +
-      ".sosafe-modal-session-spots{font-size:.85rem;font-weight:600;padding:.2rem .6rem;border-radius:100px}" +
+      ".sosafe-modal-session-spots{font-size:.85rem;font-weight:600;padding:.2rem .6rem;border-radius:9999px}" +
       ".sosafe-modal-session-spots.available{color:#059669;background:#ecfdf5}" +
       ".sosafe-modal-session-spots.full{color:#dc2626;background:#fef2f2}" +
       ".sosafe-modal-footer{display:flex;justify-content:space-between;align-items:center;padding-top:1.2rem;border-top:2px solid #f3f4f6;margin-top:1rem}" +
-      ".sosafe-modal-price{font-size:1.3rem;font-weight:700;color:#111827}" +
+      ".sosafe-modal-price{font-size:1.3rem;font-weight:700;color:#000}" +
       ".sosafe-modal-price small{font-size:.8rem;font-weight:400;color:#6b7280}" +
-      ".sosafe-modal-cta{display:inline-block;padding:.7rem 2rem;background:" + t.primaryColor + ";color:#111827;text-decoration:none;border-radius:8px;font-size:.95rem;font-weight:700;border:none;cursor:pointer;transition:opacity .2s;font-family:" + t.fontFamily + "}" +
-      ".sosafe-modal-cta:hover{opacity:.85}" +
-      ".sosafe-modal-cta-outline{background:transparent;color:" + t.accentColor + ";border:2px solid " + t.accentColor + "}" +
-      ".sosafe-modal-cta-outline:hover{background:" + t.accentColor + ";color:#fff}" +
-      ".sosafe-no-session-modal{font-size:.9rem;color:#9ca3af;font-style:italic;padding:.8rem;background:#f9fafb;border-radius:8px;text-align:center}" +
+      ".sosafe-modal-cta{display:inline-block;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#32373c;color:#fff;text-decoration:none;border-radius:9999px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + "}" +
+      ".sosafe-modal-cta:hover{background:#23272b}" +
+      ".sosafe-modal-cta-outline{background:transparent;color:#32373c;border:2px solid #32373c}" +
+      ".sosafe-modal-cta-outline:hover{background:#32373c;color:#fff}" +
+      ".sosafe-no-session-modal{font-size:.9rem;color:#9ca3af;font-style:italic;padding:.8rem;background:#f9fafb;border-radius:4px;text-align:center}" +
 
       // States
       ".sosafe-loading{text-align:center;padding:3rem;color:#9ca3af;font-size:.9rem}" +
       ".sosafe-error{text-align:center;padding:3rem;color:#dc2626;font-size:.9rem}" +
 
       // Responsive
-      "@media(max-width:700px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{height:280px}.sosafe-banner-title{font-size:1.4rem}.sosafe-stats{gap:1rem}.sosafe-stat-value{font-size:1.2rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
+      "@media(max-width:900px){.sosafe-grid{grid-template-columns:repeat(2,1fr)}}" +
+      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner{height:200px}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
@@ -182,21 +185,20 @@
     var t = Object.assign({}, defaultTheme, theme || {});
     var html = '<div class="sosafe-widget">';
 
-    // Banner with KPIs overlaid
+    // KPI stats bar with yellow gradient
     var totalSessions = 0;
     programs.forEach(function (p) { totalSessions += (p.sessions || []).length; });
-    html += '<div class="sosafe-banner">';
-    html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
-    html += '<div class="sosafe-banner-overlay">';
-    html += '<div class="sosafe-banner-title">Nos formations</div>';
-    html += '<div class="sosafe-banner-sub">Sant\u00E9, secours et pr\u00E9vention des risques</div>';
-    html += '<div class="sosafe-stats">';
+    html += '<div class="sosafe-stats-bar">';
+    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">668</div><div class="sosafe-stat-label">Stagiaires form\u00E9s</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + totalSessions + '</div><div class="sosafe-stat-label">Sessions</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">R\u00E9ussite</div></div>';
     html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">Satisfaction</div></div>';
     html += '</div>';
-    html += '</div></div>';
+
+    // Banner image (no overlay)
+    html += '<div class="sosafe-banner">';
+    html += '<img src="' + bannerImage + '" alt="SO\'SAFE Formations">';
+    html += '</div>';
 
     // Collect categories
     var categories = [];
@@ -210,12 +212,18 @@
     html += '<div class="sosafe-search-bar">';
     html += '<input type="text" class="sosafe-search-input" placeholder="Saisissez au moins 3 caract\u00E8res pour filtrer..." data-role="search">';
     html += '<select class="sosafe-select" data-role="cat-select">';
-    html += '<option value="all">Toutes les cat\u00E9gories</option>';
+    html += '<option value="all">Cat\u00E9gorie</option>';
     categories.forEach(function (cat) {
       html += '<option value="' + cat + '">' + cat + '</option>';
     });
     html += '</select>';
-    html += '<button class="sosafe-filter-reset" data-role="reset">R\u00E9initialiser</button>';
+    html += '<select class="sosafe-select" data-role="surmesure-select">';
+    html += '<option value="all">Sur-mesure</option>';
+    html += '<option value="oui">Oui</option>';
+    html += '<option value="non">Non</option>';
+    html += '</select>';
+    html += '<button class="sosafe-filter-btn sosafe-filter-reset" data-role="reset">R\u00E9initialiser</button>';
+    html += '<button class="sosafe-filter-btn sosafe-filter-submit" data-role="filter">Filtrer</button>';
     html += '</div>';
 
     // Toolbar
@@ -224,8 +232,8 @@
     html += '<div class="sosafe-toolbar">';
     html += '<div class="sosafe-count">' + displayed.length + ' r\u00E9sultat' + (displayed.length > 1 ? 's' : '') + '</div>';
     html += '<div class="sosafe-view-toggle">';
-    html += '<button class="sosafe-view-btn active" data-view="grid" title="Vue grille"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>';
-    html += '<button class="sosafe-view-btn" data-view="list" title="Vue liste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>';
+    html += '<button class="sosafe-view-btn active" data-view="grid" title="Voir en grille"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>';
+    html += '<button class="sosafe-view-btn" data-view="list" title="Voir en liste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>';
     html += '</div></div>';
 
     // Grid - simple cards
