@@ -113,13 +113,19 @@
       ".list-view .sosafe-card-img{height:100%;min-height:180px}" +
       ".list-view .sosafe-card-body{flex:1;display:flex;flex-direction:column;justify-content:center}" +
 
-      // Modal (detail view)
-      ".sosafe-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;justify-content:center;align-items:flex-start;padding:2rem;overflow-y:auto}" +
-      ".sosafe-modal{background:#fff;border-radius:0;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative}" +
-      ".sosafe-modal-close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:background .2s}" +
-      ".sosafe-modal-close:hover{background:rgba(0,0,0,.8)}" +
-      ".sosafe-modal-img{width:100%;height:280px;object-fit:cover;display:block}" +
-      ".sosafe-modal-body{padding:2rem}" +
+      // Detail page view (replaces catalog)
+      ".sosafe-detail-page{}" +
+      ".sosafe-detail-header{position:relative;width:100%}" +
+      ".sosafe-detail-banner{width:100%;height:300px;object-fit:cover;display:block}" +
+      ".sosafe-detail-header-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:flex-end;padding:2rem}" +
+      ".sosafe-detail-breadcrumb{font-size:.9rem;color:#fff;margin-bottom:.5rem}" +
+      ".sosafe-detail-breadcrumb a{color:#fff;text-decoration:none;cursor:pointer}" +
+      ".sosafe-detail-breadcrumb a:hover{text-decoration:underline}" +
+      ".sosafe-detail-title{font-size:2rem;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.3)}" +
+      ".sosafe-detail-content{max-width:900px;margin:0 auto;padding:2rem 1rem}" +
+      ".sosafe-detail-meta{display:flex;flex-wrap:wrap;gap:1.5rem;margin-bottom:1.5rem;font-size:.9rem;color:#6b7280;padding-bottom:1rem;border-bottom:1px solid #e5e7eb}" +
+      ".sosafe-detail-meta span{display:flex;align-items:center;gap:.3rem}" +
+      ".sosafe-modal-body{padding:0}" +
       ".sosafe-modal-badges{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}" +
       ".sosafe-modal-badge{font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;padding:.25rem .7rem;border-radius:9999px;font-weight:600}" +
       ".sosafe-modal-badge-cat{background:#F6DE1430;color:#8B6914}" +
@@ -140,7 +146,7 @@
       ".sosafe-modal-session-spots{font-size:.85rem;font-weight:600;padding:.2rem .6rem;border-radius:9999px}" +
       ".sosafe-modal-session-spots.available{color:#059669;background:#ecfdf5}" +
       ".sosafe-modal-session-spots.full{color:#dc2626;background:#fef2f2}" +
-      ".sosafe-modal-footer{display:flex;justify-content:space-between;align-items:center;padding-top:1.2rem;border-top:2px solid #f3f4f6;margin-top:1rem}" +
+      ".sosafe-modal-footer{display:flex;justify-content:space-between;align-items:center;padding-top:1.2rem;border-top:2px solid #f3f4f6;margin-top:1.5rem}" +
       ".sosafe-modal-price{font-size:1.3rem;font-weight:700;color:#000}" +
       ".sosafe-modal-price small{font-size:.8rem;font-weight:400;color:#6b7280}" +
       ".sosafe-modal-cta{display:inline-block;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#32373c;color:#fff;text-decoration:none;border-radius:9999px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + "}" +
@@ -148,6 +154,8 @@
       ".sosafe-modal-cta-outline{background:transparent;color:#32373c;border:2px solid #32373c}" +
       ".sosafe-modal-cta-outline:hover{background:#32373c;color:#fff}" +
       ".sosafe-no-session-modal{font-size:.9rem;color:#9ca3af;font-style:italic;padding:.8rem;background:#f9fafb;border-radius:4px;text-align:center}" +
+      ".sosafe-back-link{display:inline-flex;align-items:center;gap:.4rem;color:#32373c;text-decoration:none;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:1.5rem;transition:color .2s}" +
+      ".sosafe-back-link:hover{color:#fec700}" +
 
       // States
       ".sosafe-loading{text-align:center;padding:3rem;color:#9ca3af;font-size:.9rem}" +
@@ -155,7 +163,7 @@
 
       // Responsive
       "@media(max-width:900px){.sosafe-grid{grid-template-columns:repeat(2,1fr)}}" +
-      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner-img{height:250px}.sosafe-header-overlay{padding:1rem}.sosafe-page-title{font-size:1.4rem}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-modal{margin:1rem;max-height:95vh}.sosafe-modal-body{padding:1.2rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
+      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner-img{height:250px}.sosafe-header-overlay{padding:1rem}.sosafe-page-title{font-size:1.4rem}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-detail-banner{height:200px}.sosafe-detail-title{font-size:1.4rem}.sosafe-detail-content{padding:1.2rem}.sosafe-detail-meta{flex-direction:column;gap:.5rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
@@ -305,16 +313,33 @@
     return html;
   }
 
-  function renderModal(p) {
-    var html = '<div class="sosafe-modal-overlay" data-role="modal-overlay">';
-    html += '<div class="sosafe-modal">';
-    html += '<button class="sosafe-modal-close" data-role="modal-close">\u00D7</button>';
-
-    // Image
+  function renderDetailPage(p) {
     var img = p.imageUrl || defaultImage;
-    html += '<img class="sosafe-modal-img" src="' + img + '" alt="' + (p.title || "") + '" onerror="this.src=\'' + defaultImage + '\'">';
+    var html = '<div class="sosafe-widget"><div class="sosafe-detail-page">';
 
-    html += '<div class="sosafe-modal-body">';
+    // Banner with overlay
+    html += '<div class="sosafe-detail-header">';
+    html += '<img class="sosafe-detail-banner" src="' + img + '" alt="' + (p.title || "") + '" onerror="this.src=\'' + bannerImage + '\'">';
+    html += '<div class="sosafe-detail-header-overlay">';
+    html += '<nav class="sosafe-detail-breadcrumb"><a data-role="back-to-catalog">Accueil</a> \u203A <a data-role="back-to-catalog">Formation</a> \u203A ' + (p.title || "Formation") + '</nav>';
+    html += '<h1 class="sosafe-detail-title">' + (p.title || "Formation") + '</h1>';
+    html += '</div></div>';
+
+    // Content
+    html += '<div class="sosafe-detail-content">';
+
+    // Back link
+    html += '<a class="sosafe-back-link" data-role="back-to-catalog">\u2190 Retour aux formations</a>';
+
+    // Meta bar
+    html += '<div class="sosafe-detail-meta">';
+    if (p.duration) html += '<span>' + formatDuration(p.duration) + '</span>';
+    if (p.modality) html += '<span>' + modalityLabel(p.modality) + '</span>';
+    if (p.sessions && p.sessions.length > 0 && p.sessions[0].maxParticipants) {
+      html += '<span>' + p.sessions[0].maxParticipants + ' participants max</span>';
+    }
+    if (p.price) html += '<span>\u00C0 partir de ' + formatPrice(p.price) + ' HT/apprenant</span>';
+    html += '</div>';
 
     // Badges
     html += '<div class="sosafe-modal-badges">';
@@ -327,19 +352,6 @@
     if (p.certifying) {
       html += '<span class="sosafe-modal-badge sosafe-modal-badge-cert">Certifiante</span>';
     }
-    html += '</div>';
-
-    // Title
-    html += '<h2 class="sosafe-modal-title">' + (p.title || "Formation") + '</h2>';
-
-    // Meta: duration + modality + capacity + price
-    html += '<div class="sosafe-modal-meta">';
-    if (p.duration) html += '<span>' + formatDuration(p.duration) + '</span>';
-    if (p.modality) html += '<span>' + modalityLabel(p.modality) + '</span>';
-    if (p.sessions && p.sessions.length > 0 && p.sessions[0].maxParticipants) {
-      html += '<span>' + p.sessions[0].maxParticipants + ' participants</span>';
-    }
-    if (p.price) html += '<span>\u00C0 partir de ' + formatPrice(p.price) + ' HT/apprenant</span>';
     html += '</div>';
 
     // Description
@@ -438,25 +450,47 @@
     return html;
   }
 
-  function openModal(root, index) {
+  var currentView = 'catalog'; // 'catalog' or 'detail'
+  var catalogHTML = '';
+
+  function showDetailPage(root, index) {
     var p = allPrograms[index];
     if (!p) return;
-    var existing = root.querySelector('[data-role="modal-overlay"]');
-    if (existing) existing.remove();
-    var modalDiv = document.createElement("div");
-    modalDiv.innerHTML = renderModal(p);
-    root.appendChild(modalDiv.firstChild);
+    currentView = 'detail';
 
-    // Close events
-    var overlay = root.querySelector('[data-role="modal-overlay"]');
-    var closeBtn = root.querySelector('[data-role="modal-close"]');
-    if (closeBtn) {
-      closeBtn.addEventListener("click", function () { overlay.remove(); });
+    // Save current catalog HTML
+    var widgetEl = root.querySelector('.sosafe-widget');
+    if (widgetEl) {
+      catalogHTML = widgetEl.parentElement.innerHTML;
     }
-    if (overlay) {
-      overlay.addEventListener("click", function (e) {
-        if (e.target === overlay) overlay.remove();
+
+    // Scroll to top of widget
+    var host = root.host || root;
+    if (host && host.scrollIntoView) host.scrollIntoView({ behavior: 'smooth' });
+
+    // Replace content with detail page
+    var wrapper = root.querySelector('.sosafe-widget');
+    if (wrapper && wrapper.parentElement) {
+      wrapper.parentElement.innerHTML = renderDetailPage(p);
+    }
+
+    // Setup back navigation
+    var backLinks = root.querySelectorAll('[data-role="back-to-catalog"]');
+    backLinks.forEach(function (link) {
+      link.addEventListener('click', function () {
+        showCatalog(root);
       });
+    });
+  }
+
+  function showCatalog(root) {
+    currentView = 'catalog';
+    if (catalogHTML) {
+      var wrapper = root.querySelector('.sosafe-widget');
+      if (wrapper && wrapper.parentElement) {
+        wrapper.parentElement.innerHTML = catalogHTML;
+      }
+      setupInteractions(root);
     }
   }
 
@@ -467,7 +501,7 @@
       card.addEventListener("click", function (e) {
         if (e.target.tagName === "A" || e.target.closest("[data-enroll]")) return;
         var idx = parseInt(card.getAttribute("data-index"));
-        openModal(root, idx);
+        showDetailPage(root, idx);
       });
     });
 
@@ -477,7 +511,7 @@
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
         var idx = parseInt(btn.getAttribute("data-index"));
-        openModal(root, idx);
+        showDetailPage(root, idx);
       });
     });
 
