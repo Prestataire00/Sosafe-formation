@@ -59,6 +59,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   Upload,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -825,6 +827,7 @@ function ProgramDetail({
 
 export default function Programs() {
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -969,12 +972,34 @@ export default function Programs() {
         }
       />
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder="Rechercher une formation..."
-        className="max-w-md"
-      />
+      <div className="flex items-center gap-3">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Rechercher une formation..."
+          className="max-w-md"
+        />
+        <div className="flex border rounded-md">
+          <Button
+            variant={viewMode === "table" ? "default" : "ghost"}
+            size="icon"
+            className="h-9 w-9 rounded-r-none"
+            onClick={() => setViewMode("table")}
+            title="Vue tableau"
+          >
+            <List className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={viewMode === "cards" ? "default" : "ghost"}
+            size="icon"
+            className="h-9 w-9 rounded-l-none"
+            onClick={() => setViewMode("cards")}
+            title="Vue cartes"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
 
       {isLoading ? (
         <Card>
@@ -1008,84 +1033,138 @@ export default function Programs() {
         </div>
       ) : (
         <>
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Formation</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Catégorie</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Durée</th>
-                    <th className="text-right text-sm font-medium text-muted-foreground px-4 py-3">Prix</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Niveau</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Sessions</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Statut</th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((program) => {
-                    const sessionCount = allSessions?.filter((s) => s.programId === program.id).length || 0;
-                    const levelLabel = levels.find((l) => l.value === program.level)?.label || program.level;
-                    const statusLabel = program.status === "published" ? "Active" : program.status === "draft" ? "Brouillon" : "Archivée";
-                    const durationDisplay = program.duration >= 7 ? `${Math.round(program.duration / 7)} jour${Math.round(program.duration / 7) > 1 ? "s" : ""}` : `${program.duration}h`;
-                    return (
-                      <tr
-                        key={program.id}
-                        className="border-b last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
-                        data-testid={`row-program-${program.id}`}
-                        onClick={() => setViewProgram(program)}
-                      >
-                        <td className="px-4 py-3">
-                          <span className="font-medium text-sm">{program.title}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-muted-foreground">{program.categories?.join(", ") || "-"}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm">{durationDisplay}</span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className="text-sm">{program.price.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm">{levelLabel}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-muted-foreground">{sessionCount} session{sessionCount > 1 ? "s" : ""}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant={program.status === "published" ? "default" : "secondary"} className="text-xs">
-                            {statusLabel}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`button-program-menu-${program.id}`}>
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setViewProgram(program)}>
-                                <Eye className="w-4 h-4 mr-2" /> Voir la fiche
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setEditProgram(program); setDialogOpen(true); }}>
-                                <Pencil className="w-4 h-4 mr-2" /> Modifier
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
-                                <Trash2 className="w-4 h-4 mr-2" /> Supprimer
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {viewMode === "table" ? (
+            <Card>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Formation</th>
+                      <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Catégorie</th>
+                      <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Durée</th>
+                      <th className="text-right text-sm font-medium text-muted-foreground px-4 py-3">Prix</th>
+                      <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Niveau</th>
+                      <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Sessions</th>
+                      <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Statut</th>
+                      <th className="w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((program) => {
+                      const sessionCount = allSessions?.filter((s) => s.programId === program.id).length || 0;
+                      const levelLabel = levels.find((l) => l.value === program.level)?.label || program.level;
+                      const statusLabel = program.status === "published" ? "Active" : program.status === "draft" ? "Brouillon" : "Archivée";
+                      const durationDisplay = program.duration >= 7 ? `${Math.round(program.duration / 7)} jour${Math.round(program.duration / 7) > 1 ? "s" : ""}` : `${program.duration}h`;
+                      return (
+                        <tr
+                          key={program.id}
+                          className="border-b last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
+                          data-testid={`row-program-${program.id}`}
+                          onClick={() => setViewProgram(program)}
+                        >
+                          <td className="px-4 py-3">
+                            <span className="font-medium text-sm">{program.title}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-muted-foreground">{program.categories?.join(", ") || "-"}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm">{durationDisplay}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm">{program.price.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm">{levelLabel}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-muted-foreground">{sessionCount} session{sessionCount > 1 ? "s" : ""}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant={program.status === "published" ? "default" : "secondary"} className="text-xs">
+                              {statusLabel}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`button-program-menu-${program.id}`}>
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setViewProgram(program)}>
+                                  <Eye className="w-4 h-4 mr-2" /> Voir la fiche
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setEditProgram(program); setDialogOpen(true); }}>
+                                  <Pencil className="w-4 h-4 mr-2" /> Modifier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
+                                  <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((program) => {
+                const sessionCount = allSessions?.filter((s) => s.programId === program.id).length || 0;
+                const durationDisplay = program.duration >= 7 ? `${Math.round(program.duration / 7)} jour${Math.round(program.duration / 7) > 1 ? "s" : ""}` : `${program.duration}h`;
+                const statusLabel = program.status === "published" ? "Active" : program.status === "draft" ? "Brouillon" : "Archivée";
+                return (
+                  <Card
+                    key={program.id}
+                    className="cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
+                    onClick={() => setViewProgram(program)}
+                  >
+                    {program.imageUrl ? (
+                      <img src={program.imageUrl} alt={program.title} className="w-full h-40 object-cover" />
+                    ) : (
+                      <div className="w-full h-40 bg-muted flex items-center justify-center">
+                        <BookOpen className="w-10 h-10 text-muted-foreground/30" />
+                      </div>
+                    )}
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold text-sm leading-tight">{program.title}</h3>
+                        <Badge variant={program.status === "published" ? "default" : "secondary"} className="text-xs shrink-0">
+                          {statusLabel}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {program.categories?.map((c) => (
+                          <Badge key={c} variant="outline" className="text-xs">{c}</Badge>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{durationDisplay}</span>
+                        <span className="flex items-center gap-1"><Euro className="w-3 h-3" />{program.price.toLocaleString("fr-FR")} €</span>
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{sessionCount} session{sessionCount > 1 ? "s" : ""}</span>
+                      </div>
+                      <div className="flex gap-1 pt-1" onClick={(e) => e.stopPropagation()}>
+                        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setViewProgram(program)}>
+                          <Eye className="w-3 h-3 mr-1" /> Voir
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setEditProgram(program); setDialogOpen(true); }}>
+                          <Pencil className="w-3 h-3 mr-1" /> Modifier
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
-          </Card>
+          )}
           <p className="text-sm text-muted-foreground">{filtered.length} formation{filtered.length > 1 ? "s" : ""} au total</p>
         </>
       )}
