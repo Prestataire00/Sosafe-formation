@@ -92,8 +92,8 @@
       ".sosafe-card:hover .sosafe-card-img{transform:scale(1.03)}" +
       ".sosafe-card-modality{position:absolute;top:10px;left:10px;background:#32373c;color:#fff;font-size:.7rem;font-weight:600;padding:.25rem .7rem;border-radius:9999px}" +
       ".sosafe-card-body{padding:1rem}" +
-      ".sosafe-card-title{font-size:.95rem;font-weight:700;color:#000;margin-bottom:.4rem;line-height:1.3}" +
-      ".sosafe-card-title-link{color:#000;text-decoration:none;cursor:pointer;transition:color .2s}" +
+      ".sosafe-card-title{font-size:.95rem;font-weight:700;margin-bottom:.4rem;line-height:1.3}" +
+      ".sosafe-card-title-link{color:#00509f;text-decoration:none;cursor:pointer;transition:color .2s}" +
       ".sosafe-card-title-link:hover{color:#fec700}" +
       ".sosafe-card-duration{font-size:.85rem;color:#6b7280;margin-bottom:.5rem}" +
       ".sosafe-card-dates-title{font-size:.8rem;font-weight:700;color:#000;margin-bottom:.3rem}" +
@@ -104,8 +104,8 @@
       ".sosafe-card-date-text{font-size:.8rem;color:#32373c;font-weight:500}" +
       ".sosafe-card-date-link{font-size:.75rem;color:#F7B136;font-weight:600;text-decoration:none;margin-left:auto;cursor:pointer}" +
       ".sosafe-card-date-link:hover{text-decoration:underline}" +
-      ".sosafe-card-btn{display:block;text-align:center;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#32373c;color:#fff;text-decoration:none;border-radius:9999px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + ";width:100%}" +
-      ".sosafe-card-btn:hover{background:#23272b}" +
+      ".sosafe-card-btn{display:block;text-align:center;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#fec700;color:#32373c;text-decoration:none;border-radius:9999px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + ";width:100%}" +
+      ".sosafe-card-btn:hover{background:#e6b400}" +
 
       // List view
       ".list-view .sosafe-card{display:flex;flex-direction:row}" +
@@ -255,6 +255,7 @@
     html += '<option value="non">Non</option>';
     html += '</select>';
     html += '<button class="sosafe-filter-btn sosafe-filter-reset" data-role="reset">R\u00E9initialiser</button>';
+    html += '<button class="sosafe-filter-btn sosafe-filter-submit" data-role="filter">Filtrer</button>';
     html += '</div>';
 
     // Toolbar
