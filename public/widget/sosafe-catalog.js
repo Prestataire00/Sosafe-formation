@@ -328,16 +328,14 @@
     // Title
     html += '<h2 class="sosafe-modal-title">' + (p.title || "Formation") + '</h2>';
 
-    // Overview meta block
+    // Meta: duration + modality + capacity + price
     html += '<div class="sosafe-modal-meta">';
-    if (p.duration) html += '<span>\u23F0 ' + formatDuration(p.duration) + '</span>';
-    if (p.modality) html += '<span>\uD83D\uDCCD ' + modalityLabel(p.modality) + '</span>';
+    if (p.duration) html += '<span>' + formatDuration(p.duration) + '</span>';
+    if (p.modality) html += '<span>' + modalityLabel(p.modality) + '</span>';
     if (p.sessions && p.sessions.length > 0 && p.sessions[0].maxParticipants) {
-      html += '<span>\uD83D\uDC65 ' + p.sessions[0].maxParticipants + ' participants max</span>';
+      html += '<span>' + p.sessions[0].maxParticipants + ' participants</span>';
     }
-    if (p.certifying) html += '<span>\uD83C\uDF93 Certifiante</span>';
-    if (p.recyclingMonths) html += '<span>\u267B\uFE0F Recyclage : ' + (p.recyclingMonths >= 12 ? (p.recyclingMonths / 12) + ' an' + (p.recyclingMonths > 12 ? 's' : '') : p.recyclingMonths + ' mois') + '</span>';
-    if (p.price) html += '<span>\uD83D\uDCB0 \u00C0 partir de ' + formatPrice(p.price) + ' HT/apprenant</span>';
+    if (p.price) html += '<span>\u00C0 partir de ' + formatPrice(p.price) + ' HT/apprenant</span>';
     html += '</div>';
 
     // Description
@@ -365,12 +363,9 @@
       html += '<div class="sosafe-modal-section"><h3>Pr\u00E9requis</h3><p>' + p.prerequisites + '</p></div>';
     }
 
-    // Moyens p\u00E9dagogiques et techniques
-    if (p.teachingMethods || p.technicalMeans) {
-      html += '<div class="sosafe-modal-section"><h3>Moyens p\u00E9dagogiques</h3>';
-      if (p.teachingMethods) html += '<p>' + p.teachingMethods + '</p>';
-      if (p.technicalMeans) html += '<p style="margin-top:.5rem"><strong>Moyens techniques :</strong> ' + p.technicalMeans + '</p>';
-      html += '</div>';
+    // Moyens p\u00E9dagogiques
+    if (p.teachingMethods) {
+      html += '<div class="sosafe-modal-section"><h3>Moyens p\u00E9dagogiques</h3><p>' + p.teachingMethods + '</p></div>';
     }
 
     // Modalit\u00E9s d'\u00E9valuation
@@ -378,22 +373,10 @@
       html += '<div class="sosafe-modal-section"><h3>Modalit\u00E9s d\'\u00E9valuation</h3><p>' + p.evaluationMethods + '</p></div>';
     }
 
-    // Indicateurs de r\u00E9sultats
-    if (p.resultIndicators) {
-      html += '<div class="sosafe-modal-section"><h3>Indicateurs de r\u00E9sultats</h3><p>' + p.resultIndicators + '</p></div>';
-    }
-
     // Accessibilit\u00E9
-    html += '<div class="sosafe-modal-section"><h3>Accessibilit\u00E9</h3>';
     if (p.accessibilityInfo) {
-      html += '<p>' + p.accessibilityInfo + '</p>';
-    } else {
-      html += '<p>Cette formation est accessible aux personnes en situation de handicap. N\'h\u00E9sitez pas \u00E0 nous contacter pour adapter les conditions d\'accueil.</p>';
+      html += '<div class="sosafe-modal-section"><h3>Accessibilit\u00E9</h3><p>' + p.accessibilityInfo + '</p></div>';
     }
-    if (p.referentHandicap) {
-      html += '<p style="margin-top:.3rem"><strong>R\u00E9f\u00E9rent handicap :</strong> ' + p.referentHandicap + '</p>';
-    }
-    html += '</div>';
 
     // D\u00E9lais d'acc\u00E8s
     if (p.accessDelay) {
@@ -413,27 +396,22 @@
         }
         html += '</div>';
         if (s.location) {
-          html += '<div class="sosafe-modal-session-loc">\uD83D\uDCCD ' + s.location + '</div>';
+          html += '<div class="sosafe-modal-session-loc">' + s.location + '</div>';
         }
         html += '</div>';
-        html += '<div style="display:flex;align-items:center;gap:.5rem">';
         if (s.isFull) {
           html += '<span class="sosafe-modal-session-spots full">Complet</span>';
         } else {
+          html += '<div style="display:flex;align-items:center;gap:.5rem">';
           html += '<span class="sosafe-modal-session-spots available">' + s.remainingSpots + ' place' + (s.remainingSpots > 1 ? 's' : '') + '</span>';
           html += '<a class="sosafe-modal-cta" style="padding:.4rem 1rem;font-size:.8rem" href="' + enrollUrl + '?sessionId=' + s.id + '" target="_blank" rel="noopener">S\'inscrire</a>';
+          html += '</div>';
         }
-        html += '</div>';
         html += '</div>';
       });
       html += '</div>';
     } else {
       html += '<div class="sosafe-no-session-modal">Aucune session pr\u00E9vue pour le moment</div>';
-    }
-
-    // Contact / R\u00E9f\u00E9rent
-    if (p.referentContact) {
-      html += '<div class="sosafe-modal-section"><h3>Contact</h3><p>' + p.referentContact + '</p></div>';
     }
 
     // Footer: price + CTA
