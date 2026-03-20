@@ -65,6 +65,7 @@
       ".sosafe-search-input::placeholder{color:#9ca3af}" +
       ".sosafe-select{padding:.5rem .6rem;border:1px solid #ddd;border-radius:4px;font-size:.85rem;font-family:" + t.fontFamily + ";background:#fff;cursor:pointer;outline:none;min-width:150px}" +
       ".sosafe-select:focus{border-color:" + t.primaryColor + "}" +
+      ".sosafe-filter-label{font-size:.85rem;font-weight:600;color:#333;white-space:nowrap}" +
       ".sosafe-filter-btn{padding:.5rem 1.2rem;border:none;border-radius:9999px;cursor:pointer;font-size:.85rem;font-family:" + t.fontFamily + ";transition:all .2s;font-weight:500}" +
       ".sosafe-filter-reset{background:#fff;border:1px solid #ddd;color:#6b7280}" +
       ".sosafe-filter-reset:hover{border-color:#999;color:#333}" +
@@ -92,6 +93,8 @@
       ".sosafe-card-modality{position:absolute;top:10px;left:10px;background:#32373c;color:#fff;font-size:.7rem;font-weight:600;padding:.25rem .7rem;border-radius:9999px}" +
       ".sosafe-card-body{padding:1rem}" +
       ".sosafe-card-title{font-size:.95rem;font-weight:700;color:#000;margin-bottom:.4rem;line-height:1.3}" +
+      ".sosafe-card-title-link{color:#000;text-decoration:none;cursor:pointer;transition:color .2s}" +
+      ".sosafe-card-title-link:hover{color:#fec700}" +
       ".sosafe-card-duration{font-size:.85rem;color:#6b7280;margin-bottom:.5rem}" +
       ".sosafe-card-dates-title{font-size:.8rem;font-weight:700;color:#000;margin-bottom:.3rem}" +
       ".sosafe-card-dates{margin-bottom:.8rem}" +
@@ -204,7 +207,7 @@
     html += '<header class="sosafe-page-header">';
     html += '<img class="sosafe-banner-img" src="' + bannerImage + '" alt="SO\'SAFE Formations">';
     html += '<div class="sosafe-header-overlay">';
-    html += '<nav class="sosafe-breadcrumb"><a href="https://www.so-safe.fr/" target="_top">Accueil</a><span class="sosafe-breadcrumb-sep">&gt;</span> Formation</nav>';
+    html += '<nav class="sosafe-breadcrumb"><a href="https://www.so-safe.fr/" target="_top">Accueil</a><span class="sosafe-breadcrumb-sep">\u203A</span> Formation</nav>';
     html += '<h1 class="sosafe-page-title">Formation</h1>';
     html += '<p class="sosafe-page-results">' + programs.length + ' r\u00E9sultats</p>';
     html += '</div>';
@@ -229,20 +232,21 @@
 
     // Search + dropdown + reset
     html += '<div class="sosafe-search-bar">';
-    html += '<input type="text" class="sosafe-search-input" placeholder="Saisissez au moins 3 caract\u00E8res pour filtrer..." data-role="search">';
+    html += '<input type="text" class="sosafe-search-input" placeholder="Saisissez au moins trois caract\u00E8res pour lancer le filtrage.." data-role="search">';
+    html += '<label class="sosafe-filter-label">Cat\u00E9gorie</label>';
     html += '<select class="sosafe-select" data-role="cat-select">';
-    html += '<option value="all">Cat\u00E9gorie</option>';
+    html += '<option value="all">Indiff\u00E9rent</option>';
     categories.forEach(function (cat) {
-      html += '<option value="' + cat + '">' + cat + '</option>';
+      html += '<option value="' + cat + '">Formations ' + cat + '</option>';
     });
     html += '</select>';
+    html += '<label class="sosafe-filter-label">Sur-mesure</label>';
     html += '<select class="sosafe-select" data-role="surmesure-select">';
-    html += '<option value="all">Sur-mesure</option>';
+    html += '<option value="all">Indiff\u00E9rent</option>';
     html += '<option value="oui">Oui</option>';
     html += '<option value="non">Non</option>';
     html += '</select>';
     html += '<button class="sosafe-filter-btn sosafe-filter-reset" data-role="reset">R\u00E9initialiser</button>';
-    html += '<button class="sosafe-filter-btn sosafe-filter-submit" data-role="filter">Filtrer</button>';
     html += '</div>';
 
     // Toolbar
@@ -273,7 +277,7 @@
 
       // Body: title + duration + next date + button
       html += '<div class="sosafe-card-body">';
-      html += '<div class="sosafe-card-title">' + (p.title || "Formation") + '</div>';
+      html += '<div class="sosafe-card-title"><a class="sosafe-card-title-link" data-index="' + index + '">' + (p.title || "Formation") + '</a></div>';
       if (p.duration) {
         html += '<div class="sosafe-card-duration">' + formatDuration(p.duration) + '</div>';
       }
