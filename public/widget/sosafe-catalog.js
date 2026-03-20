@@ -66,11 +66,11 @@
       ".sosafe-select{padding:.5rem .6rem;border:1px solid #ddd;border-radius:4px;font-size:.85rem;font-family:" + t.fontFamily + ";background:#fff;cursor:pointer;outline:none;min-width:150px}" +
       ".sosafe-select:focus{border-color:" + t.primaryColor + "}" +
       ".sosafe-filter-label{font-size:.85rem;font-weight:600;color:#333;white-space:nowrap}" +
-      ".sosafe-filter-btn{padding:.5rem 1.2rem;border:none;border-radius:9999px;cursor:pointer;font-size:.85rem;font-family:" + t.fontFamily + ";transition:all .2s;font-weight:500}" +
-      ".sosafe-filter-reset{background:#fff;border:1px solid #ddd;color:#6b7280}" +
-      ".sosafe-filter-reset:hover{border-color:#999;color:#333}" +
-      ".sosafe-filter-submit{background:#32373c;color:#fff}" +
-      ".sosafe-filter-submit:hover{background:#23272b}" +
+      ".sosafe-filter-btn{padding:.5rem 1.2rem;border:none;border-radius:0;cursor:pointer;font-size:.85rem;font-family:" + t.fontFamily + ";transition:all .2s;font-weight:500}" +
+      ".sosafe-filter-reset{background:#fec700;border:1px solid #fec700;color:#000}" +
+      ".sosafe-filter-reset:hover{background:#e6b400;border-color:#e6b400}" +
+      ".sosafe-filter-submit{background:#fec700;color:#000}" +
+      ".sosafe-filter-submit:hover{background:#e6b400}" +
 
       // Toolbar
       ".sosafe-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}" +
@@ -85,26 +85,23 @@
       ".sosafe-grid.list-view{grid-template-columns:1fr}" +
 
       // Cards
-      ".sosafe-card{border:none;border-radius:0;background:#fff;overflow:hidden;transition:box-shadow .3s,transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.08);cursor:pointer}" +
-      ".sosafe-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12);transform:translateY(-2px)}" +
+      ".sosafe-card{border:none;border-radius:0;background:#fff;overflow:hidden;transition:box-shadow .3s;box-shadow:none;cursor:pointer}" +
+      ".sosafe-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}" +
       ".sosafe-card-img-wrap{position:relative;overflow:hidden}" +
-      ".sosafe-card-img{width:100%;height:220px;object-fit:cover;display:block;transition:transform .3s}" +
-      ".sosafe-card:hover .sosafe-card-img{transform:scale(1.03)}" +
+      ".sosafe-card-img{width:100%;height:220px;object-fit:cover;display:block}" +
       ".sosafe-card-modality{position:absolute;top:10px;left:10px;background:#32373c;color:#fff;font-size:.7rem;font-weight:600;padding:.25rem .7rem;border-radius:9999px}" +
       ".sosafe-card-body{padding:1rem}" +
       ".sosafe-card-title{font-size:.95rem;font-weight:700;margin-bottom:.4rem;line-height:1.3}" +
-      ".sosafe-card-title-link{color:#00509f;text-decoration:none;cursor:pointer;transition:color .2s}" +
-      ".sosafe-card-title-link:hover{color:#fec700}" +
+      ".sosafe-card-title-link{color:#000;text-decoration:none;cursor:pointer;transition:color .2s}" +
+      ".sosafe-card-title-link:hover{color:#000;text-decoration:underline}" +
       ".sosafe-card-duration{font-size:.85rem;color:#6b7280;margin-bottom:.5rem}" +
       ".sosafe-card-dates-title{font-size:.8rem;font-weight:700;color:#000;margin-bottom:.3rem}" +
       ".sosafe-card-dates{margin-bottom:.8rem}" +
       ".sosafe-card-date-row{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem}" +
-      ".sosafe-card-date-icon{width:16px;height:16px;flex-shrink:0;cursor:pointer;color:#32373c;transition:color .2s}" +
-      ".sosafe-card-date-icon:hover{color:#F7B136}" +
-      ".sosafe-card-date-text{font-size:.8rem;color:#32373c;font-weight:500}" +
-      ".sosafe-card-date-link{font-size:.75rem;color:#F7B136;font-weight:600;text-decoration:none;margin-left:auto;cursor:pointer}" +
-      ".sosafe-card-date-link:hover{text-decoration:underline}" +
-      ".sosafe-card-btn{display:block;text-align:center;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#fec700;color:#32373c;text-decoration:none;border-radius:9999px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + ";width:100%}" +
+      ".sosafe-card-date-bullet{width:6px;height:6px;border-radius:50%;background:#fec700;flex-shrink:0}" +
+      ".sosafe-card-date-text{font-size:.8rem;color:#333;font-weight:500}" +
+      ".sosafe-card-subtitle{font-size:.8rem;color:#6b7280;margin-bottom:.3rem;font-style:italic}" +
+      ".sosafe-card-btn{display:block;text-align:center;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#fec700;color:#000;text-decoration:none;border-radius:0;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + ";width:100%}" +
       ".sosafe-card-btn:hover{background:#e6b400}" +
 
       // List view
@@ -287,6 +284,9 @@
       // Body: title + duration + next date + button
       html += '<div class="sosafe-card-body">';
       html += '<div class="sosafe-card-title"><a class="sosafe-card-title-link" data-index="' + index + '">' + (p.title || "Formation") + '</a></div>';
+      if (p.subtitle) {
+        html += '<div class="sosafe-card-subtitle">' + p.subtitle + '</div>';
+      }
       if (p.duration) {
         html += '<div class="sosafe-card-duration">' + formatDuration(p.duration) + '</div>';
       }
@@ -297,11 +297,8 @@
         for (var si = 0; si < maxDates; si++) {
           var sess = p.sessions[si];
           html += '<div class="sosafe-card-date-row">';
-          html += '<svg class="sosafe-card-date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+          html += '<span class="sosafe-card-date-bullet"></span>';
           html += '<span class="sosafe-card-date-text">' + formatDate(sess.startDate) + '</span>';
-          if (!sess.isFull) {
-            html += '<a class="sosafe-card-date-link" href="' + enrollUrl + '?sessionId=' + sess.id + '" target="_blank" rel="noopener" data-enroll="true">S\'inscrire</a>';
-          }
           html += '</div>';
         }
         html += '</div>';
