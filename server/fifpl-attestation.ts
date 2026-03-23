@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, degrees, PDFPage, PDFFont } from "pdf-lib";
 
 // SO'SAFE fixed information
 const ORG = {
@@ -185,11 +185,8 @@ export async function generateFIFPLAttestation(data: FIFPLData = {}): Promise<Ui
 
   // Blue sidebar label
   drawBox(page, margin, y - partie1H + 18, 22, partie1H, { fill: COLORS.blue });
-  // Rotated text simulation - draw vertically
-  const sideText1 = "Partie 1 à compléter";
-  const sideText1b = "si la formation";
-  const sideText1c = "est en présentiel";
-  page.drawText(sideText1, { x: margin + 3, y: y - 5, font: fontBold, size: 5.5, color: COLORS.white, rotate: { type: "degrees" as any, angle: 90 } as any });
+  // Sidebar label text (vertical)
+  page.drawText("Partie 1 - Présentiel", { x: margin + 3, y: y - partie1H + 25, font: fontBold, size: 5.5, color: COLORS.white, rotate: degrees(90) });
 
   // Content
   const p1x = margin + 28;

@@ -782,6 +782,23 @@ export async function registerRoutes(
   });
 
   // ============================================================
+  // FIFPL ATTESTATION — Public routes (before auth middleware)
+  // ============================================================
+  app.get("/api/fifpl-attestation/blank", async (_req, res) => {
+    try {
+      const pdfBytes = await generateFIFPLAttestation({});
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="Attestation_FIFPL_vierge.pdf"`,
+        "Content-Length": pdfBytes.length.toString(),
+      });
+      res.send(Buffer.from(pdfBytes));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ============================================================
   // ROUTE PERMISSION MIDDLEWARE
   // Applied via app.use() to preserve Express type inference
   // ============================================================
@@ -2981,20 +2998,7 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
     }
   });
 
-  // GET /api/fifpl-attestation/blank — Empty template (no trainee data)
-  app.get("/api/fifpl-attestation/blank", async (_req, res) => {
-    try {
-      const pdfBytes = await generateFIFPLAttestation({});
-      res.set({
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="Attestation_FIFPL_vierge.pdf"`,
-        "Content-Length": pdfBytes.length.toString(),
-      });
-      res.send(Buffer.from(pdfBytes));
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+  // (blank FIFPL route is registered before auth middleware above)
 
   // ============================================================
   // GENERATE BPF (Bilan Pédagogique et Financier)
