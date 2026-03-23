@@ -10,6 +10,7 @@ import { storage } from "./storage";
 import { wrapWithBranding, applyBranding } from "./document-utils";
 import { setupAuth, hashPassword, comparePasswords, requireAuth, requireRole, requirePermission } from "./auth";
 import { triggerAutomation, triggerSessionAutomation, executeRuleManually } from "./automation-engine";
+import { generateFIFPLAttestation } from "./fifpl-attestation";
 import {
   insertTrainerSchema, insertTraineeSchema, insertProgramSchema,
   insertSessionSchema, insertEnrollmentSchema, insertEnterpriseSchema,
@@ -2926,6 +2927,73 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
       "Content-Length": pdfBytes.length.toString(),
     });
     res.send(Buffer.from(pdfBytes));
+  });
+
+  // ============================================================
+  // FIFPL ATTESTATION — Generate from enrollment data
+  // GET /api/enrollments/:id/fifpl-attestation
+  // ============================================================
+  app.get("/api/enrollments/:id/fifpl-attestation", async (req, res) => {
+    try {
+      const enrollment = await storage.getEnrollment(req.params.id);
+      if (!enrollment) return res.status(404).json({ message: "Inscription non trouvée" });
+
+      const trainee = enrollment.traineeId ? await storage.getTrainee(enrollment.traineeId) : null;
+      const session = enrollment.sessionId ? await storage.getSession(enrollment.sessionId) : null;
+      let program: any = null;
+      if (session) program = await storage.getProgram(session.programId);
+
+      const formatDateFR = (d: string | Date | null) => {
+        if (!d) return "";
+        const date = new Date(d);
+        return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      };
+
+      const duration = program?.duration || 0;
+      const nbJours = duration >= 7 ? Math.round(duration / 7) : 0;
+      const nbDemiJournees = duration >= 3 && duration < 7 ? 1 : 0;
+
+      const pdfBytes = await generateFIFPLAttestation({
+        traineeFirstName: trainee?.firstName || "",
+        traineeLastName: trainee?.lastName || "",
+        formationTitle: program?.title || session?.title || "",
+        startDate: session?.startDate ? formatDateFR(session.startDate) : "",
+        endDate: session?.endDate ? formatDateFR(session.endDate) : "",
+        nbJoursEntiers: nbJours,
+        nbDemiJournees: nbDemiJournees,
+        nbHeuresTotal: duration,
+        montantHT: program?.price || undefined,
+        montantTTC: program?.price || undefined,
+        faitA: session?.location || "Puget-Ville",
+        dateFait: formatDateFR(new Date()),
+      });
+
+      const safeName = `Attestation_FIFPL_${trainee ? `${trainee.lastName}_${trainee.firstName}` : "stagiaire"}`;
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${safeName}.pdf"`,
+        "Content-Length": pdfBytes.length.toString(),
+      });
+      res.send(Buffer.from(pdfBytes));
+    } catch (err: any) {
+      console.error("[FIFPL Attestation]", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/fifpl-attestation/blank — Empty template (no trainee data)
+  app.get("/api/fifpl-attestation/blank", async (_req, res) => {
+    try {
+      const pdfBytes = await generateFIFPLAttestation({});
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="Attestation_FIFPL_vierge.pdf"`,
+        "Content-Length": pdfBytes.length.toString(),
+      });
+      res.send(Buffer.from(pdfBytes));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // ============================================================
