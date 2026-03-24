@@ -4198,18 +4198,7 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
     res.status(201).json(question);
   });
 
-  app.patch("/api/quiz-questions/:id", async (req, res) => {
-    const parsed = insertQuizQuestionSchema.partial().safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const question = await storage.updateQuizQuestion(req.params.id, parsed.data);
-    if (!question) return res.status(404).json({ message: "Question non trouvée" });
-    res.json(question);
-  });
-
-  app.delete("/api/quiz-questions/:id", async (req, res) => {
-    await storage.deleteQuizQuestion(req.params.id);
-    res.status(204).send();
-  });
+  // quiz-questions PATCH/DELETE handled in Kahoot section below (with requireAuth)
 
   // ============================================================
   // AI BLOCK EDITING
