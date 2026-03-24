@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +61,7 @@ import { SearchInput } from "@/components/shared/SearchInput";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import type { Enterprise, InsertEnterprise, Enrollment, Session } from "@shared/schema";
-import { ENTERPRISE_FORMATS_JURIDIQUES, ENTERPRISE_CONTACT_ROLES } from "@shared/schema";
+import { ENTERPRISE_FORMATS_JURIDIQUES } from "@shared/schema";
 
 type EnterpriseContact = {
   id: string;
@@ -315,26 +315,56 @@ function EnterpriseForm({
 // Contact Form
 // ============================================================
 
+const DEFAULT_ROLE_SUGGESTIONS = [
+  "Contact général",
+  "Finance / Comptabilité",
+  "Ressources Humaines",
+  "Responsable de service",
+  "Direction",
+  "Responsable formation",
+  "Référent Qualiopi",
+  "Contact facturation",
+  "Contact logistique",
+  "Médecin du travail",
+  "Référent handicap",
+  "Assistante de direction",
+  "Secrétariat",
+];
+
 function ContactForm({
   contact,
   onSubmit,
   isPending,
+  existingRoles,
 }: {
   contact?: EnterpriseContact;
   onSubmit: (data: { firstName: string; lastName: string; email: string | null; phone: string | null; role: string; department: string | null; notes: string | null; isPrimary: boolean }) => void;
   isPending: boolean;
+  existingRoles?: string[];
 }) {
   const [firstName, setFirstName] = useState(contact?.firstName || "");
   const [lastName, setLastName] = useState(contact?.lastName || "");
   const [email, setEmail] = useState(contact?.email || "");
   const [phone, setPhone] = useState(contact?.phone || "");
-  const [role, setRole] = useState(contact?.role || "general");
+  const [role, setRole] = useState(contact?.role || "");
   const [department, setDepartment] = useState(contact?.department || "");
   const [notes, setNotes] = useState(contact?.notes || "");
   const [isPrimary, setIsPrimary] = useState(contact?.isPrimary || false);
+  const [showRoleSuggestions, setShowRoleSuggestions] = useState(false);
+
+  // Merge default suggestions with existing roles from the database
+  const allSuggestions = useMemo(() => {
+    const set = new Set([...DEFAULT_ROLE_SUGGESTIONS, ...(existingRoles || [])]);
+    return Array.from(set).filter(Boolean).sort();
+  }, [existingRoles]);
+
+  const filteredSuggestions = useMemo(() => {
+    if (!role.trim()) return allSuggestions;
+    return allSuggestions.filter((s) => s.toLowerCase().includes(role.toLowerCase()));
+  }, [role, allSuggestions]);
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ firstName, lastName, email: email || null, phone: phone || null, role, department: department || null, notes: notes || null, isPrimary }); }} className="space-y-4">
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ firstName, lastName, email: email || null, phone: phone || null, role: role || "Contact général", department: department || null, notes: notes || null, isPrimary }); }} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Prénom</Label>
@@ -356,16 +386,29 @@ function ContactForm({
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Rôle</Label>
-          <Select value={role} onValueChange={setRole}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {ENTERPRISE_CONTACT_ROLES.map((r) => (
-                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+        <div className="space-y-2 relative">
+          <Label>Fonction / Rôle</Label>
+          <Input
+            value={role}
+            onChange={(e) => { setRole(e.target.value); setShowRoleSuggestions(true); }}
+            onFocus={() => setShowRoleSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowRoleSuggestions(false), 200)}
+            placeholder="Tapez ou choisissez..."
+          />
+          {showRoleSuggestions && filteredSuggestions.length > 0 && (
+            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+              {filteredSuggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                  onMouseDown={(e) => { e.preventDefault(); setRole(s); setShowRoleSuggestions(false); }}
+                >
+                  {s}
+                </button>
               ))}
-            </SelectContent>
-          </Select>
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           <Label>Service / Département</Label>
@@ -439,8 +482,11 @@ function EnterpriseDetail({ enterprise, onBack }: { enterprise: Enterprise; onBa
     },
   });
 
-  const roleLabels: Record<string, string> = {};
-  ENTERPRISE_CONTACT_ROLES.forEach((r) => { roleLabels[r.value] = r.label; });
+  // Collect all existing roles from contacts for suggestions
+  const existingRoles = useMemo(() => {
+    if (!contacts) return [];
+    return Array.from(new Set(contacts.map((c) => c.role).filter(Boolean)));
+  }, [contacts]);
 
   const formatLabels: Record<string, string> = {};
   ENTERPRISE_FORMATS_JURIDIQUES.forEach((f) => { formatLabels[f.value] = f.label; });
@@ -545,7 +591,7 @@ function EnterpriseDetail({ enterprise, onBack }: { enterprise: Enterprise; onBa
                         <TableCell className="text-sm">{c.email ? <a href={`mailto:${c.email}`} className="text-primary hover:underline">{c.email}</a> : <span className="text-muted-foreground">—</span>}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{c.phone || "—"}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{c.department || "—"}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-xs">{roleLabels[c.role] || c.role}</Badge></TableCell>
+                        <TableCell><Badge variant="outline" className="text-xs">{c.role}</Badge></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button variant="ghost" size="icon" onClick={() => { setEditContact(c); setContactDialogOpen(true); }}>
@@ -571,6 +617,7 @@ function EnterpriseDetail({ enterprise, onBack }: { enterprise: Enterprise; onBa
               </DialogHeader>
               <ContactForm
                 contact={editContact}
+                existingRoles={existingRoles}
                 onSubmit={(data) =>
                   editContact
                     ? updateContactMutation.mutate({ id: editContact.id, data })
