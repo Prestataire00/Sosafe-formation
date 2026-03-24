@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -214,6 +215,7 @@ function EnrollmentForm({
 }
 
 export default function Enrollments() {
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -465,7 +467,17 @@ export default function Enrollments() {
                       <TableCell>
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-medium">{trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}</p>
+                            {trainee ? (
+                              <button
+                                type="button"
+                                className="text-sm font-medium text-primary hover:underline cursor-pointer text-left"
+                                onClick={() => navigate(`/trainees?id=${trainee.id}`)}
+                              >
+                                {trainee.firstName} {trainee.lastName}
+                              </button>
+                            ) : (
+                              <p className="text-sm font-medium">Inconnu</p>
+                            )}
                             {enrollment.customData && Object.keys(enrollment.customData).length > 0 && (
                               <Tooltip>
                                 <TooltipTrigger asChild>

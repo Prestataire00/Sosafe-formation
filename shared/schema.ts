@@ -116,7 +116,27 @@ export const trainees = pgTable("trainees", {
   managerName: text("manager_name"),
   diplomaNumber: text("diploma_number"),
   socialSecurityNumber: text("social_security_number"),
+  fundingMode: text("funding_mode"), // entreprise, particulier, opco, fifpl, pole_emploi, autre
 });
+
+export const FUNDING_MODES = [
+  { value: "entreprise", label: "Entreprise / Employeur" },
+  { value: "opco", label: "OPCO" },
+  { value: "fifpl", label: "FIF-PL" },
+  { value: "pole_emploi", label: "France Travail (Pôle Emploi)" },
+  { value: "particulier", label: "Financement personnel" },
+  { value: "cpf", label: "CPF" },
+  { value: "autre", label: "Autre" },
+] as const;
+
+export const PROFILE_TYPES = [
+  { value: "salarie", label: "Salarié(e)" },
+  { value: "profession_liberale", label: "Profession libérale" },
+  { value: "independant", label: "Indépendant(e) / Auto-entrepreneur" },
+  { value: "particulier", label: "Particulier" },
+  { value: "demandeur_emploi", label: "Demandeur d'emploi" },
+  { value: "autre", label: "Autre" },
+] as const;
 
 export const programs = pgTable("programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

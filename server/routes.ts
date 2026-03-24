@@ -171,6 +171,15 @@ export async function registerRoutes(
           company: trainee.company,
           rppsNumber: trainee.rppsNumber,
           profession: trainee.profession,
+          profileType: trainee.profileType,
+          fundingMode: trainee.fundingMode,
+          address: trainee.address,
+          city: trainee.city,
+          postalCode: trainee.postalCode,
+          diplomaNumber: trainee.diplomaNumber,
+          dateOfBirth: trainee.dateOfBirth,
+          managerName: trainee.managerName,
+          managerEmail: trainee.managerEmail,
         },
       });
     } else {
@@ -319,7 +328,8 @@ export async function registerRoutes(
   // POST /api/public/enrollments — public enrollment
   app.post("/api/public/enrollments", async (req, res) => {
     try {
-      const { sessionId, firstName, lastName, email, phone, company, documents, rppsNumber, profession, customData } = req.body;
+      const { sessionId, firstName, lastName, email, phone, company, documents, rppsNumber, profession, customData,
+        profileType, fundingMode, address, city, postalCode, diplomaNumber, dateOfBirth, managerName, managerEmail } = req.body;
 
       // Validate required fields
       if (!sessionId || !firstName || !lastName || !email) {
@@ -352,12 +362,21 @@ export async function registerRoutes(
       // Find or create trainee
       let trainee = await storage.getTraineeByEmail(email);
       if (trainee) {
-        // Update phone/company/rpps/profession if provided
+        // Update fields if provided and not already set
         const updates: Record<string, string> = {};
         if (phone && !trainee.phone) updates.phone = phone;
         if (company && !trainee.company) updates.company = company;
         if (rppsNumber) updates.rppsNumber = rppsNumber;
         if (profession && !trainee.profession) updates.profession = profession;
+        if (profileType && !trainee.profileType) updates.profileType = profileType;
+        if (fundingMode && !trainee.fundingMode) updates.fundingMode = fundingMode;
+        if (address && !trainee.address) updates.address = address;
+        if (city && !trainee.city) updates.city = city;
+        if (postalCode && !trainee.postalCode) updates.postalCode = postalCode;
+        if (diplomaNumber && !trainee.diplomaNumber) updates.diplomaNumber = diplomaNumber;
+        if (dateOfBirth && !trainee.dateOfBirth) updates.dateOfBirth = dateOfBirth;
+        if (managerName && !trainee.managerName) updates.managerName = managerName;
+        if (managerEmail && !trainee.managerEmail) updates.managerEmail = managerEmail;
         if (Object.keys(updates).length > 0) {
           await storage.updateTrainee(trainee.id, updates);
         }
@@ -370,6 +389,15 @@ export async function registerRoutes(
           company: company || null,
           rppsNumber: rppsNumber || null,
           profession: profession || null,
+          profileType: profileType || "salarie",
+          fundingMode: fundingMode || null,
+          address: address || null,
+          city: city || null,
+          postalCode: postalCode || null,
+          diplomaNumber: diplomaNumber || null,
+          dateOfBirth: dateOfBirth || null,
+          managerName: managerName || null,
+          managerEmail: managerEmail || null,
           status: "active",
         });
       }

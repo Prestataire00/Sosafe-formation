@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TRAINEE_PROFESSIONS } from "@shared/schema";
+import { TRAINEE_PROFESSIONS, FUNDING_MODES, PROFILE_TYPES } from "@shared/schema";
 import type { ProgramCustomField } from "@shared/schema";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
@@ -101,6 +101,15 @@ export default function PublicEnrollment() {
     phone: "",
     company: "",
     profession: "",
+    profileType: "",
+    fundingMode: "",
+    address: "",
+    city: "",
+    postalCode: "",
+    diplomaNumber: "",
+    dateOfBirth: "",
+    managerName: "",
+    managerEmail: "",
   });
   const [knownTrainee, setKnownTrainee] = useState<string | null>(null);
   const [confirmationData, setConfirmationData] = useState<any>(null);
@@ -158,6 +167,15 @@ export default function PublicEnrollment() {
           phone: data.trainee.phone || prev.phone,
           company: data.trainee.company || prev.company,
           profession: data.trainee.profession || prev.profession,
+          profileType: data.trainee.profileType || prev.profileType,
+          fundingMode: data.trainee.fundingMode || prev.fundingMode,
+          address: data.trainee.address || prev.address,
+          city: data.trainee.city || prev.city,
+          postalCode: data.trainee.postalCode || prev.postalCode,
+          diplomaNumber: data.trainee.diplomaNumber || prev.diplomaNumber,
+          dateOfBirth: data.trainee.dateOfBirth || prev.dateOfBirth,
+          managerName: data.trainee.managerName || prev.managerName,
+          managerEmail: data.trainee.managerEmail || prev.managerEmail,
         }));
         setKnownTrainee(data.trainee.firstName);
         if (data.trainee.rppsNumber) {
@@ -348,6 +366,15 @@ export default function PublicEnrollment() {
       company: formData.company.trim() || undefined,
       rppsNumber: rppsNumber.trim() || undefined,
       profession: formData.profession || undefined,
+      profileType: formData.profileType || undefined,
+      fundingMode: formData.fundingMode || undefined,
+      address: formData.address.trim() || undefined,
+      city: formData.city.trim() || undefined,
+      postalCode: formData.postalCode.trim() || undefined,
+      diplomaNumber: formData.diplomaNumber.trim() || undefined,
+      dateOfBirth: formData.dateOfBirth || undefined,
+      managerName: formData.managerName.trim() || undefined,
+      managerEmail: formData.managerEmail.trim() || undefined,
       documents: allDocs.length > 0 ? allDocs : undefined,
       customData: Object.keys(customFieldValues).length > 0 ? customFieldValues : undefined,
     });
@@ -360,7 +387,7 @@ export default function PublicEnrollment() {
     }
     setStep("sessions");
     setSelectedSession(null);
-    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "", profession: "" });
+    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "", profession: "", profileType: "", fundingMode: "", address: "", city: "", postalCode: "", diplomaNumber: "", dateOfBirth: "", managerName: "", managerEmail: "" });
     setKnownTrainee(null);
     setUploadedDocs([]);
     setVerificationMode(null);
@@ -383,7 +410,7 @@ export default function PublicEnrollment() {
   const handleNewEnrollment = () => {
     setStep("sessions");
     setSelectedSession(null);
-    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "", profession: "" });
+    setFormData({ email: "", firstName: "", lastName: "", phone: "", company: "", profession: "", profileType: "", fundingMode: "", address: "", city: "", postalCode: "", diplomaNumber: "", dateOfBirth: "", managerName: "", managerEmail: "" });
     setKnownTrainee(null);
     setConfirmationData(null);
     setUploadedDocs([]);
@@ -976,6 +1003,110 @@ export default function PublicEnrollment() {
                         />
                       </div>
                     </div>
+
+                    {/* Profil & Financement */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Votre situation *</Label>
+                        <Select value={formData.profileType} onValueChange={(v) => setFormData({ ...formData, profileType: v })}>
+                          <SelectTrigger><SelectValue placeholder="Sélectionnez..." /></SelectTrigger>
+                          <SelectContent>
+                            {PROFILE_TYPES.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Mode de financement *</Label>
+                        <Select value={formData.fundingMode} onValueChange={(v) => setFormData({ ...formData, fundingMode: v })}>
+                          <SelectTrigger><SelectValue placeholder="Sélectionnez..." /></SelectTrigger>
+                          <SelectContent>
+                            {FUNDING_MODES.map((f) => (
+                              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Date de naissance */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="dateOfBirth">Date de naissance</Label>
+                        <Input
+                          id="dateOfBirth"
+                          type="date"
+                          value={formData.dateOfBirth}
+                          onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="diplomaNumber">N° de diplôme</Label>
+                        <Input
+                          id="diplomaNumber"
+                          placeholder="Numéro de diplôme"
+                          value={formData.diplomaNumber}
+                          onChange={(e) => setFormData({ ...formData, diplomaNumber: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Adresse */}
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Adresse</Label>
+                      <Input
+                        id="address"
+                        placeholder="Numéro et rue"
+                        value={formData.address}
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="postalCode">Code postal</Label>
+                        <Input
+                          id="postalCode"
+                          placeholder="75000"
+                          value={formData.postalCode}
+                          onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city">Ville</Label>
+                        <Input
+                          id="city"
+                          placeholder="Paris"
+                          value={formData.city}
+                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Responsable / Manager (si salarié) */}
+                    {(formData.profileType === "salarie" || formData.fundingMode === "entreprise") && (
+                      <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t">
+                        <div className="space-y-2">
+                          <Label htmlFor="managerName">Nom du responsable</Label>
+                          <Input
+                            id="managerName"
+                            placeholder="Nom du responsable hiérarchique"
+                            value={formData.managerName}
+                            onChange={(e) => setFormData({ ...formData, managerName: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="managerEmail">Email du responsable</Label>
+                          <Input
+                            id="managerEmail"
+                            type="email"
+                            placeholder="responsable@entreprise.com"
+                            value={formData.managerEmail}
+                            onChange={(e) => setFormData({ ...formData, managerEmail: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Profession - shown when session has profession prerequisites */}
                     {selectedSession?.prerequisites?.some(p => p.requiredProfessions && (p.requiredProfessions as string[]).length > 0) && (

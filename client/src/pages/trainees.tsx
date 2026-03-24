@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, uploadFile } from "@/lib/queryClient";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
@@ -780,6 +780,22 @@ export default function Trainees() {
   const { data: trainees, isLoading } = useQuery<Trainee[]>({
     queryKey: ["/api/trainees"],
   });
+
+  // Auto-open trainee dialog from URL param (e.g., /trainees?id=xxx)
+  useEffect(() => {
+    if (!trainees) return;
+    const params = new URLSearchParams(window.location.search);
+    const traineeId = params.get("id");
+    if (traineeId) {
+      const found = trainees.find((t) => t.id === traineeId);
+      if (found) {
+        setEditTrainee(found);
+        setDialogOpen(true);
+      }
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [trainees]);
 
   const { data: enterprises } = useQuery<Enterprise[]>({
     queryKey: ["/api/enterprises"],
