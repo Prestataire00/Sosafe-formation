@@ -1662,26 +1662,29 @@ export async function registerRoutes(
           const startDate = new Date(session.startDate).toLocaleDateString("fr-FR");
           const endDate = new Date(session.endDate).toLocaleDateString("fr-FR");
 
+          const { sendEmailNow, wrapEmailHtml } = await import("./email-service");
           const emailLog = await storage.createEmailLog({
             recipient: trainer.email,
             subject: `Nouvelle session attribuée : ${session.title}`,
-            body: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-              <h2 style="color:#1e40af;">Nouvelle session de formation</h2>
-              <p>Bonjour ${trainer.firstName},</p>
-              <p>Une nouvelle session de formation vous a été attribuée :</p>
-              <table style="width:100%;border-collapse:collapse;margin:15px 0;">
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Formation</td><td style="padding:8px;border:1px solid #e2e8f0;">${program?.title || session.title}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Session</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.title}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Dates</td><td style="padding:8px;border:1px solid #e2e8f0;">Du ${startDate} au ${endDate}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Lieu</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.location || "À définir"}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Modalité</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.modality || "-"}</td></tr>
-              </table>
-              <p>Connectez-vous à votre espace formateur pour préparer cette session et créer les contenus e-learning associés.</p>
-              <p style="color:#666;font-size:12px;margin-top:30px;">${orgName}</p>
-            </div>`,
+            body: wrapEmailHtml({
+              title: "Nouvelle session de formation",
+              preheader: `Session attribuée : ${session.title}`,
+              body: `
+                <p>Bonjour <strong>${trainer.firstName}</strong>,</p>
+                <p>Une nouvelle session de formation vous a été attribuée :</p>
+                <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                  <tr><td style="padding:8px 12px;color:#6b7280;width:120px;">Formation</td><td style="padding:8px 12px;font-weight:600;">${program?.title || session.title}</td></tr>
+                  <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;">Session</td><td style="padding:8px 12px;font-weight:600;">${session.title}</td></tr>
+                  <tr><td style="padding:8px 12px;color:#6b7280;">Dates</td><td style="padding:8px 12px;font-weight:600;">Du ${startDate} au ${endDate}</td></tr>
+                  <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;">Lieu</td><td style="padding:8px 12px;font-weight:600;">${session.location || "À définir"}</td></tr>
+                  <tr><td style="padding:8px 12px;color:#6b7280;">Modalité</td><td style="padding:8px 12px;font-weight:600;">${session.modality || "-"}</td></tr>
+                </table>
+                <p>Connectez-vous à votre espace formateur pour préparer cette session.</p>`,
+              ctaLabel: "Accéder à mon espace",
+              ctaUrl: `${process.env.APP_URL || ""}/trainer-portal`,
+            }),
             status: "pending",
           });
-          const { sendEmailNow } = await import("./email-service");
           await sendEmailNow(emailLog.id);
           console.log(`[trainer-notify] Sent session assignment email to ${trainer.email} for session ${session.id}`);
         } catch (err) {
@@ -1719,26 +1722,29 @@ export async function registerRoutes(
           const startDate = new Date(session.startDate).toLocaleDateString("fr-FR");
           const endDate = new Date(session.endDate).toLocaleDateString("fr-FR");
 
+          const { sendEmailNow: sendNow2, wrapEmailHtml: wrapHtml2 } = await import("./email-service");
           const emailLog = await storage.createEmailLog({
             recipient: trainer.email,
             subject: `Session attribuée : ${session.title}`,
-            body: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-              <h2 style="color:#1e40af;">Session de formation attribuée</h2>
-              <p>Bonjour ${trainer.firstName},</p>
-              <p>Une session de formation vous a été attribuée :</p>
-              <table style="width:100%;border-collapse:collapse;margin:15px 0;">
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Formation</td><td style="padding:8px;border:1px solid #e2e8f0;">${program?.title || session.title}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Session</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.title}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Dates</td><td style="padding:8px;border:1px solid #e2e8f0;">Du ${startDate} au ${endDate}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Lieu</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.location || "À définir"}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Modalité</td><td style="padding:8px;border:1px solid #e2e8f0;">${session.modality || "-"}</td></tr>
-              </table>
-              <p>Connectez-vous à votre espace formateur pour préparer cette session et créer les contenus e-learning associés.</p>
-              <p style="color:#666;font-size:12px;margin-top:30px;">${orgName}</p>
-            </div>`,
+            body: wrapHtml2({
+              title: "Session de formation attribuée",
+              preheader: `Session attribuée : ${session.title}`,
+              body: `
+                <p>Bonjour <strong>${trainer.firstName}</strong>,</p>
+                <p>Une session de formation vous a été attribuée :</p>
+                <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                  <tr><td style="padding:8px 12px;color:#6b7280;width:120px;">Formation</td><td style="padding:8px 12px;font-weight:600;">${program?.title || session.title}</td></tr>
+                  <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;">Session</td><td style="padding:8px 12px;font-weight:600;">${session.title}</td></tr>
+                  <tr><td style="padding:8px 12px;color:#6b7280;">Dates</td><td style="padding:8px 12px;font-weight:600;">Du ${startDate} au ${endDate}</td></tr>
+                  <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;">Lieu</td><td style="padding:8px 12px;font-weight:600;">${session.location || "À définir"}</td></tr>
+                  <tr><td style="padding:8px 12px;color:#6b7280;">Modalité</td><td style="padding:8px 12px;font-weight:600;">${session.modality || "-"}</td></tr>
+                </table>
+                <p>Connectez-vous à votre espace formateur pour préparer cette session.</p>`,
+              ctaLabel: "Accéder à mon espace",
+              ctaUrl: `${process.env.APP_URL || ""}/trainer-portal`,
+            }),
             status: "pending",
           });
-          const { sendEmailNow } = await import("./email-service");
           await sendEmailNow(emailLog.id);
           console.log(`[trainer-notify] Sent session assignment email to ${trainer.email} for session ${session.id}`);
         } catch (err) {
@@ -1855,20 +1861,22 @@ export async function registerRoutes(
             for (const entId of enterpriseIds) {
               const enterprise = await storage.getEnterprise(entId as string);
               if (!enterprise?.email) continue;
+              const { sendEmailNow: sendNow3, wrapEmailHtml: wrapHtml3 } = await import("./email-service");
               const emailLog = await storage.createEmailLog({
                 recipient: enterprise.email,
-                subject: `Rapport d'emargement — ${session.title}`,
-                body: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                  <h2>Rapport d'emargement</h2>
-                  <p>Bonjour,</p>
-                  <p>La formation <strong>${session.title}</strong> est terminee. Veuillez trouver ci-dessous le rapport d'emargement.</p>
-                  ${html}
-                  <p style="color:#666;font-size:12px;margin-top:30px;">Ce rapport est disponible dans votre espace entreprise.</p>
-                </div>`,
+                subject: `Rapport d'émargement — ${session.title}`,
+                body: wrapHtml3({
+                  title: "Rapport d'émargement",
+                  preheader: `Rapport d'émargement — ${session.title}`,
+                  body: `
+                    <p>Bonjour,</p>
+                    <p>La formation <strong>${session.title}</strong> est terminée. Veuillez trouver ci-dessous le rapport d'émargement de vos collaborateurs.</p>
+                    ${html}`,
+                  footerText: "Ce rapport est également disponible dans votre espace entreprise.",
+                }),
                 status: "pending",
               });
               try {
-                const { sendEmailNow } = await import("./email-service");
                 await sendEmailNow(emailLog.id);
               } catch {}
             }
@@ -6758,23 +6766,25 @@ Le contenu doit être en français, clair et bien structuré.`;
           const enterprise = await storage.getEnterprise(entId as string);
           if (!enterprise?.email) continue;
 
+          const { sendEmailNow: sendNow4, wrapEmailHtml: wrapHtml4 } = await import("./email-service");
           const emailLog = await storage.createEmailLog({
             recipient: enterprise.email,
-            subject: `Rapport d'emargement — ${session.title}`,
-            body: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-              <h2>Rapport d'emargement</h2>
-              <p>Bonjour,</p>
-              <p>Veuillez trouver ci-dessous le rapport d'emargement pour la formation <strong>${session.title}</strong>
-              (${new Date(session.startDate).toLocaleDateString("fr-FR")} — ${new Date(session.endDate).toLocaleDateString("fr-FR")}).</p>
-              ${html}
-              <p style="color:#666;font-size:12px;margin-top:30px;">Ce rapport est egalement disponible dans votre espace entreprise sur la plateforme.</p>
-            </div>`,
+            subject: `Rapport d'émargement — ${session.title}`,
+            body: wrapHtml4({
+              title: "Rapport d'émargement",
+              preheader: `Rapport — ${session.title}`,
+              body: `
+                <p>Bonjour,</p>
+                <p>Veuillez trouver ci-dessous le rapport d'émargement pour la formation <strong>${session.title}</strong>
+                (${new Date(session.startDate).toLocaleDateString("fr-FR")} — ${new Date(session.endDate).toLocaleDateString("fr-FR")}).</p>
+                ${html}`,
+              footerText: "Ce rapport est également disponible dans votre espace entreprise sur la plateforme.",
+            }),
             status: "pending",
           });
 
           try {
-            const { sendEmailNow } = await import("./email-service");
-            await sendEmailNow(emailLog.id);
+            await sendNow4(emailLog.id);
           } catch {}
         }
       }
@@ -6842,19 +6852,23 @@ Le contenu doit être en français, clair et bien structuré.`;
           : sheet.period === "apres-midi" ? "Apres-midi" : "Journee entiere";
         const dateStr = new Date(sheet.date).toLocaleDateString("fr-FR");
 
-        const subject = `Emargement - ${session?.title || "Formation"} - ${dateStr} ${periodLabel}`;
-        const body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-          <h2 style="color:#1a1a1a;">Emargement de presence</h2>
-          <p>Bonjour ${trainee.firstName},</p>
-          <p>Merci de confirmer votre presence pour :</p>
-          <ul>
-            <li><strong>Formation :</strong> ${session?.title || ""}</li>
-            <li><strong>Date :</strong> ${dateStr}</li>
-            <li><strong>Periode :</strong> ${periodLabel}</li>
-          </ul>
-          <p><a href="${signUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Signer mon emargement</a></p>
-          <p style="color:#666;font-size:12px;margin-top:20px;">Ce lien est personnel et unique. Ne le partagez pas.</p>
-        </div>`;
+        const { wrapEmailHtml: wrapEmarg } = await import("./email-service");
+        const subject = `Émargement — ${session?.title || "Formation"} — ${dateStr}`;
+        const body = wrapEmarg({
+          title: "Émargement de présence",
+          preheader: `Confirmez votre présence — ${session?.title || "Formation"}`,
+          body: `
+            <p>Bonjour <strong>${trainee.firstName}</strong>,</p>
+            <p>Merci de confirmer votre présence pour la formation ci-dessous :</p>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+              <tr><td style="padding:8px 12px;color:#6b7280;width:120px;">Formation</td><td style="padding:8px 12px;font-weight:600;">${session?.title || ""}</td></tr>
+              <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;">Date</td><td style="padding:8px 12px;font-weight:600;">${dateStr}</td></tr>
+              <tr><td style="padding:8px 12px;color:#6b7280;">Période</td><td style="padding:8px 12px;font-weight:600;">${periodLabel}</td></tr>
+            </table>`,
+          ctaLabel: "Signer mon émargement",
+          ctaUrl: signUrl,
+          footerText: "Ce lien est personnel et unique. Ne le partagez pas.",
+        });
 
         const emailLog = await storage.createEmailLog({
           recipient: trainee.email,

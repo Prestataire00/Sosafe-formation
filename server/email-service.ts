@@ -182,6 +182,84 @@ export async function sendEmailNow(logId: string): Promise<void> {
 }
 
 /**
+ * Wrap email content in a professional Digiforma-style HTML layout.
+ * Provides consistent branding across all outgoing emails.
+ */
+export function wrapEmailHtml({
+  title,
+  preheader,
+  body,
+  ctaLabel,
+  ctaUrl,
+  footerText,
+}: {
+  title?: string;
+  preheader?: string;
+  body: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  footerText?: string;
+}): string {
+  const brandColor = "#1e3a5f";
+  const accentColor = "#2563eb";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title || "SO'SAFE Formation"}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+${preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${preheader}</div>` : ""}
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:24px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+<!-- Header -->
+<tr>
+<td style="background-color:${brandColor};padding:24px 32px;text-align:center;">
+<h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:600;letter-spacing:0.5px;">SO'SAFE Formation</h1>
+</td>
+</tr>
+<!-- Body -->
+<tr>
+<td style="padding:32px 32px 16px 32px;">
+${title ? `<h2 style="margin:0 0 20px 0;color:${brandColor};font-size:18px;font-weight:600;">${title}</h2>` : ""}
+<div style="color:#374151;font-size:14px;line-height:1.7;">
+${body}
+</div>
+</td>
+</tr>
+${ctaLabel && ctaUrl ? `
+<!-- CTA Button -->
+<tr>
+<td style="padding:8px 32px 24px 32px;text-align:center;">
+<a href="${ctaUrl}" style="display:inline-block;background-color:${accentColor};color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:0.3px;">${ctaLabel}</a>
+</td>
+</tr>` : ""}
+<!-- Divider -->
+<tr>
+<td style="padding:0 32px;">
+<hr style="border:none;border-top:1px solid #e5e7eb;margin:0;">
+</td>
+</tr>
+<!-- Footer -->
+<tr>
+<td style="padding:20px 32px 24px 32px;text-align:center;">
+${footerText ? `<p style="margin:0 0 8px 0;color:#6b7280;font-size:12px;">${footerText}</p>` : ""}
+<p style="margin:0;color:#9ca3af;font-size:11px;">SO'SAFE Formation &copy; ${year} &mdash; Tous droits réservés</p>
+<p style="margin:4px 0 0 0;color:#9ca3af;font-size:11px;">Cet email a été envoyé automatiquement, merci de ne pas y répondre directement.</p>
+</td>
+</tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
+/**
  * Process all pending emails that are due.
  */
 export async function processPendingEmails(): Promise<void> {

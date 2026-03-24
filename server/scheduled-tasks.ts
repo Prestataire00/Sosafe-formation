@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { triggerSessionAutomation, triggerAutomation } from "./automation-engine";
-import { sendEmailNow } from "./email-service";
+import { sendEmailNow, wrapEmailHtml } from "./email-service";
 import { log } from "./index";
 
 const SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes (was 1h, reduced for emargement scheduling)
@@ -391,25 +391,23 @@ async function scanAutoEmargement(): Promise<void> {
           const periodLabel = period === "matin" ? "Matin" : period === "apres-midi" ? "Apres-midi" : "Journee entiere";
           const dateDisplay = new Date(dateStr + "T00:00:00").toLocaleDateString("fr-FR");
 
-          const subject = `Emargement — ${session.title} — ${dateDisplay}`;
-          const body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-            <h2 style="color:#1a1a1a;">Emargement de presence</h2>
-            <p>Bonjour ${trainee.firstName},</p>
-            <p>Votre formation <strong>${session.title}</strong> commence bientot.</p>
-            <p>Merci de confirmer votre presence en cliquant sur le bouton ci-dessous :</p>
-            <ul>
-              <li><strong>Date :</strong> ${dateDisplay}</li>
-              <li><strong>Periode :</strong> ${periodLabel}</li>
-              <li><strong>Heure :</strong> ${startTime}</li>
-              ${session.location ? `<li><strong>Lieu :</strong> ${session.location}</li>` : ""}
-            </ul>
-            <p style="margin:25px 0;">
-              <a href="${signUrl}" style="display:inline-block;padding:14px 28px;background:#16a34a;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
-                Confirmer ma presence
-              </a>
-            </p>
-            <p style="color:#666;font-size:12px;">Ce lien est personnel et unique. Ne le partagez pas.</p>
-          </div>`;
+          const subject = `Émargement — ${session.title} — ${dateDisplay}`;
+          const body = wrapEmailHtml({
+            title: "Émargement de présence",
+            preheader: `Confirmez votre présence — ${session.title}`,
+            body: `
+              <p>Bonjour <strong>${trainee.firstName}</strong>,</p>
+              <p>Votre formation <strong>${session.title}</strong> commence bientôt. Merci de confirmer votre présence en cliquant sur le bouton ci-dessous.</p>
+              <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                <tr><td style="padding:8px 12px;color:#6b7280;width:120px;">Date</td><td style="padding:8px 12px;font-weight:600;">${dateDisplay}</td></tr>
+                <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;">Période</td><td style="padding:8px 12px;font-weight:600;">${periodLabel}</td></tr>
+                <tr><td style="padding:8px 12px;color:#6b7280;">Heure</td><td style="padding:8px 12px;font-weight:600;">${startTime}</td></tr>
+                ${session.location ? `<tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;">Lieu</td><td style="padding:8px 12px;font-weight:600;">${session.location}</td></tr>` : ""}
+              </table>`,
+            ctaLabel: "Confirmer ma présence",
+            ctaUrl: signUrl,
+            footerText: "Ce lien est personnel et unique. Ne le partagez pas.",
+          });
 
           await storage.createEmailLog({
             templateId: null,
