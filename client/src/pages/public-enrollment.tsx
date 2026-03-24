@@ -1004,30 +1004,58 @@ export default function PublicEnrollment() {
                       </div>
                     </div>
 
-                    {/* Profil & Financement */}
+                    {/* Profil & Financement — radio buttons */}
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>Votre situation *</Label>
-                        <Select value={formData.profileType} onValueChange={(v) => setFormData({ ...formData, profileType: v })}>
-                          <SelectTrigger><SelectValue placeholder="Sélectionnez..." /></SelectTrigger>
-                          <SelectContent>
-                            {PROFILE_TYPES.map((p) => (
-                              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Mode de financement *</Label>
-                        <Select value={formData.fundingMode} onValueChange={(v) => setFormData({ ...formData, fundingMode: v })}>
-                          <SelectTrigger><SelectValue placeholder="Sélectionnez..." /></SelectTrigger>
-                          <SelectContent>
-                            {FUNDING_MODES.map((f) => (
-                              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <fieldset className="space-y-2">
+                        <Label asChild><legend>Votre situation *</legend></Label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {PROFILE_TYPES.map((p) => (
+                            <label
+                              key={p.value}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                                formData.profileType === p.value
+                                  ? "border-primary bg-primary/5 font-medium"
+                                  : "border-muted hover:border-muted-foreground/30"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="profileType"
+                                value={p.value}
+                                checked={formData.profileType === p.value}
+                                onChange={() => setFormData({ ...formData, profileType: p.value })}
+                                className="accent-primary"
+                              />
+                              {p.label}
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                      <fieldset className="space-y-2">
+                        <Label asChild><legend>Mode de financement *</legend></Label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {FUNDING_MODES.map((f) => (
+                            <label
+                              key={f.value}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors text-sm ${
+                                formData.fundingMode === f.value
+                                  ? "border-primary bg-primary/5 font-medium"
+                                  : "border-muted hover:border-muted-foreground/30"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="fundingMode"
+                                value={f.value}
+                                checked={formData.fundingMode === f.value}
+                                onChange={() => setFormData({ ...formData, fundingMode: f.value })}
+                                className="accent-primary"
+                              />
+                              {f.label}
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
                     </div>
 
                     {/* Date de naissance */}

@@ -57,13 +57,24 @@ export interface GeneratedCourse {
 }
 
 export type PathType = "learning" | "assessment" | "combined";
-export type CourseDuration = "court" | "moyen" | "long";
+export type CourseDuration = "court" | "moyen" | "long" | "custom";
 
-const DURATION_CONFIG: Record<CourseDuration, { min: number; max: number; label: string }> = {
+const DURATION_CONFIG: Record<string, { min: number; max: number; label: string }> = {
   court: { min: 3, max: 5, label: "court (15 min)" },
   moyen: { min: 8, max: 12, label: "moyen (45-60 min)" },
   long: { min: 12, max: 18, label: "long (1h30-2h)" },
 };
+
+function getDurationConfig(duration: string, durationMinutes?: number): { min: number; max: number; label: string } {
+  if (durationMinutes && durationMinutes > 0) {
+    // ~1 block per 7 minutes, with min 2 and max 25
+    const targetBlocks = Math.round(durationMinutes / 7);
+    const min = Math.max(2, targetBlocks - 1);
+    const max = Math.max(min + 1, targetBlocks + 1);
+    return { min, max, label: `${durationMinutes} minutes (${min}-${max} blocs)` };
+  }
+  return DURATION_CONFIG[duration] || DURATION_CONFIG.moyen;
+}
 
 const ALL_BLOCK_TYPES = ["text", "quiz", "flashcard", "scenario", "simulation"] as const;
 
@@ -182,9 +193,10 @@ function buildPrompt(
   moduleTitle?: string,
   pathType: PathType = "combined",
   duration: CourseDuration = "moyen",
-  blockTypes?: string[]
+  blockTypes?: string[],
+  durationMinutes?: number
 ): string {
-  const durationConf = DURATION_CONFIG[duration];
+  const durationConf = getDurationConfig(duration, durationMinutes);
   const effectiveTypes = blockTypes && blockTypes.length > 0 ? blockTypes : getDefaultBlockTypes(pathType);
 
   const typesList = effectiveTypes.map(t => `"${t}"`).join(", ");
@@ -264,6 +276,7 @@ export interface GenerateOptions {
   moduleTitle?: string;
   pathType?: PathType;
   duration?: CourseDuration;
+  durationMinutes?: number;
   blockTypes?: string[];
 }
 
@@ -272,7 +285,8 @@ export async function generateCourseFromDocument(
   moduleTitle?: string,
   pathType: PathType = "combined",
   duration: CourseDuration = "moyen",
-  blockTypes?: string[]
+  blockTypes?: string[],
+  durationMinutes?: number
 ): Promise<GeneratedCourse> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -296,7 +310,8 @@ export async function generateCourseFromDocument(
   }
 
   // Use more source material for longer courses
-  const maxChars = duration === "long" ? 40000 : duration === "moyen" ? 30000 : 15000;
+  const effectiveMinutes = durationMinutes || (duration === "long" ? 120 : duration === "moyen" ? 60 : 15);
+  const maxChars = effectiveMinutes >= 90 ? 40000 : effectiveMinutes >= 30 ? 30000 : 15000;
   const truncatedText = text.slice(0, maxChars);
 
   // 2. Send to OpenAI
@@ -304,13 +319,12 @@ export async function generateCourseFromDocument(
   const openai = new OpenAI({ apiKey });
 
   const effectiveTypes = blockTypes && blockTypes.length > 0 ? blockTypes : undefined;
-  const prompt = buildPrompt(truncatedText, moduleTitle, pathType, duration, effectiveTypes);
+  const prompt = buildPrompt(truncatedText, moduleTitle, pathType, duration, effectiveTypes, durationMinutes);
 
-  // Use gpt-4o for moyen/long to get much longer content (16k+ tokens)
-  // gpt-4o-mini is limited to ~16k output tokens which is not enough for detailed long courses
-  const useFullModel = duration === "long" || duration === "moyen";
+  // Use gpt-4o for longer courses to get more detailed content
+  const useFullModel = effectiveMinutes >= 30;
   const model = useFullModel ? "gpt-4o" : "gpt-4o-mini";
-  const maxTokens = duration === "long" ? 16000 : duration === "moyen" ? 14000 : 8192;
+  const maxTokens = effectiveMinutes >= 90 ? 16000 : effectiveMinutes >= 30 ? 14000 : 8192;
 
   let responseText: string;
   try {

@@ -3164,6 +3164,7 @@ export default function Elearning() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiPathType, setAiPathType] = useState("combined");
   const [aiDuration, setAiDuration] = useState("moyen");
+  const [aiDurationMinutes, setAiDurationMinutes] = useState<number | "">("");
   const [aiBlockTypes, setAiBlockTypes] = useState<string[]>(["text", "quiz", "flashcard"]);
   const aiFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -3233,6 +3234,9 @@ export default function Elearning() {
       if (aiSessionId && aiSessionId !== "none") formData.append("sessionId", aiSessionId);
       formData.append("pathType", aiPathType);
       formData.append("duration", aiDuration);
+      if (aiDurationMinutes && typeof aiDurationMinutes === "number") {
+        formData.append("durationMinutes", aiDurationMinutes.toString());
+      }
       if (aiBlockTypes.length > 0) formData.append("blockTypes", aiBlockTypes.join(","));
 
       const resp = await fetch("/api/elearning-modules/generate-from-document", {
@@ -3608,17 +3612,18 @@ export default function Elearning() {
             </div>
             {/* Duration selector */}
             <div className="space-y-2">
-              <Label>Duree du parcours</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <Label>Durée du parcours</Label>
+              <div className="grid grid-cols-4 gap-2">
                 {[
-                  { value: "court", label: "Court", desc: "~15 min (3-5 blocs)", icon: <Zap className="w-5 h-5" /> },
-                  { value: "moyen", label: "Moyen", desc: "~45-60 min (8-12 blocs)", icon: <Timer className="w-5 h-5" /> },
-                  { value: "long", label: "Long", desc: "~1h30-2h (12-18 blocs)", icon: <Layers className="w-5 h-5" /> },
+                  { value: "court", label: "Court", desc: "~15 min", icon: <Zap className="w-5 h-5" /> },
+                  { value: "moyen", label: "Moyen", desc: "~45-60 min", icon: <Timer className="w-5 h-5" /> },
+                  { value: "long", label: "Long", desc: "~1h30-2h", icon: <Layers className="w-5 h-5" /> },
+                  { value: "custom", label: "Précis", desc: "En minutes", icon: <Clock className="w-5 h-5" /> },
                 ].map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setAiDuration(opt.value)}
+                    onClick={() => { setAiDuration(opt.value); if (opt.value !== "custom") setAiDurationMinutes(""); }}
                     className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-center ${
                       aiDuration === opt.value
                         ? "border-primary bg-primary/5 shadow-sm"
@@ -3631,6 +3636,25 @@ export default function Elearning() {
                   </button>
                 ))}
               </div>
+              {aiDuration === "custom" && (
+                <div className="flex items-center gap-3 pt-2">
+                  <Input
+                    type="number"
+                    min={5}
+                    max={300}
+                    placeholder="Ex: 30"
+                    value={aiDurationMinutes}
+                    onChange={(e) => setAiDurationMinutes(e.target.value ? parseInt(e.target.value) : "")}
+                    className="w-28"
+                  />
+                  <span className="text-sm text-muted-foreground">minutes</span>
+                  {typeof aiDurationMinutes === "number" && aiDurationMinutes > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      → ~{Math.max(2, Math.round(aiDurationMinutes / 7))} blocs
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             {/* Block types selector */}
             <div className="space-y-2">

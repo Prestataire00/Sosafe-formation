@@ -4094,9 +4094,10 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
         console.log("[AI Generate] Starting course generation from:", fileMeta.originalName);
         const pathType = (fields.pathType === "learning" || fields.pathType === "assessment") ? fields.pathType : "combined";
         const duration = (fields.duration === "court" || fields.duration === "moyen" || fields.duration === "long") ? fields.duration : "moyen";
+        const durationMinutes = fields.durationMinutes ? parseInt(fields.durationMinutes) : undefined;
         const blockTypes = fields.blockTypes ? fields.blockTypes.split(",").filter(Boolean) : undefined;
-        const course = await generateCourseFromDocument(fileMeta.fullPath, fields.title || undefined, pathType as any, duration as any, blockTypes);
-        console.log("[AI Generate] Course generated:", course.title, "with", course.blocks.length, "blocks (duration:", duration, "blockTypes:", blockTypes?.join(",") || "default", ")");
+        const course = await generateCourseFromDocument(fileMeta.fullPath, fields.title || undefined, pathType as any, duration as any, blockTypes, durationMinutes);
+        console.log("[AI Generate] Course generated:", course.title, "with", course.blocks.length, "blocks (duration:", durationMinutes ? `${durationMinutes}min` : duration, "blockTypes:", blockTypes?.join(",") || "default", ")");
 
         // Create module
         const module = await storage.createElearningModule({
