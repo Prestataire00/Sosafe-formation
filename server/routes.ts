@@ -1722,6 +1722,19 @@ export async function registerRoutes(
       // Don't block enrollment on prerequisite check errors
     }
 
+    // Check capacity and auto-set waitlist if full
+    const session = await storage.getSession(parsed.data.sessionId);
+    if (session) {
+      const enrollmentCount = await storage.getEnrollmentCount(parsed.data.sessionId);
+      const isFull = enrollmentCount >= session.maxParticipants;
+      if (isFull && (!parsed.data.status || !["cancelled", "no_show", "waitlisted"].includes(parsed.data.status))) {
+        const wlCount = await storage.getWaitlistCount(parsed.data.sessionId);
+        parsed.data.status = "waitlisted";
+        parsed.data.waitlistPosition = wlCount + 1;
+        _warnings.push(`Session complète (${enrollmentCount}/${session.maxParticipants}). Inscription mise en liste d'attente.`);
+      }
+    }
+
     const enrollment = await storage.createEnrollment(parsed.data);
     res.status(201).json({ ...enrollment, _warnings });
 

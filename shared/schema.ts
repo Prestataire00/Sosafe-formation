@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, date, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, date, timestamp, boolean, jsonb, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -108,8 +108,8 @@ export const programs = pgTable("programs", {
   title: text("title").notNull(),
   description: text("description"),
   categories: jsonb("categories").$type<string[]>().default([]),
-  duration: integer("duration").notNull(),
-  price: integer("price").notNull(),
+  duration: real("duration").notNull(),
+  price: real("price").notNull(),
   level: text("level").notNull().default("beginner"),
   objectives: text("objectives"),
   prerequisites: text("prerequisites"),
