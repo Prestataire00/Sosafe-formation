@@ -25,7 +25,7 @@ import type { ProgramCustomField } from "@shared/schema";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
   ArrowLeft, CheckCircle2, Clock, Euro, Monitor, Building2,
-  Upload, FileText, X, Loader2, ShieldCheck, AlertTriangle, RefreshCw,
+  Upload, FileText, X, Loader2, ShieldCheck, AlertTriangle, RefreshCw, RotateCcw, ArrowRight,
 } from "lucide-react";
 
 type Prerequisite = {
@@ -65,7 +65,135 @@ type PublicSession = {
   prerequisites: Prerequisite[];
 };
 
-type Step = "sessions" | "prerequisites" | "form" | "confirmation";
+type Step = "sessions" | "afgsu_check" | "prerequisites" | "form" | "confirmation";
+
+// AFGSU eligibility logic (imported from afgsu-simulator)
+const AFGSU2_PROFESSIONS = [
+  { value: "medecin", label: "Médecin" },
+  { value: "chirurgien_dentiste", label: "Chirurgien-dentiste" },
+  { value: "sage_femme", label: "Sage-femme" },
+  { value: "pharmacien", label: "Pharmacien" },
+  { value: "infirmier", label: "Infirmier(ère)" },
+  { value: "infirmier_iade", label: "Infirmier(ère) anesthésiste (IADE)" },
+  { value: "infirmier_ibode", label: "Infirmier(ère) de bloc (IBODE)" },
+  { value: "infirmier_ipa", label: "Infirmier(ère) en pratique avancée (IPA)" },
+  { value: "infirmier_puericultrice", label: "Puéricultrice" },
+  { value: "masseur_kinesitherapeute", label: "Masseur-kinésithérapeute" },
+  { value: "pedicure_podologue", label: "Pédicure-podologue" },
+  { value: "ergotherapeute", label: "Ergothérapeute" },
+  { value: "psychomotricien", label: "Psychomotricien(ne)" },
+  { value: "orthophoniste", label: "Orthophoniste" },
+  { value: "orthoptiste", label: "Orthoptiste" },
+  { value: "audioprothesiste", label: "Audioprothésiste" },
+  { value: "opticien_lunetier", label: "Opticien-lunetier" },
+  { value: "dieteticien", label: "Diététicien(ne)" },
+  { value: "manipulateur_radio", label: "Manipulateur d'électroradiologie" },
+  { value: "technicien_labo", label: "Technicien de laboratoire" },
+  { value: "preparateur_pharmacie", label: "Préparateur en pharmacie" },
+  { value: "aide_soignant", label: "Aide-soignant(e)" },
+  { value: "auxiliaire_puericulture", label: "Auxiliaire de puériculture" },
+  { value: "ambulancier", label: "Ambulancier(ère)" },
+];
+
+const AFGSU1_PROFESSIONS = [
+  { value: "administratif_sante", label: "Personnel administratif (établissement de santé)" },
+  { value: "technique_sante", label: "Personnel technique (établissement de santé)" },
+  { value: "ash", label: "Agent de service hospitalier (ASH)" },
+  { value: "brancardier", label: "Brancardier" },
+  { value: "secretaire_medicale", label: "Secrétaire médicale" },
+  { value: "agent_accueil_sante", label: "Agent d'accueil (établissement de santé)" },
+  { value: "autre_sante", label: "Autre personnel d'un établissement de santé" },
+];
+
+const NOT_ELIGIBLE_AFGSU = [
+  { value: "hors_sante", label: "Je ne travaille pas dans un établissement de santé" },
+  { value: "etudiant_hors_sante", label: "Étudiant(e) hors filière santé" },
+  { value: "autre", label: "Autre (secteur privé, hors santé)" },
+];
+
+const ALL_AFGSU_PROFESSIONS = [
+  { group: "Professions médicales et paramédicales (AFGSU 2)", items: AFGSU2_PROFESSIONS },
+  { group: "Personnel non médical en établissement de santé (AFGSU 1)", items: AFGSU1_PROFESSIONS },
+  { group: "Hors établissement de santé", items: NOT_ELIGIBLE_AFGSU },
+];
+
+type AfgsuResult = {
+  eligible: "afgsu2" | "afgsu1" | "none";
+  recycling: "needed" | "not_needed" | "not_applicable";
+  message: string;
+  details: string[];
+};
+
+function computeAfgsuEligibility(
+  profession: string,
+  hasExisting: boolean,
+  existingLevel: string,
+  existingDate: string,
+): AfgsuResult {
+  const isAfgsu2 = AFGSU2_PROFESSIONS.some((p) => p.value === profession);
+  const isAfgsu1 = AFGSU1_PROFESSIONS.some((p) => p.value === profession);
+
+  if (!isAfgsu2 && !isAfgsu1) {
+    return {
+      eligible: "none",
+      recycling: "not_applicable",
+      message: "Non éligible à l'AFGSU",
+      details: [
+        "L'AFGSU est réservée aux personnels travaillant dans un établissement de santé ou médico-social.",
+        "Si vous pensez être éligible, contactez-nous directement.",
+      ],
+    };
+  }
+
+  const level: "afgsu2" | "afgsu1" = isAfgsu2 ? "afgsu2" : "afgsu1";
+  const levelLabel = level === "afgsu2" ? "AFGSU 2" : "AFGSU 1";
+
+  if (hasExisting && existingDate) {
+    const obtained = new Date(existingDate);
+    const years = (Date.now() - obtained.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+    if (years >= 4) {
+      return {
+        eligible: level,
+        recycling: "needed",
+        message: `Recyclage ${levelLabel} nécessaire`,
+        details: [
+          `Votre dernier AFGSU date de plus de 4 ans.`,
+          `Vous devez suivre une formation de recyclage ${levelLabel} (1 journée).`,
+          level === "afgsu2" && existingLevel === "afgsu1"
+            ? `Attention : vous aviez un AFGSU 1. Pour passer à l'AFGSU 2, formation initiale complète (3 jours) requise.`
+            : "",
+        ].filter(Boolean),
+      };
+    }
+    return {
+      eligible: level,
+      recycling: "not_needed",
+      message: `${levelLabel} en cours de validité`,
+      details: [
+        `Votre ${existingLevel === "afgsu2" ? "AFGSU 2" : "AFGSU 1"} est valide jusqu'au ${new Date(obtained.getTime() + 4 * 365.25 * 24 * 60 * 60 * 1000).toLocaleDateString("fr-FR")}.`,
+        `Le recyclage sera nécessaire à cette date.`,
+      ],
+    };
+  }
+
+  return {
+    eligible: level,
+    recycling: "not_applicable",
+    message: `Éligible à l'${levelLabel} (formation initiale)`,
+    details: [
+      `En tant que ${ALL_AFGSU_PROFESSIONS.flatMap((g) => g.items).find((p) => p.value === profession)?.label || profession}, vous êtes éligible à l'${levelLabel}.`,
+      level === "afgsu2"
+        ? "Formation initiale AFGSU 2 : 3 jours (21 heures)."
+        : "Formation initiale AFGSU 1 : 2 jours (14 heures).",
+    ],
+  };
+}
+
+function isAfgsuSession(session: PublicSession | null): boolean {
+  if (!session) return false;
+  const title = (session.program?.title || session.title || "").toLowerCase();
+  return title.includes("afgsu") || title.includes("a.f.g.s.u");
+}
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("fr-FR", {
@@ -118,6 +246,15 @@ export default function PublicEnrollment() {
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [uploadedDocs, setUploadedDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
   const [uploading, setUploading] = useState(false);
+  // AFGSU eligibility state
+  const [afgsuProfession, setAfgsuProfession] = useState("");
+  const [afgsuHasExisting, setAfgsuHasExisting] = useState<boolean | null>(null);
+  const [afgsuExistingLevel, setAfgsuExistingLevel] = useState("");
+  const [afgsuExistingDate, setAfgsuExistingDate] = useState("");
+  const [afgsuResult, setAfgsuResult] = useState<AfgsuResult | null>(null);
+  const [afgsuStep, setAfgsuStep] = useState<1 | 2 | 3 | 4>(1);
+  const [afgsuDocs, setAfgsuDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
+  const [afgsuDocUploading, setAfgsuDocUploading] = useState(false);
   // Prerequisite verification state
   const [verificationMode, setVerificationMode] = useState<"rpps" | "diploma" | null>(null);
   const [rppsNumber, setRppsNumber] = useState("");
@@ -259,7 +396,9 @@ export default function PublicEnrollment() {
 
   const handleSelectSession = (session: PublicSession) => {
     setSelectedSession(session);
-    if (hasPrerequisites(session)) {
+    if (isAfgsuSession(session)) {
+      setStep("afgsu_check");
+    } else if (hasPrerequisites(session)) {
       setStep("prerequisites");
     } else {
       setStep("form");
@@ -377,12 +516,27 @@ export default function PublicEnrollment() {
       managerEmail: formData.managerEmail.trim() || undefined,
       documents: allDocs.length > 0 ? allDocs : undefined,
       customData: Object.keys(customFieldValues).length > 0 ? customFieldValues : undefined,
+      afgsuEligibility: afgsuResult ? {
+        eligible: afgsuResult.eligible,
+        recycling: afgsuResult.recycling,
+        profession: afgsuProfession,
+        existingLevel: afgsuExistingLevel || null,
+        existingDate: afgsuExistingDate || null,
+      } : undefined,
     });
   };
 
   const handleBack = () => {
     if (step === "form" && selectedSession && hasPrerequisites(selectedSession)) {
       setStep("prerequisites");
+      return;
+    }
+    if (step === "form" && selectedSession && isAfgsuSession(selectedSession)) {
+      setStep("afgsu_check");
+      return;
+    }
+    if (step === "prerequisites" && selectedSession && isAfgsuSession(selectedSession)) {
+      setStep("afgsu_check");
       return;
     }
     setStep("sessions");
@@ -395,6 +549,13 @@ export default function PublicEnrollment() {
     setDiplomaDocs([]);
     setRecyclingEmail("");
     setRecyclingResult(null);
+    setAfgsuProfession("");
+    setAfgsuHasExisting(null);
+    setAfgsuExistingLevel("");
+    setAfgsuExistingDate("");
+    setAfgsuResult(null);
+    setAfgsuStep(1);
+    setAfgsuDocs([]);
   };
 
   const handleBackToSessions = () => {
@@ -405,6 +566,13 @@ export default function PublicEnrollment() {
     setDiplomaDocs([]);
     setRecyclingEmail("");
     setRecyclingResult(null);
+    setAfgsuProfession("");
+    setAfgsuHasExisting(null);
+    setAfgsuExistingLevel("");
+    setAfgsuExistingDate("");
+    setAfgsuResult(null);
+    setAfgsuStep(1);
+    setAfgsuDocs([]);
   };
 
   const handleNewEnrollment = () => {
@@ -421,6 +589,52 @@ export default function PublicEnrollment() {
     setRecyclingResult(null);
     setDocumentIds([]);
     setPrerequisitesWarnings([]);
+    setAfgsuProfession("");
+    setAfgsuHasExisting(null);
+    setAfgsuExistingLevel("");
+    setAfgsuExistingDate("");
+    setAfgsuResult(null);
+    setAfgsuStep(1);
+    setAfgsuDocs([]);
+  };
+
+  const handleAfgsuDocUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setAfgsuDocUploading(true);
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: `${file.name} dépasse 10 Mo`, variant: "destructive" });
+        continue;
+      }
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const res = await fetch("/api/public/upload", { method: "POST", body: fd });
+        if (!res.ok) continue;
+        const data = await res.json();
+        setAfgsuDocs((prev) => [...prev, {
+          title: file.name,
+          fileUrl: data.fileUrl,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          mimeType: data.mimeType,
+        }]);
+      } catch {}
+    }
+    setAfgsuDocUploading(false);
+  };
+
+  const handleAfgsuContinue = () => {
+    if (!afgsuResult || afgsuResult.eligible === "none") return;
+    // Merge AFGSU docs into main uploaded docs
+    if (afgsuDocs.length > 0) {
+      setUploadedDocs((prev) => [...prev, ...afgsuDocs]);
+    }
+    if (selectedSession && hasPrerequisites(selectedSession)) {
+      setStep("prerequisites");
+    } else {
+      setStep("form");
+    }
   };
 
   const filteredSessions = sessions?.filter((s) => {
@@ -441,12 +655,15 @@ export default function PublicEnrollment() {
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-8">
           {(() => {
+            const showAfgsu = selectedSession && isAfgsuSession(selectedSession);
             const showPrereq = selectedSession && hasPrerequisites(selectedSession);
+            let stepNum = 1;
             const steps = [
-              { key: "sessions", label: "Choix de la session", num: 1 },
-              ...(showPrereq ? [{ key: "prerequisites", label: "Vérification des prérequis", num: 2 }] : []),
-              { key: "form", label: "Vos informations", num: showPrereq ? 3 : 2 },
-              { key: "confirmation", label: "Confirmation", num: showPrereq ? 4 : 3 },
+              { key: "sessions", label: "Choix de la session", num: stepNum++ },
+              ...(showAfgsu ? [{ key: "afgsu_check", label: "Éligibilité AFGSU", num: stepNum++ }] : []),
+              ...(showPrereq ? [{ key: "prerequisites", label: "Prérequis", num: stepNum++ }] : []),
+              { key: "form", label: "Vos informations", num: stepNum++ },
+              { key: "confirmation", label: "Confirmation", num: stepNum++ },
             ];
             const currentIndex = steps.findIndex((s) => s.key === step);
             return steps.map((s, i) => (
@@ -602,6 +819,253 @@ export default function PublicEnrollment() {
                 </CardContent>
               </Card>
             )}
+          </>
+        )}
+
+        {/* STEP: AFGSU Eligibility Check */}
+        {step === "afgsu_check" && selectedSession && (
+          <>
+            <Button variant="ghost" size="sm" className="mb-4" onClick={handleBackToSessions}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> Retour aux sessions
+            </Button>
+
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5" />
+                  Vérification d'éligibilité AFGSU
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Cette formation nécessite de vérifier votre éligibilité. Répondez aux questions ci-dessous.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {/* AFGSU sub-step 1: Profession */}
+                {afgsuStep === 1 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-base">Quelle est votre profession ?</h3>
+                    {ALL_AFGSU_PROFESSIONS.map((group) => (
+                      <div key={group.group}>
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">
+                          {group.group}
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {group.items.map((p) => (
+                            <Button
+                              key={p.value}
+                              variant={afgsuProfession === p.value ? "default" : "outline"}
+                              className="justify-start text-left h-auto py-2.5 px-3 text-sm"
+                              onClick={() => setAfgsuProfession(p.value)}
+                            >
+                              {p.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex justify-end pt-2">
+                      <Button
+                        onClick={() => {
+                          if (NOT_ELIGIBLE_AFGSU.some((p) => p.value === afgsuProfession)) {
+                            const res = computeAfgsuEligibility(afgsuProfession, false, "", "");
+                            setAfgsuResult(res);
+                            setAfgsuStep(4);
+                          } else {
+                            setAfgsuStep(2);
+                          }
+                        }}
+                        disabled={!afgsuProfession}
+                      >
+                        Suivant <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* AFGSU sub-step 2: Existing AFGSU? */}
+                {afgsuStep === 2 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-base">Avez-vous déjà un AFGSU ?</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Button
+                        variant={afgsuHasExisting === true ? "default" : "outline"}
+                        className="h-16 text-base"
+                        onClick={() => { setAfgsuHasExisting(true); setAfgsuStep(3); }}
+                      >
+                        <CheckCircle2 className="w-5 h-5 mr-2" /> Oui
+                      </Button>
+                      <Button
+                        variant={afgsuHasExisting === false ? "default" : "outline"}
+                        className="h-16 text-base"
+                        onClick={() => {
+                          setAfgsuHasExisting(false);
+                          const res = computeAfgsuEligibility(afgsuProfession, false, "", "");
+                          setAfgsuResult(res);
+                          setAfgsuStep(4);
+                        }}
+                      >
+                        Non
+                      </Button>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setAfgsuStep(1)}>
+                      <ArrowLeft className="w-4 h-4 mr-1" /> Retour
+                    </Button>
+                  </div>
+                )}
+
+                {/* AFGSU sub-step 3: AFGSU details */}
+                {afgsuStep === 3 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-base">Détails de votre AFGSU actuel</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Niveau AFGSU obtenu</Label>
+                        <Select value={afgsuExistingLevel} onValueChange={setAfgsuExistingLevel}>
+                          <SelectTrigger><SelectValue placeholder="Sélectionnez..." /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="afgsu1">AFGSU Niveau 1</SelectItem>
+                            <SelectItem value="afgsu2">AFGSU Niveau 2</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Date d'obtention</Label>
+                        <Input
+                          type="date"
+                          value={afgsuExistingDate}
+                          onChange={(e) => setAfgsuExistingDate(e.target.value)}
+                          max={new Date().toISOString().split("T")[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setAfgsuStep(2)}>
+                        <ArrowLeft className="w-4 h-4 mr-1" /> Retour
+                      </Button>
+                      <Button
+                        className="ml-auto"
+                        disabled={!afgsuExistingLevel || !afgsuExistingDate}
+                        onClick={() => {
+                          const res = computeAfgsuEligibility(afgsuProfession, true, afgsuExistingLevel, afgsuExistingDate);
+                          setAfgsuResult(res);
+                          setAfgsuStep(4);
+                        }}
+                      >
+                        Vérifier <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* AFGSU sub-step 4: Result */}
+                {afgsuStep === 4 && afgsuResult && (
+                  <div className="space-y-4">
+                    {/* Result card */}
+                    <div className={`p-4 rounded-lg border ${
+                      afgsuResult.eligible === "none"
+                        ? "border-red-200 bg-red-50 dark:bg-red-900/10"
+                        : afgsuResult.recycling === "needed"
+                          ? "border-amber-200 bg-amber-50 dark:bg-amber-900/10"
+                          : "border-green-200 bg-green-50 dark:bg-green-900/10"
+                    }`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        {afgsuResult.eligible === "none" ? (
+                          <AlertTriangle className="w-8 h-8 text-red-500 shrink-0" />
+                        ) : afgsuResult.recycling === "needed" ? (
+                          <AlertTriangle className="w-8 h-8 text-amber-500 shrink-0" />
+                        ) : (
+                          <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
+                        )}
+                        <div>
+                          <h3 className="font-bold text-lg">{afgsuResult.message}</h3>
+                          {afgsuResult.eligible !== "none" && (
+                            <Badge variant={afgsuResult.recycling === "needed" ? "destructive" : "default"} className="mt-1">
+                              {afgsuResult.eligible === "afgsu2" ? "AFGSU 2" : "AFGSU 1"}
+                              {afgsuResult.recycling === "needed" ? " — Recyclage" : ""}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        {afgsuResult.details.map((d, i) => (
+                          <p key={i} className="text-sm text-muted-foreground">{d}</p>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Document upload for eligible users */}
+                    {afgsuResult.eligible !== "none" && (
+                      <div className="space-y-3">
+                        <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200">
+                          <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                            📎 Justificatifs recommandés
+                          </p>
+                          <ul className="text-xs text-blue-700 dark:text-blue-400 mt-1 space-y-0.5 list-disc list-inside">
+                            <li>Attestation AFGSU en cours de validité (si recyclage)</li>
+                            <li>Diplôme professionnel attestant de votre qualification</li>
+                            <li>Carte professionnelle ou numéro RPPS</li>
+                          </ul>
+                        </div>
+                        <div>
+                          <Label>Télécharger vos justificatifs</Label>
+                          <Input
+                            type="file"
+                            multiple
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => handleAfgsuDocUpload(e.target.files)}
+                            disabled={afgsuDocUploading}
+                            className="mt-1"
+                          />
+                          {afgsuDocUploading && (
+                            <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                              <Loader2 className="w-4 h-4 animate-spin" /> Upload en cours...
+                            </div>
+                          )}
+                          {afgsuDocs.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {afgsuDocs.map((doc, i) => (
+                                <div key={i} className="flex items-center gap-2 text-sm">
+                                  <FileText className="w-4 h-4 text-green-600" />
+                                  <span className="flex-1 truncate">{doc.title}</span>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setAfgsuDocs((prev) => prev.filter((_, idx) => idx !== i))}>
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 pt-2">
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        setAfgsuStep(1);
+                        setAfgsuResult(null);
+                        setAfgsuProfession("");
+                        setAfgsuHasExisting(null);
+                        setAfgsuExistingLevel("");
+                        setAfgsuExistingDate("");
+                        setAfgsuDocs([]);
+                      }}>
+                        <RotateCcw className="w-4 h-4 mr-1" /> Recommencer
+                      </Button>
+                      {afgsuResult.eligible !== "none" && (
+                        <Button className="ml-auto" onClick={handleAfgsuContinue}>
+                          Continuer l'inscription <ArrowRight className="w-4 h-4 ml-2" />
+                        </Button>
+                      )}
+                      {afgsuResult.eligible === "none" && (
+                        <Button variant="outline" className="ml-auto" onClick={handleBackToSessions}>
+                          Retour aux formations
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </>
         )}
 

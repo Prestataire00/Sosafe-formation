@@ -329,7 +329,8 @@ export async function registerRoutes(
   app.post("/api/public/enrollments", async (req, res) => {
     try {
       const { sessionId, firstName, lastName, email, phone, company, documents, rppsNumber, profession, customData,
-        profileType, fundingMode, address, city, postalCode, diplomaNumber, dateOfBirth, managerName, managerEmail } = req.body;
+        profileType, fundingMode, address, city, postalCode, diplomaNumber, dateOfBirth, managerName, managerEmail,
+        afgsuEligibility } = req.body;
 
       // Validate required fields
       if (!sessionId || !firstName || !lastName || !email) {
@@ -482,6 +483,12 @@ export async function registerRoutes(
       }
 
       // Create enrollment (waitlisted if full, pending otherwise)
+      // Merge AFGSU eligibility data into customData for admin review
+      const mergedCustomData = {
+        ...(customData || {}),
+        ...(afgsuEligibility ? { afgsuEligibility } : {}),
+      };
+
       let enrollment;
       let waitlistPosition: number | null = null;
       if (isFull) {
@@ -492,7 +499,7 @@ export async function registerRoutes(
           traineeId: trainee.id,
           status: "waitlisted",
           waitlistPosition,
-          customData: customData || {},
+          customData: mergedCustomData,
         });
         await storage.updateEnrollment(enrollment.id, { waitlistedAt: new Date() } as any);
       } else {
@@ -500,7 +507,7 @@ export async function registerRoutes(
           sessionId,
           traineeId: trainee.id,
           status: "pending",
-          customData: customData || {},
+          customData: mergedCustomData,
         });
       }
 
@@ -1663,10 +1670,7 @@ export async function registerRoutes(
           const endDate = new Date(session.endDate).toLocaleDateString("fr-FR");
 
           const { sendEmailNow, wrapEmailHtml } = await import("./email-service");
-          const emailLog = await storage.createEmailLog({
-            recipient: trainer.email,
-            subject: `Nouvelle session attribuée : ${session.title}`,
-            body: wrapEmailHtml({
+          const emailBody = await wrapEmailHtml({
               title: "Nouvelle session de formation",
               preheader: `Session attribuée : ${session.title}`,
               body: `
@@ -1682,7 +1686,11 @@ export async function registerRoutes(
                 <p>Connectez-vous à votre espace formateur pour préparer cette session.</p>`,
               ctaLabel: "Accéder à mon espace",
               ctaUrl: `${process.env.APP_URL || ""}/trainer-portal`,
-            }),
+          });
+          const emailLog = await storage.createEmailLog({
+            recipient: trainer.email,
+            subject: `Nouvelle session attribuée : ${session.title}`,
+            body: emailBody,
             status: "pending",
           });
           await sendEmailNow(emailLog.id);
@@ -1723,10 +1731,7 @@ export async function registerRoutes(
           const endDate = new Date(session.endDate).toLocaleDateString("fr-FR");
 
           const { sendEmailNow: sendNow2, wrapEmailHtml: wrapHtml2 } = await import("./email-service");
-          const emailLog = await storage.createEmailLog({
-            recipient: trainer.email,
-            subject: `Session attribuée : ${session.title}`,
-            body: wrapHtml2({
+          const emailBody2 = await wrapHtml2({
               title: "Session de formation attribuée",
               preheader: `Session attribuée : ${session.title}`,
               body: `
@@ -1742,7 +1747,11 @@ export async function registerRoutes(
                 <p>Connectez-vous à votre espace formateur pour préparer cette session.</p>`,
               ctaLabel: "Accéder à mon espace",
               ctaUrl: `${process.env.APP_URL || ""}/trainer-portal`,
-            }),
+          });
+          const emailLog = await storage.createEmailLog({
+            recipient: trainer.email,
+            subject: `Session attribuée : ${session.title}`,
+            body: emailBody2,
             status: "pending",
           });
           await sendEmailNow(emailLog.id);
@@ -1862,10 +1871,7 @@ export async function registerRoutes(
               const enterprise = await storage.getEnterprise(entId as string);
               if (!enterprise?.email) continue;
               const { sendEmailNow: sendNow3, wrapEmailHtml: wrapHtml3 } = await import("./email-service");
-              const emailLog = await storage.createEmailLog({
-                recipient: enterprise.email,
-                subject: `Rapport d'émargement — ${session.title}`,
-                body: wrapHtml3({
+              const emailBody3 = await wrapHtml3({
                   title: "Rapport d'émargement",
                   preheader: `Rapport d'émargement — ${session.title}`,
                   body: `
@@ -1873,7 +1879,11 @@ export async function registerRoutes(
                     <p>La formation <strong>${session.title}</strong> est terminée. Veuillez trouver ci-dessous le rapport d'émargement de vos collaborateurs.</p>
                     ${html}`,
                   footerText: "Ce rapport est également disponible dans votre espace entreprise.",
-                }),
+              });
+              const emailLog = await storage.createEmailLog({
+                recipient: enterprise.email,
+                subject: `Rapport d'émargement — ${session.title}`,
+                body: emailBody3,
                 status: "pending",
               });
               try {
@@ -6767,10 +6777,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           if (!enterprise?.email) continue;
 
           const { sendEmailNow: sendNow4, wrapEmailHtml: wrapHtml4 } = await import("./email-service");
-          const emailLog = await storage.createEmailLog({
-            recipient: enterprise.email,
-            subject: `Rapport d'émargement — ${session.title}`,
-            body: wrapHtml4({
+          const emailBody4 = await wrapHtml4({
               title: "Rapport d'émargement",
               preheader: `Rapport — ${session.title}`,
               body: `
@@ -6779,7 +6786,11 @@ Le contenu doit être en français, clair et bien structuré.`;
                 (${new Date(session.startDate).toLocaleDateString("fr-FR")} — ${new Date(session.endDate).toLocaleDateString("fr-FR")}).</p>
                 ${html}`,
               footerText: "Ce rapport est également disponible dans votre espace entreprise sur la plateforme.",
-            }),
+          });
+          const emailLog = await storage.createEmailLog({
+            recipient: enterprise.email,
+            subject: `Rapport d'émargement — ${session.title}`,
+            body: emailBody4,
             status: "pending",
           });
 
@@ -6854,7 +6865,7 @@ Le contenu doit être en français, clair et bien structuré.`;
 
         const { wrapEmailHtml: wrapEmarg } = await import("./email-service");
         const subject = `Émargement — ${session?.title || "Formation"} — ${dateStr}`;
-        const body = wrapEmarg({
+        const body = await wrapEmarg({
           title: "Émargement de présence",
           preheader: `Confirmez votre présence — ${session?.title || "Formation"}`,
           body: `

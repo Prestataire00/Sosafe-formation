@@ -703,6 +703,37 @@ export function ImmersiveModuleViewer({
                     existingProgress={blockProgress || undefined}
                   />
                 )}
+
+                {/* KAHOOT QUIZ (AUTOPOSITIONNEMENT) */}
+                {currentBlock.type === "kahoot" && (currentBlock as any).linkedQuizId && (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-lg bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200 dark:border-purple-800">
+                      <h3 className="font-semibold text-lg mb-2">🎯 Quiz interactif — Autopositionnement</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Participez au quiz interactif pour évaluer vos connaissances. Choisissez un pseudo et répondez aux questions le plus rapidement possible !
+                      </p>
+                      <a
+                        href={`/quiz/join?quizId=${(currentBlock as any).linkedQuizId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm"
+                      >
+                        Participer au quiz
+                      </a>
+                    </div>
+                    {blockProgress?.completed && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <CheckCircle className="w-5 h-5" />
+                        <span className="text-sm font-medium">Quiz complété !</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {currentBlock.type === "kahoot" && !(currentBlock as any).linkedQuizId && (
+                  <div className="p-4 rounded-lg bg-muted text-center">
+                    <p className="text-sm text-muted-foreground">Aucun quiz associé à ce bloc.</p>
+                  </div>
+                )}
               </div>
 
               {/* NAVIGATION FOOTER */}

@@ -182,16 +182,17 @@ export async function sendEmailNow(logId: string): Promise<void> {
 }
 
 /**
- * Wrap email content in a professional Digiforma-style HTML layout.
- * Provides consistent branding across all outgoing emails.
+ * Wrap email content in a Digiforma-style HTML layout.
+ * Reads org settings dynamically for logo, name, address, SIRET, NDA.
  */
-export function wrapEmailHtml({
+export async function wrapEmailHtml({
   title,
   preheader,
   body,
   ctaLabel,
   ctaUrl,
   footerText,
+  orgSettings,
 }: {
   title?: string;
   preheader?: string;
@@ -199,60 +200,157 @@ export function wrapEmailHtml({
   ctaLabel?: string;
   ctaUrl?: string;
   footerText?: string;
-}): string {
-  const brandColor = "#1e3a5f";
-  const accentColor = "#2563eb";
+  orgSettings?: Record<string, string>;
+}): Promise<string> {
+  // Load org settings if not provided
+  let org = orgSettings;
+  if (!org) {
+    try {
+      const allSettings = await storage.getOrganizationSettings();
+      org = {};
+      for (const s of allSettings) {
+        org[s.key] = s.value;
+      }
+    } catch {
+      org = {};
+    }
+  }
+
+  const orgName = org["org_name"] || "SO'SAFE Formation";
+  const orgAddress = org["org_address"] || "";
+  const orgPhone = org["org_phone"] || "";
+  const orgEmail = org["org_email"] || "";
+  const orgSiret = org["org_siret"] || "";
+  const orgNda = org["org_nda"] || "";
+  const orgWebsite = org["org_website"] || "";
+  const orgLogoUrl = org["org_logo_url"] || "";
+  const appUrl = process.env.APP_URL || "https://sosafe-formation.onrender.com";
   const year = new Date().getFullYear();
 
+  // Build logo: if relative path, prepend APP_URL
+  const logoSrc = orgLogoUrl
+    ? (orgLogoUrl.startsWith("http") ? orgLogoUrl : `${appUrl}${orgLogoUrl}`)
+    : "";
+
+  // Build footer info lines
+  const footerLines: string[] = [];
+  if (orgAddress) footerLines.push(orgAddress);
+  const contactParts: string[] = [];
+  if (orgPhone) contactParts.push(`Tél. ${orgPhone}`);
+  if (orgEmail) contactParts.push(orgEmail);
+  if (orgWebsite) contactParts.push(orgWebsite);
+  if (contactParts.length) footerLines.push(contactParts.join(" — "));
+  const legalParts: string[] = [];
+  if (orgSiret) legalParts.push(`SIRET : ${orgSiret}`);
+  if (orgNda) legalParts.push(`N° de déclaration d'activité : ${orgNda}`);
+  if (legalParts.length) footerLines.push(legalParts.join(" — "));
+
   return `<!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" xmlns="http://www.w3.org/1999/xhtml">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title || "SO'SAFE Formation"}</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>${title || orgName}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-${preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${preheader}</div>` : ""}
-<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:24px 0;">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-<!-- Header -->
+<body style="margin:0;padding:0;background-color:#f2f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+${preheader ? `<div style="display:none;font-size:1px;color:#f2f4f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${preheader}</div>` : ""}
+
+<!-- Wrapper -->
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f2f4f6;">
+<tr><td align="center" style="padding:32px 16px;">
+
+<!-- Container 600px -->
+<table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;margin:0 auto;">
+
+<!-- Logo Header -->
 <tr>
-<td style="background-color:${brandColor};padding:24px 32px;text-align:center;">
-<h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:600;letter-spacing:0.5px;">SO'SAFE Formation</h1>
+<td align="center" style="padding:0 0 24px 0;">
+${logoSrc
+  ? `<a href="${appUrl}" target="_blank" style="display:inline-block;"><img src="${logoSrc}" alt="${orgName}" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0;" /></a>`
+  : `<a href="${appUrl}" target="_blank" style="display:inline-block;text-decoration:none;"><span style="font-size:26px;font-weight:700;color:#1a2b49;letter-spacing:1px;">${orgName}</span></a>`
+}
 </td>
 </tr>
-<!-- Body -->
+
+<!-- Email Card -->
 <tr>
-<td style="padding:32px 32px 16px 32px;">
-${title ? `<h2 style="margin:0 0 20px 0;color:${brandColor};font-size:18px;font-weight:600;">${title}</h2>` : ""}
-<div style="color:#374151;font-size:14px;line-height:1.7;">
+<td>
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#ffffff;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+
+<!-- Title bar -->
+${title ? `<tr>
+<td style="padding:28px 36px 0 36px;">
+<h1 style="margin:0;font-size:20px;font-weight:600;color:#1a2b49;line-height:1.4;">${title}</h1>
+</td>
+</tr>` : ""}
+
+<!-- Body content -->
+<tr>
+<td style="padding:24px 36px 28px 36px;">
+<div style="color:#51545e;font-size:15px;line-height:1.75;">
 ${body}
 </div>
 </td>
 </tr>
+
 ${ctaLabel && ctaUrl ? `
 <!-- CTA Button -->
 <tr>
-<td style="padding:8px 32px 24px 32px;text-align:center;">
-<a href="${ctaUrl}" style="display:inline-block;background-color:${accentColor};color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:0.3px;">${ctaLabel}</a>
-</td>
-</tr>` : ""}
-<!-- Divider -->
+<td style="padding:0 36px 32px 36px;">
+<table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
 <tr>
-<td style="padding:0 32px;">
-<hr style="border:none;border-top:1px solid #e5e7eb;margin:0;">
-</td>
-</tr>
-<!-- Footer -->
-<tr>
-<td style="padding:20px 32px 24px 32px;text-align:center;">
-${footerText ? `<p style="margin:0 0 8px 0;color:#6b7280;font-size:12px;">${footerText}</p>` : ""}
-<p style="margin:0;color:#9ca3af;font-size:11px;">SO'SAFE Formation &copy; ${year} &mdash; Tous droits réservés</p>
-<p style="margin:4px 0 0 0;color:#9ca3af;font-size:11px;">Cet email a été envoyé automatiquement, merci de ne pas y répondre directement.</p>
+<td align="center" style="border-radius:6px;background-color:#3869d4;">
+<a href="${ctaUrl}" target="_blank" style="display:inline-block;background-color:#3869d4;color:#ffffff;padding:13px 32px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;letter-spacing:0.3px;mso-padding-alt:0;text-align:center;">
+<!--[if mso]><i style="letter-spacing:32px;mso-font-width:-100%;mso-text-raise:26pt">&nbsp;</i><![endif]-->
+<span style="mso-text-raise:13pt;">${ctaLabel}</span>
+<!--[if mso]><i style="letter-spacing:32px;mso-font-width:-100%">&nbsp;</i><![endif]-->
+</a>
 </td>
 </tr>
 </table>
+</td>
+</tr>` : ""}
+
+</table>
+</td>
+</tr>
+
+<!-- Footer -->
+<tr>
+<td style="padding:24px 0 0 0;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+
+${footerText ? `<tr>
+<td align="center" style="padding:0 0 12px 0;">
+<p style="margin:0;color:#6b6e76;font-size:13px;line-height:1.5;">${footerText}</p>
+</td>
+</tr>` : ""}
+
+<tr>
+<td align="center" style="padding:0 0 4px 0;">
+<p style="margin:0;color:#a8aaaf;font-size:12px;line-height:1.6;font-weight:600;">${orgName}</p>
+</td>
+</tr>
+
+${footerLines.map(line => `<tr>
+<td align="center" style="padding:0;">
+<p style="margin:0;color:#a8aaaf;font-size:11px;line-height:1.6;">${line}</p>
+</td>
+</tr>`).join("\n")}
+
+<tr>
+<td align="center" style="padding:12px 0 0 0;">
+<p style="margin:0;color:#a8aaaf;font-size:11px;">&copy; ${year} ${orgName} &mdash; Tous droits réservés</p>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+
+</table>
+
 </td></tr>
 </table>
 </body>

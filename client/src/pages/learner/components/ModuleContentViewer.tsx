@@ -494,6 +494,23 @@ export function ModuleContentViewer({
                     existingProgress={blockProgress || undefined}
                   />
                 )}
+
+                {block.type === "kahoot" && (block as any).linkedQuizId && (
+                  <div className="p-4 rounded-lg bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200">
+                    <h3 className="font-semibold mb-2">🎯 Quiz interactif — Autopositionnement</h3>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Participez au quiz interactif pour évaluer vos connaissances.
+                    </p>
+                    <a
+                      href={`/quiz/join?quizId=${(block as any).linkedQuizId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm"
+                    >
+                      Participer au quiz
+                    </a>
+                  </div>
+                )}
               </div>
             </AccordionContent>
             )}

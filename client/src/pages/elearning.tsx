@@ -164,6 +164,7 @@ function BlockTypeIcon({ type }: { type: string }) {
   if (type === "survey") return <BarChart3 className="w-4 h-4 text-violet-500" />;
   if (type === "scenario") return <GitBranch className="w-4 h-4 text-cyan-500" />;
   if (type === "simulation") return <Gamepad2 className="w-4 h-4 text-lime-500" />;
+  if (type === "kahoot") return <Gamepad2 className="w-4 h-4 text-purple-600" />;
   return <FileText className="w-4 h-4 text-muted-foreground" />;
 }
 
@@ -365,6 +366,12 @@ function BlockForm({
     enabled: type === "scorm",
   });
 
+  // Kahoot quizzes for autopositionnement block
+  const { data: availableQuizzes } = useQuery<Array<{ id: string; title: string; description: string | null }>>({
+    queryKey: ["/api/quizzes"],
+    enabled: type === "kahoot",
+  });
+
   // Assignment config
   const existingAssignment = (block?.assignmentConfig as any) || {};
   const [assignInstructions, setAssignInstructions] = useState(existingAssignment.instructions || "");
@@ -406,6 +413,9 @@ function BlockForm({
     id: string; situation: string; imageUrl?: string;
     choices: Array<{ id: string; text: string; feedback: string; points: number; nextNodeId: string | null }>;
   }>>(existingScenario?.nodes || [{ id: "node-1", situation: "", choices: [{ id: "c-1-1", text: "", feedback: "", points: 10, nextNodeId: null }] }]);
+
+  // Linked Kahoot quiz (autopositionnement)
+  const [linkedQuizId, setLinkedQuizId] = useState((block as any)?.linkedQuizId || "");
 
   // Simulation config
   const existingSim = (block as any)?.simulationConfig as any;
@@ -521,6 +531,9 @@ function BlockForm({
         simConfig.hotspotZones = simHotspotZones;
       }
       data.simulationConfig = simConfig;
+    }
+    if (type === "kahoot") {
+      data.linkedQuizId = linkedQuizId || null;
     }
     onSubmit(data);
   };
@@ -1141,6 +1154,40 @@ function BlockForm({
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* KAHOOT QUIZ (autopositionnement / evaluation) */}
+      {type === "kahoot" && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Quiz interactif (Autopositionnement)</p>
+          <p className="text-xs text-muted-foreground">
+            Sélectionnez un quiz Kahoot existant. Les apprenants pourront y participer directement dans le parcours e-learning.
+          </p>
+          <div className="space-y-1">
+            <Label className="text-xs">Quiz à associer</Label>
+            <Select value={linkedQuizId} onValueChange={setLinkedQuizId}>
+              <SelectTrigger><SelectValue placeholder="Sélectionner un quiz..." /></SelectTrigger>
+              <SelectContent>
+                {availableQuizzes?.map((q) => (
+                  <SelectItem key={q.id} value={q.id}>
+                    {q.title}
+                    {q.description ? ` — ${q.description}` : ""}
+                  </SelectItem>
+                ))}
+                {(!availableQuizzes || availableQuizzes.length === 0) && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">
+                    Aucun quiz créé. Allez dans Quiz Manager pour en créer.
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          {linkedQuizId && (
+            <p className="text-xs text-green-600">
+              ✓ Quiz sélectionné. L'apprenant pourra rejoindre et participer au quiz dans le parcours.
+            </p>
           )}
         </div>
       )}

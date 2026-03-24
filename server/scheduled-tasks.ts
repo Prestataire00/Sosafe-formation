@@ -392,7 +392,7 @@ async function scanAutoEmargement(): Promise<void> {
           const dateDisplay = new Date(dateStr + "T00:00:00").toLocaleDateString("fr-FR");
 
           const subject = `Émargement — ${session.title} — ${dateDisplay}`;
-          const body = wrapEmailHtml({
+          const body = await wrapEmailHtml({
             title: "Émargement de présence",
             preheader: `Confirmez votre présence — ${session.title}`,
             body: `

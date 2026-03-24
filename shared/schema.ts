@@ -852,6 +852,8 @@ export const elearningBlocks = pgTable("elearning_blocks", {
       }>;
     }>;
   }>(),
+  // Linked Kahoot quiz (autopositionnement / evaluation)
+  linkedQuizId: varchar("linked_quiz_id"),
   // Simulation (practical exercise) config
   simulationConfig: jsonb("simulation_config").$type<{
     subType: "ordering" | "matching" | "fill_blank" | "hotspot";
@@ -2154,6 +2156,7 @@ export const ELEARNING_BLOCK_TYPES = [
   { value: "survey", label: "Sondage (non noté)" },
   { value: "scenario", label: "Scénario à embranchements" },
   { value: "simulation", label: "Mise en situation (exercice pratique)" },
+  { value: "kahoot", label: "Quiz interactif (Autopositionnement)" },
 ] as const;
 
 export const GAMIFICATION_LEVELS = [
