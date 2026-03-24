@@ -4,6 +4,20 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ============================================================
+// CUSTOM FIELD TYPES (for program-specific enrollment fields)
+// ============================================================
+
+export type ProgramCustomField = {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "select" | "checkbox" | "date" | "email" | "phone" | "number" | "file";
+  required: boolean;
+  placeholder?: string;
+  options?: string[]; // for select type
+  helpText?: string;
+};
+
+// ============================================================
 // EXISTING TABLES
 // ============================================================
 
@@ -129,6 +143,7 @@ export const programs = pgTable("programs", {
   referentHandicap: text("referent_handicap"),
   fundingTypes: jsonb("funding_types").$type<string[]>().default([]),
   imageUrl: text("image_url"),
+  customFields: jsonb("custom_fields").$type<ProgramCustomField[]>().default([]),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -163,7 +178,52 @@ export const enrollments = pgTable("enrollments", {
   certificateBlocked: boolean("certificate_blocked").default(false),
   waitlistPosition: integer("waitlist_position"),
   waitlistedAt: timestamp("waitlisted_at"),
+  customData: jsonb("custom_data").$type<Record<string, any>>().default({}),
 });
+
+// ============================================================
+// SESSION TRAINERS (many-to-many: session ↔ trainer)
+// ============================================================
+
+export const sessionTrainers = pgTable("session_trainers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  trainerId: varchar("trainer_id").notNull(),
+  role: text("role").default("trainer"), // "trainer" | "co-trainer" | "observer"
+  assignedAt: timestamp("assigned_at").defaultNow(),
+});
+
+export const insertSessionTrainerSchema = createInsertSchema(sessionTrainers);
+export type SessionTrainer = typeof sessionTrainers.$inferSelect;
+export type InsertSessionTrainer = typeof sessionTrainers.$inferInsert;
+
+// ============================================================
+// TRAINING LOCATIONS (bibliothèque de lieux de formation)
+// ============================================================
+
+export const trainingLocations = pgTable("training_locations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  address: text("address"),
+  city: text("city"),
+  postalCode: text("postal_code"),
+  country: text("country").default("France"),
+  rooms: jsonb("rooms").$type<string[]>().default([]),
+  capacity: integer("capacity"),
+  contactName: text("contact_name"),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  notes: text("notes"),
+  accessibilityInfo: text("accessibility_info"),
+  parkingInfo: text("parking_info"),
+  transportInfo: text("transport_info"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTrainingLocationSchema = createInsertSchema(trainingLocations);
+export type TrainingLocation = typeof trainingLocations.$inferSelect;
+export type InsertTrainingLocation = typeof trainingLocations.$inferInsert;
 
 // ============================================================
 // NEW TABLES - PROGRAM PREREQUISITES & TRAINEE CERTIFICATIONS
@@ -792,14 +852,19 @@ export const elearningBlocks = pgTable("elearning_blocks", {
 
 export const quizQuestions = pgTable("quiz_questions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  blockId: varchar("block_id").notNull(),
+  blockId: varchar("block_id"),
+  quizId: varchar("quiz_id"),
   question: text("question").notNull(),
   type: text("type").notNull().default("qcm"),
   options: jsonb("options").$type<string[]>().default([]),
   correctAnswer: integer("correct_answer").notNull().default(0),
   explanation: text("explanation"),
   orderIndex: integer("order_index").notNull().default(0),
+  order: integer("order").notNull().default(0),
   timecode: integer("timecode"),
+  timeLimit: integer("time_limit").notNull().default(20),
+  points: integer("points").notNull().default(100),
+  imageUrl: text("image_url"),
 });
 
 export const learnerProgress = pgTable("learner_progress", {
@@ -946,6 +1011,11 @@ export const attendanceSheets = pgTable("attendance_sheets", {
   sessionId: varchar("session_id").notNull(),
   date: date("date").notNull(),
   period: text("period").notNull().default("journee"),
+  startTime: text("start_time"), // e.g. "09:00"
+  endTime: text("end_time"), // e.g. "12:30"
+  trainerId: varchar("trainer_id"),
+  trainerSignatureData: text("trainer_signature_data"),
+  trainerSignedAt: timestamp("trainer_signed_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -959,6 +1029,14 @@ export const attendanceRecords = pgTable("attendance_records", {
   notes: text("notes"),
   signatureData: text("signature_data"),
   emargementToken: varchar("emargement_token"),
+  lateArrivalTime: text("late_arrival_time"),
+  earlyDepartureTime: text("early_departure_time"),
+  // Double émargement (entrée + sortie) like Digiforma
+  entrySignedAt: timestamp("entry_signed_at"),
+  entrySignatureData: text("entry_signature_data"),
+  exitSignedAt: timestamp("exit_signed_at"),
+  exitSignatureData: text("exit_signature_data"),
+  signatureType: text("signature_type").default("tablet"), // tablet, electronic, remote, manual
 });
 
 // ============================================================
@@ -1207,6 +1285,51 @@ export const forumMutes = pgTable("forum_mutes", {
 });
 
 // ============================================================
+// KAHOOT-STYLE QUIZ SYSTEM (Autopositionnement)
+// ============================================================
+
+export const quizzes = pgTable("quizzes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  programId: varchar("program_id"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const quizSessions = pgTable("quiz_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quizId: varchar("quiz_id").notNull(),
+  sessionId: varchar("session_id"), // linked training session (optional)
+  code: varchar("code", { length: 6 }).notNull(), // 6-digit join code
+  status: text("status").notNull().default("waiting"), // waiting | active | showing_results | finished
+  currentQuestionIndex: integer("current_question_index").notNull().default(-1),
+  questionStartedAt: timestamp("question_started_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const quizParticipants = pgTable("quiz_participants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quizSessionId: varchar("quiz_session_id").notNull(),
+  pseudo: text("pseudo").notNull(),
+  traineeId: varchar("trainee_id"), // optional link to real trainee
+  score: integer("score").notNull().default(0),
+  joinedAt: timestamp("joined_at").defaultNow(),
+});
+
+export const quizAnswers = pgTable("quiz_answers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quizSessionId: varchar("quiz_session_id").notNull(),
+  questionId: varchar("question_id").notNull(),
+  participantId: varchar("participant_id").notNull(),
+  answer: integer("answer").notNull(), // index chosen
+  answeredAt: timestamp("answered_at").defaultNow(),
+  isCorrect: boolean("is_correct").notNull().default(false),
+  points: integer("points").notNull().default(0),
+  responseTimeMs: integer("response_time_ms"), // how fast they answered
+});
+
+// ============================================================
 // INSERT SCHEMAS
 // ============================================================
 
@@ -1263,6 +1386,11 @@ export const insertTrainerCompetencySchema = createInsertSchema(trainerCompetenc
 export const insertForumPostSchema = createInsertSchema(forumPosts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertForumReplySchema = createInsertSchema(forumReplies).omit({ id: true, createdAt: true });
 export const insertForumMuteSchema = createInsertSchema(forumMutes).omit({ id: true, createdAt: true });
+
+export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, createdAt: true });
+export const insertQuizSessionSchema = createInsertSchema(quizSessions).omit({ id: true, createdAt: true });
+export const insertQuizParticipantSchema = createInsertSchema(quizParticipants).omit({ id: true, joinedAt: true });
+export const insertQuizAnswerSchema = createInsertSchema(quizAnswers).omit({ id: true, answeredAt: true });
 
 // ============================================================
 // ANALYSIS COMMENTS (post-évaluation)
@@ -1675,6 +1803,15 @@ export type InsertForumReply = z.infer<typeof insertForumReplySchema>;
 export type ForumReply = typeof forumReplies.$inferSelect;
 export type InsertForumMute = z.infer<typeof insertForumMuteSchema>;
 export type ForumMute = typeof forumMutes.$inferSelect;
+
+export type Quiz = typeof quizzes.$inferSelect;
+export type InsertQuiz = z.infer<typeof insertQuizSchema>;
+export type QuizSession = typeof quizSessions.$inferSelect;
+export type InsertQuizSession = z.infer<typeof insertQuizSessionSchema>;
+export type QuizParticipant = typeof quizParticipants.$inferSelect;
+export type InsertQuizParticipant = z.infer<typeof insertQuizParticipantSchema>;
+export type QuizAnswer = typeof quizAnswers.$inferSelect;
+export type InsertQuizAnswer = z.infer<typeof insertQuizAnswerSchema>;
 export type InsertAnalysisComment = z.infer<typeof insertAnalysisCommentSchema>;
 export type AnalysisComment = typeof analysisComments.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
@@ -1952,6 +2089,7 @@ export const ATTENDANCE_STATUSES = [
   { value: "absent", label: "Absent", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
   { value: "late", label: "Retard", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
   { value: "excused", label: "Excusé", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "early_departure", label: "Départ anticipé", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
 ] as const;
 
 export const ATTENDANCE_PERIODS = [

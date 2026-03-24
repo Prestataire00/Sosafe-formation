@@ -135,6 +135,7 @@ export async function registerRoutes(
             fundingTypes: program.fundingTypes,
             certifying: program.certifying,
             recyclingMonths: program.recyclingMonths,
+            customFields: program.customFields || [],
           } : null,
           prerequisites: prerequisites.map(p => ({
             id: p.id,
@@ -318,7 +319,7 @@ export async function registerRoutes(
   // POST /api/public/enrollments — public enrollment
   app.post("/api/public/enrollments", async (req, res) => {
     try {
-      const { sessionId, firstName, lastName, email, phone, company, documents, rppsNumber, profession } = req.body;
+      const { sessionId, firstName, lastName, email, phone, company, documents, rppsNumber, profession, customData } = req.body;
 
       // Validate required fields
       if (!sessionId || !firstName || !lastName || !email) {
@@ -463,6 +464,7 @@ export async function registerRoutes(
           traineeId: trainee.id,
           status: "waitlisted",
           waitlistPosition,
+          customData: customData || {},
         });
         await storage.updateEnrollment(enrollment.id, { waitlistedAt: new Date() } as any);
       } else {
@@ -470,6 +472,7 @@ export async function registerRoutes(
           sessionId,
           traineeId: trainee.id,
           status: "pending",
+          customData: customData || {},
         });
       }
 
@@ -656,15 +659,20 @@ export async function registerRoutes(
         }
       }
       const periodLabel = sheet?.period === "matin" ? "Matin"
-        : sheet?.period === "apres-midi" ? "Apres-midi" : "Journee entiere";
+        : sheet?.period === "apres-midi" ? "Après-midi" : "Journée entière";
 
       res.json({
         traineeName: trainee ? `${trainee.firstName} ${trainee.lastName}` : "Stagiaire",
         sessionTitle,
         date: sheet?.date || "",
         period: periodLabel,
+        startTime: sheet?.startTime || null,
+        endTime: sheet?.endTime || null,
         modality,
         alreadySigned: !!record.signedAt,
+        // Double émargement info
+        entrySignedAt: record.entrySignedAt || null,
+        exitSignedAt: record.exitSignedAt || null,
       });
     } catch (err) {
       console.error("[emargement] public GET error:", err);
@@ -672,21 +680,48 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/public/emargement/:token — sign attendance via token
+  // POST /api/public/emargement/:token — sign attendance via token (supports entry/exit)
   app.post("/api/public/emargement/:token", async (req, res) => {
     try {
       const record = await storage.getAttendanceRecordByToken(req.params.token);
       if (!record) return res.status(404).json({ message: "Lien d'emargement invalide ou expire" });
-      if (record.signedAt) return res.status(409).json({ message: "Emargement deja effectue" });
 
-      const { signatureData } = req.body;
-      await storage.updateAttendanceRecord(record.id, {
-        status: "present",
-        signedAt: new Date(),
-        signatureData: signatureData || null,
-      });
+      const { signatureData, mode } = req.body; // mode: "entry" | "exit" | undefined (legacy single sign)
 
-      res.json({ success: true, message: "Emargement enregistre avec succes" });
+      if (mode === "exit") {
+        // Exit signing
+        if (record.exitSignedAt) return res.status(409).json({ message: "Signature de sortie déjà effectuée" });
+        if (!record.entrySignedAt) return res.status(400).json({ message: "Veuillez d'abord signer l'entrée" });
+        await storage.updateAttendanceRecord(record.id, {
+          exitSignedAt: new Date(),
+          exitSignatureData: signatureData || null,
+          signatureType: "electronic",
+        } as any);
+        res.json({ success: true, message: "Signature de sortie enregistrée" });
+      } else if (mode === "entry") {
+        // Entry signing
+        if (record.entrySignedAt) return res.status(409).json({ message: "Signature d'entrée déjà effectuée" });
+        await storage.updateAttendanceRecord(record.id, {
+          status: "present",
+          signedAt: new Date(),
+          entrySignedAt: new Date(),
+          entrySignatureData: signatureData || null,
+          signatureType: "electronic",
+        } as any);
+        res.json({ success: true, message: "Signature d'entrée enregistrée" });
+      } else {
+        // Legacy single signing (backward compat)
+        if (record.signedAt) return res.status(409).json({ message: "Emargement déjà effectué" });
+        await storage.updateAttendanceRecord(record.id, {
+          status: "present",
+          signedAt: new Date(),
+          signatureData: signatureData || null,
+          entrySignedAt: new Date(),
+          entrySignatureData: signatureData || null,
+          signatureType: "electronic",
+        } as any);
+        res.json({ success: true, message: "Emargement enregistré avec succès" });
+      }
     } catch (err) {
       console.error("[emargement] public POST error:", err);
       res.status(500).json({ message: "Erreur lors de l'emargement" });
@@ -1337,6 +1372,191 @@ export async function registerRoutes(
     }
   });
 
+  // GET /api/programs/:id/pdf — generate individual program PDF
+  app.get("/api/programs/:id/pdf", async (req, res) => {
+    try {
+      const program = await storage.getProgram(req.params.id);
+      if (!program) return res.status(404).json({ message: "Formation non trouvée" });
+
+      const settings = await storage.getOrganizationSettings();
+      const settingsMap = Object.fromEntries(settings.map(s => [s.key, s.value]));
+
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const fontItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+
+      const W = 595.28, H = 841.89, M = 50, maxW = W - M * 2;
+      const blue = rgb(0.06, 0.31, 0.55);
+      const darkGray = rgb(0.2, 0.2, 0.2);
+      const lightGray = rgb(0.93, 0.93, 0.93);
+
+      // Helper: wrap text into lines
+      const wrapText = (text: string, f: typeof font, size: number, mw: number): string[] => {
+        const lines: string[] = [];
+        for (const paragraph of text.split("\n")) {
+          if (!paragraph.trim()) { lines.push(""); continue; }
+          const words = paragraph.split(" ");
+          let line = "";
+          for (const word of words) {
+            const test = line ? line + " " + word : word;
+            if (f.widthOfTextAtSize(test, size) > mw) {
+              if (line) lines.push(line);
+              line = word;
+            } else {
+              line = test;
+            }
+          }
+          if (line) lines.push(line);
+        }
+        return lines;
+      };
+
+      // Helper: draw section
+      let page = pdfDoc.addPage([W, H]);
+      let y = H - M;
+
+      const newPageIfNeeded = (needed: number) => {
+        if (y - needed < M + 30) {
+          page = pdfDoc.addPage([W, H]);
+          y = H - M;
+        }
+      };
+
+      const drawSection = (title: string, content: string, icon?: string) => {
+        if (!content || !content.trim()) return;
+        newPageIfNeeded(80);
+        // Section title with colored bar
+        page.drawRectangle({ x: M, y: y - 2, width: 4, height: 18, color: blue });
+        page.drawText((icon ? icon + " " : "") + title, { x: M + 12, y, font: fontBold, size: 12, color: blue });
+        y -= 22;
+        // Content
+        const lines = wrapText(content.trim(), font, 10, maxW - 12);
+        for (const line of lines) {
+          newPageIfNeeded(16);
+          page.drawText(line, { x: M + 12, y, font, size: 10, color: darkGray });
+          y -= 15;
+        }
+        y -= 8;
+      };
+
+      // === HEADER ===
+      // Logo
+      const orgLogoUrl = settingsMap["org_logo_url"];
+      if (orgLogoUrl) {
+        try {
+          let logoBytes: Buffer;
+          if (orgLogoUrl.startsWith("/")) {
+            const fsMod = await import("fs");
+            const pathMod = await import("path");
+            const pubPath = pathMod.resolve(process.cwd(), "client/public", orgLogoUrl.replace(/^\//, ""));
+            const rootPath = pathMod.resolve(process.cwd(), orgLogoUrl.replace(/^\//, ""));
+            logoBytes = fsMod.existsSync(pubPath) ? fsMod.readFileSync(pubPath) : fsMod.readFileSync(rootPath);
+          } else {
+            const resp = await fetch(orgLogoUrl);
+            logoBytes = Buffer.from(await resp.arrayBuffer());
+          }
+          const logoImg = orgLogoUrl.toLowerCase().endsWith(".png")
+            ? await pdfDoc.embedPng(logoBytes)
+            : await pdfDoc.embedJpg(logoBytes);
+          const dims = logoImg.scale(Math.min(1, 120 / logoImg.width, 40 / logoImg.height));
+          page.drawImage(logoImg, { x: M, y: y - dims.height, width: dims.width, height: dims.height });
+          y -= dims.height + 12;
+        } catch { /* skip logo */ }
+      }
+
+      // Organization name
+      const orgName = settingsMap["org_name"] || "SO'SAFE";
+      page.drawText(orgName, { x: M, y, font: fontBold, size: 10, color: blue });
+      y -= 18;
+
+      // Title background
+      const titleLines = wrapText(program.title, fontBold, 20, maxW);
+      const titleBlockH = titleLines.length * 26 + 20;
+      page.drawRectangle({ x: M, y: y - titleBlockH + 10, width: maxW, height: titleBlockH, color: blue });
+      for (const line of titleLines) {
+        page.drawText(line, { x: M + 16, y: y - 6, font: fontBold, size: 20, color: rgb(1, 1, 1) });
+        y -= 26;
+      }
+      y -= 16;
+
+      // Subtitle
+      if (program.subtitle) {
+        const subLines = wrapText(program.subtitle, fontItalic, 11, maxW);
+        for (const line of subLines) {
+          page.drawText(line, { x: M, y, font: fontItalic, size: 11, color: darkGray });
+          y -= 16;
+        }
+        y -= 6;
+      }
+
+      // === INFO BAR ===
+      const modalityLabel: Record<string, string> = { presentiel: "Présentiel", distanciel: "Distanciel", blended: "Blended", hybride: "Hybride" };
+      const infos: string[] = [];
+      if (program.duration) infos.push(`Durée : ${program.duration}h`);
+      if (program.modality) infos.push(`Modalité : ${modalityLabel[program.modality] || program.modality}`);
+      if (program.price) infos.push(`Tarif : ${program.price}€`);
+      if (program.certifying) infos.push("Certifiante");
+      const categories = program.categories || [];
+      if (categories.length > 0) infos.push(`Catégorie : ${categories.join(", ")}`);
+
+      if (infos.length > 0) {
+        newPageIfNeeded(30);
+        page.drawRectangle({ x: M, y: y - 6, width: maxW, height: 22, color: lightGray });
+        page.drawText(infos.join("  |  "), { x: M + 10, y: y, font, size: 9, color: darkGray });
+        y -= 28;
+      }
+      y -= 6;
+
+      // === SECTIONS ===
+      if (program.description) drawSection("Description", program.description);
+      if (program.objectives) drawSection("Objectifs de la formation", program.objectives);
+      if (program.targetAudience) drawSection("Public visé", program.targetAudience);
+      if (program.prerequisites) drawSection("Prérequis", program.prerequisites);
+      if (program.programContent) drawSection("Contenu du programme", program.programContent);
+      if (program.teachingMethods) drawSection("Moyens pédagogiques", program.teachingMethods);
+      if (program.evaluationMethods) drawSection("Modalités d'évaluation", program.evaluationMethods);
+      if (program.technicalMeans) drawSection("Moyens techniques", program.technicalMeans);
+      if (program.accessibilityInfo) drawSection("Accessibilité", program.accessibilityInfo);
+      if (program.accessDelay) drawSection("Délai d'accès", program.accessDelay);
+      if (program.resultIndicators) drawSection("Indicateurs de résultats", program.resultIndicators);
+
+      // === FOOTER on each page ===
+      const orgPhone = settingsMap["org_phone"] || "";
+      const orgEmail = settingsMap["org_email"] || "";
+      const orgAddress = settingsMap["org_address"] || "";
+      const nda = settingsMap["org_nda"] || "";
+      const footerParts: string[] = [];
+      if (orgName) footerParts.push(orgName);
+      if (orgPhone) footerParts.push(orgPhone);
+      if (orgEmail) footerParts.push(orgEmail);
+      const footerLine1 = footerParts.join(" - ");
+      const footerLine2Parts: string[] = [];
+      if (orgAddress) footerLine2Parts.push(orgAddress);
+      if (nda) footerLine2Parts.push(`N° déclaration d'activité : ${nda}`);
+      const footerLine2 = footerLine2Parts.join(" - ");
+
+      const pages = pdfDoc.getPages();
+      for (let i = 0; i < pages.length; i++) {
+        const pg = pages[i];
+        pg.drawLine({ start: { x: M, y: 45 }, end: { x: W - M, y: 45 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+        if (footerLine1) pg.drawText(footerLine1, { x: M, y: 32, font, size: 7, color: rgb(0.5, 0.5, 0.5) });
+        if (footerLine2) pg.drawText(footerLine2, { x: M, y: 22, font, size: 7, color: rgb(0.5, 0.5, 0.5) });
+        pg.drawText(`${i + 1}/${pages.length}`, { x: W - M - 20, y: 22, font, size: 7, color: rgb(0.5, 0.5, 0.5) });
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const safeTitle = program.title.replace(/[^a-zA-Z0-9àâéèêëïîôùûüçÀÂÉÈÊËÏÎÔÙÛÜÇ ]/g, "").replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Programme_${safeTitle}.pdf"`);
+      res.setHeader("Content-Length", pdfBytes.length.toString());
+      res.send(Buffer.from(pdfBytes));
+    } catch (error) {
+      console.error("Error generating program PDF:", error);
+      res.status(500).json({ message: "Erreur lors de la génération du programme PDF" });
+    }
+  });
+
   app.get("/api/programs/:id", async (req, res) => {
     const program = await storage.getProgram(req.params.id);
     if (!program) return res.status(404).json({ message: "Formation non trouvée" });
@@ -1370,9 +1590,11 @@ export async function registerRoutes(
   app.get("/api/sessions", async (req: any, res) => {
     const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
     let result = await storage.getSessions();
-    // Trainers only see sessions assigned to them
-    if (user && (user.role === "trainer" || user.role === "formateur")) {
-      result = result.filter((s: any) => s.trainerId === user.trainerId);
+    // Trainers only see sessions assigned to them (check both legacy trainerId and session_trainers table)
+    if (user && (user.role === "trainer" || user.role === "formateur") && user.trainerId) {
+      const allST = await storage.getAllSessionTrainers();
+      const stSessionIds = new Set(allST.filter((st) => st.trainerId === user.trainerId).map((st) => st.sessionId));
+      result = result.filter((s: any) => s.trainerId === user.trainerId || stSessionIds.has(s.id));
     }
     res.json(result);
   });
@@ -1575,15 +1797,15 @@ export async function registerRoutes(
                 const status = record?.status || "absent";
                 total++;
                 if (status === "present") present++;
-                const color = status === "present" ? "#16a34a" : status === "late" ? "#d97706" : status === "excused" ? "#2563eb" : "#dc2626";
-                const label = status === "present" ? "P" : status === "late" ? "R" : status === "excused" ? "E" : "A";
+                const color = status === "present" ? "#16a34a" : status === "late" ? "#d97706" : status === "excused" ? "#2563eb" : status === "early_departure" ? "#9333ea" : "#dc2626";
+                const label = status === "present" ? "P" : status === "late" ? "R" : status === "excused" ? "E" : status === "early_departure" ? "D" : "A";
                 html += `<td style="border:1px solid #999;padding:6px;text-align:center;color:${color};font-weight:600;font-size:12px;">${label}</td>`;
               }
               const rate = total > 0 ? Math.round((present / total) * 100) : 0;
               html += `<td style="border:1px solid #999;padding:6px;text-align:center;font-weight:600;">${rate}%</td></tr>`;
             }
             html += `</tbody></table>`;
-            html += `<p style="margin-top:15px;font-size:11px;color:#666;">P = Present, A = Absent, R = Retard, E = Excuse</p>`;
+            html += `<p style="margin-top:15px;font-size:11px;color:#666;">P = Present, A = Absent, R = Retard, E = Excuse, D = Depart anticipe</p>`;
             html += `<p style="margin-top:20px;font-size:12px;color:#666;">Rapport genere automatiquement le ${new Date().toLocaleDateString("fr-FR")}</p></div>`;
 
             await storage.createGeneratedDocument({
@@ -1633,6 +1855,82 @@ export async function registerRoutes(
 
   app.delete("/api/sessions/:id", async (req, res) => {
     await storage.deleteSession(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // SESSION TRAINERS (multi-formateur)
+  // ============================================================
+
+  app.get("/api/sessions/:id/trainers", async (req, res) => {
+    const st = await storage.getSessionTrainers(req.params.id);
+    res.json(st);
+  });
+
+  app.get("/api/session-trainers", async (_req, res) => {
+    const all = await storage.getAllSessionTrainers();
+    res.json(all);
+  });
+
+  app.put("/api/sessions/:id/trainers", async (req, res) => {
+    const { trainerIds } = req.body as { trainerIds: { trainerId: string; role?: string }[] };
+    if (!Array.isArray(trainerIds)) return res.status(400).json({ message: "trainerIds must be an array" });
+
+    const result = await storage.setSessionTrainers(req.params.id, trainerIds);
+
+    // Also update the legacy trainerId field (first trainer = primary)
+    const primaryTrainerId = trainerIds.length > 0 ? trainerIds[0].trainerId : null;
+    await storage.updateSession(req.params.id, { trainerId: primaryTrainerId });
+
+    res.json(result);
+  });
+
+  app.post("/api/sessions/:id/trainers", async (req, res) => {
+    const { trainerId, role } = req.body as { trainerId: string; role?: string };
+    if (!trainerId) return res.status(400).json({ message: "trainerId is required" });
+    const result = await storage.addSessionTrainer({ sessionId: req.params.id, trainerId, role: role || "trainer" });
+    res.status(201).json(result);
+  });
+
+  app.delete("/api/sessions/:id/trainers/:trainerId", async (req, res) => {
+    await storage.removeSessionTrainer(req.params.id, req.params.trainerId);
+    res.status(204).send();
+  });
+
+  // ============================================================
+  // TRAINING LOCATIONS (bibliothèque de lieux)
+  // ============================================================
+
+  app.get("/api/training-locations", async (_req, res) => {
+    const locations = await storage.getTrainingLocations();
+    res.json(locations);
+  });
+
+  app.get("/api/training-locations/:id", async (req, res) => {
+    const location = await storage.getTrainingLocation(req.params.id);
+    if (!location) return res.status(404).json({ message: "Lieu non trouvé" });
+    res.json(location);
+  });
+
+  app.post("/api/training-locations", async (req, res) => {
+    const { insertTrainingLocationSchema } = await import("@shared/schema");
+    const parsed = insertTrainingLocationSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const location = await storage.createTrainingLocation(parsed.data);
+    res.status(201).json(location);
+  });
+
+  app.patch("/api/training-locations/:id", async (req, res) => {
+    const { insertTrainingLocationSchema } = await import("@shared/schema");
+    const parsed = insertTrainingLocationSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const location = await storage.updateTrainingLocation(req.params.id, parsed.data);
+    if (!location) return res.status(404).json({ message: "Lieu non trouvé" });
+    res.json(location);
+  });
+
+  app.delete("/api/training-locations/:id", async (req, res) => {
+    await storage.deleteTrainingLocation(req.params.id);
     res.status(204).send();
   });
 
@@ -2126,6 +2424,41 @@ export async function registerRoutes(
   app.delete("/api/document-templates/:id", async (req, res) => {
     await storage.deleteDocumentTemplate(req.params.id);
     res.status(204).send();
+  });
+
+  // Duplicate a document template
+  app.post("/api/document-templates/:id/duplicate", async (req, res) => {
+    try {
+      const original = await storage.getDocumentTemplate(req.params.id);
+      if (!original) return res.status(404).json({ message: "Template introuvable" });
+
+      const { name, replacements } = req.body;
+      let content = original.content || "";
+
+      // Apply replacements if provided (e.g. { "{nom_entreprise}": "Nouvelle Entreprise" })
+      if (replacements && typeof replacements === "object") {
+        for (const [key, value] of Object.entries(replacements)) {
+          content = content.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), String(value));
+        }
+      }
+
+      const duplicate = await storage.createDocumentTemplate({
+        name: name || `${original.name} (copie)`,
+        type: original.type,
+        content,
+        variables: original.variables,
+        brandColor: (original as any).brandColor,
+        fontFamily: (original as any).fontFamily,
+        logoUrl: (original as any).logoUrl,
+        headerHtml: (original as any).headerHtml,
+        footerHtml: (original as any).footerHtml,
+      } as any);
+
+      res.status(201).json(duplicate);
+    } catch (err) {
+      console.error("[document-templates] duplicate error:", err);
+      res.status(500).json({ message: "Erreur lors de la duplication" });
+    }
   });
 
   // AI-generate a document template
@@ -4617,6 +4950,263 @@ Le contenu doit être en français, clair et bien structuré.`;
   });
 
   // ============================================================
+  // QUIZ SYSTEM (Kahoot-style autopositionnement)
+  // ============================================================
+
+  // Admin: CRUD quizzes
+  app.get("/api/quizzes", requireAuth, async (req, res) => {
+    const quizzes = await storage.getQuizzes();
+    res.json(quizzes);
+  });
+
+  app.get("/api/quizzes/:id", requireAuth, async (req, res) => {
+    const quiz = await storage.getQuiz(req.params.id);
+    if (!quiz) return res.status(404).json({ message: "Quiz introuvable" });
+    const questions = await storage.getQuizQuestions(quiz.id);
+    res.json({ ...quiz, questions });
+  });
+
+  app.post("/api/quizzes", requireAuth, async (req, res) => {
+    const quiz = await storage.createQuiz(req.body);
+    res.status(201).json(quiz);
+  });
+
+  app.patch("/api/quizzes/:id", requireAuth, async (req, res) => {
+    const quiz = await storage.updateQuiz(req.params.id, req.body);
+    if (!quiz) return res.status(404).json({ message: "Quiz introuvable" });
+    res.json(quiz);
+  });
+
+  app.delete("/api/quizzes/:id", requireAuth, async (req, res) => {
+    await storage.deleteQuiz(req.params.id);
+    res.status(204).send();
+  });
+
+  // Admin: CRUD quiz questions
+  app.get("/api/quizzes/:quizId/questions", requireAuth, async (req, res) => {
+    const questions = await storage.getQuizQuestions(req.params.quizId);
+    res.json(questions);
+  });
+
+  app.post("/api/quizzes/:quizId/questions", requireAuth, async (req, res) => {
+    const question = await storage.createQuizQuestion({ ...req.body, quizId: req.params.quizId });
+    res.status(201).json(question);
+  });
+
+  app.patch("/api/quiz-questions/:id", requireAuth, async (req, res) => {
+    const question = await storage.updateQuizQuestion(req.params.id, req.body);
+    if (!question) return res.status(404).json({ message: "Question introuvable" });
+    res.json(question);
+  });
+
+  app.delete("/api/quiz-questions/:id", requireAuth, async (req, res) => {
+    await storage.deleteQuizQuestion(req.params.id);
+    res.status(204).send();
+  });
+
+  // Admin: Start a live quiz session
+  app.post("/api/quiz-sessions", requireAuth, async (req, res) => {
+    const { quizId, sessionId } = req.body;
+    // Generate 6-digit code
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const qs = await storage.createQuizSession({
+      quizId,
+      sessionId: sessionId || null,
+      code,
+      status: "waiting",
+      currentQuestionIndex: -1,
+    });
+    res.status(201).json(qs);
+  });
+
+  app.get("/api/quiz-sessions", requireAuth, async (req, res) => {
+    const quizId = req.query.quizId as string | undefined;
+    const sessions = await storage.getQuizSessions(quizId);
+    res.json(sessions);
+  });
+
+  app.get("/api/quiz-sessions/:id", requireAuth, async (req, res) => {
+    const qs = await storage.getQuizSession(req.params.id);
+    if (!qs) return res.status(404).json({ message: "Session quiz introuvable" });
+    const quiz = await storage.getQuiz(qs.quizId);
+    const questions = await storage.getQuizQuestions(qs.quizId);
+    const participants = await storage.getQuizParticipants(qs.id);
+    res.json({ ...qs, quiz, questions, participants });
+  });
+
+  // Admin: Control quiz session (next question, show results, finish)
+  app.post("/api/quiz-sessions/:id/next", requireAuth, async (req, res) => {
+    const qs = await storage.getQuizSession(req.params.id);
+    if (!qs) return res.status(404).json({ message: "Session introuvable" });
+
+    const questions = await storage.getQuizQuestions(qs.quizId);
+    const nextIndex = qs.currentQuestionIndex + 1;
+
+    if (nextIndex >= questions.length) {
+      // Quiz finished
+      const updated = await storage.updateQuizSession(qs.id, {
+        status: "finished",
+        currentQuestionIndex: nextIndex,
+      });
+      return res.json(updated);
+    }
+
+    const updated = await storage.updateQuizSession(qs.id, {
+      status: "active",
+      currentQuestionIndex: nextIndex,
+      questionStartedAt: new Date(),
+    });
+    res.json(updated);
+  });
+
+  app.post("/api/quiz-sessions/:id/show-results", requireAuth, async (req, res) => {
+    const updated = await storage.updateQuizSession(req.params.id, {
+      status: "showing_results",
+    });
+    if (!updated) return res.status(404).json({ message: "Session introuvable" });
+    res.json(updated);
+  });
+
+  app.post("/api/quiz-sessions/:id/finish", requireAuth, async (req, res) => {
+    const updated = await storage.updateQuizSession(req.params.id, {
+      status: "finished",
+    });
+    if (!updated) return res.status(404).json({ message: "Session introuvable" });
+    res.json(updated);
+  });
+
+  // Admin: Get leaderboard for a quiz session
+  app.get("/api/quiz-sessions/:id/leaderboard", requireAuth, async (req, res) => {
+    const participants = await storage.getQuizParticipants(req.params.id);
+    res.json(participants);
+  });
+
+  // Admin: Get answers for a specific question
+  app.get("/api/quiz-sessions/:id/answers", requireAuth, async (req, res) => {
+    const questionId = req.query.questionId as string | undefined;
+    const answers = await storage.getQuizAnswers(req.params.id, questionId);
+    res.json(answers);
+  });
+
+  // ---- PUBLIC QUIZ ENDPOINTS (no auth required) ----
+
+  // Join a quiz session by code
+  app.post("/api/public/quiz/join", async (req, res) => {
+    const { code, pseudo, traineeId } = req.body;
+    if (!code || !pseudo) return res.status(400).json({ message: "Code et pseudo requis" });
+
+    const qs = await storage.getQuizSessionByCode(code);
+    if (!qs) return res.status(404).json({ message: "Code invalide" });
+    if (qs.status === "finished") return res.status(400).json({ message: "Ce quiz est terminé" });
+
+    // Check if pseudo already taken in this session
+    const participants = await storage.getQuizParticipants(qs.id);
+    if (participants.find((p: any) => p.pseudo.toLowerCase() === pseudo.toLowerCase())) {
+      return res.status(400).json({ message: "Ce pseudo est déjà pris" });
+    }
+
+    const participant = await storage.createQuizParticipant({
+      quizSessionId: qs.id,
+      pseudo,
+      traineeId: traineeId || null,
+      score: 0,
+    });
+
+    res.status(201).json({ participant, quizSessionId: qs.id });
+  });
+
+  // Poll: get current quiz state (public)
+  app.get("/api/public/quiz/session/:id", async (req, res) => {
+    const qs = await storage.getQuizSession(req.params.id);
+    if (!qs) return res.status(404).json({ message: "Session introuvable" });
+
+    const quiz = await storage.getQuiz(qs.quizId);
+    const questions = await storage.getQuizQuestions(qs.quizId);
+    const participants = await storage.getQuizParticipants(qs.id);
+
+    // Don't expose correctAnswer to participants until showing_results
+    const safeQuestions = questions.map((q: any, idx: number) => {
+      if (qs.status === "active" && idx === qs.currentQuestionIndex) {
+        return { id: q.id, question: q.question, options: q.options, timeLimit: q.timeLimit, points: q.points, order: q.order, imageUrl: q.imageUrl };
+      }
+      if (qs.status === "showing_results" && idx === qs.currentQuestionIndex) {
+        return q; // show correctAnswer
+      }
+      if (idx < qs.currentQuestionIndex) {
+        return q; // past questions: show answers
+      }
+      return { id: q.id, order: q.order }; // future questions: hide
+    });
+
+    res.json({
+      id: qs.id,
+      status: qs.status,
+      currentQuestionIndex: qs.currentQuestionIndex,
+      questionStartedAt: qs.questionStartedAt,
+      quizTitle: quiz?.title,
+      totalQuestions: questions.length,
+      questions: safeQuestions,
+      participants: participants.map((p: any) => ({ id: p.id, pseudo: p.pseudo, score: p.score })),
+    });
+  });
+
+  // Submit an answer (public)
+  app.post("/api/public/quiz/answer", async (req, res) => {
+    const { quizSessionId, questionId, participantId, answer } = req.body;
+    if (!quizSessionId || !questionId || !participantId || answer === undefined) {
+      return res.status(400).json({ message: "Données manquantes" });
+    }
+
+    const qs = await storage.getQuizSession(quizSessionId);
+    if (!qs || qs.status !== "active") return res.status(400).json({ message: "La question n'est plus active" });
+
+    // Check if already answered
+    const existingAnswers = await storage.getQuizAnswers(quizSessionId, questionId);
+    if (existingAnswers.find((a: any) => a.participantId === participantId)) {
+      return res.status(400).json({ message: "Vous avez déjà répondu" });
+    }
+
+    // Get the question to check correctness
+    const questions = await storage.getQuizQuestions(qs.quizId);
+    const question = questions.find((q: any) => q.id === questionId);
+    if (!question) return res.status(404).json({ message: "Question introuvable" });
+
+    const isCorrect = answer === question.correctAnswer;
+    const responseTimeMs = qs.questionStartedAt
+      ? Date.now() - new Date(qs.questionStartedAt).getTime()
+      : 0;
+
+    // Calculate points: base points * time bonus (faster = more points)
+    let points = 0;
+    if (isCorrect) {
+      const timeLimitMs = question.timeLimit * 1000;
+      const timeRatio = Math.max(0, 1 - (responseTimeMs / timeLimitMs));
+      points = Math.round(question.points * (0.5 + 0.5 * timeRatio)); // min 50% of points if correct
+    }
+
+    const answerRecord = await storage.createQuizAnswer({
+      quizSessionId,
+      questionId,
+      participantId,
+      answer,
+      isCorrect,
+      points,
+      responseTimeMs,
+    });
+
+    // Update participant score
+    const participant = await storage.getQuizParticipants(quizSessionId)
+      .then(ps => ps.find((p: any) => p.id === participantId));
+    if (participant) {
+      await storage.updateQuizParticipant(participantId, {
+        score: participant.score + points,
+      });
+    }
+
+    res.status(201).json({ isCorrect, points, responseTimeMs });
+  });
+
+  // ============================================================
   // FORUM / ESPACE COLLABORATIF
   // ============================================================
 
@@ -5710,6 +6300,93 @@ Le contenu doit être en français, clair et bien structuré.`;
     res.status(204).send();
   });
 
+  // POST /api/attendance-sheets/:id/trainer-sign — trainer signs an attendance sheet
+  app.post("/api/attendance-sheets/:id/trainer-sign", async (req, res) => {
+    try {
+      const { signatureData, trainerId } = req.body;
+      const sheet = await storage.updateAttendanceSheet(req.params.id, {
+        trainerSignatureData: signatureData,
+        trainerSignedAt: new Date(),
+        trainerId: trainerId || (req as any).user?.id,
+      } as any);
+      if (!sheet) return res.status(404).json({ message: "Feuille non trouvée" });
+      res.json(sheet);
+    } catch (err) {
+      console.error("[attendance-sheets] trainer-sign error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // POST /api/attendance-sheets/auto-generate — auto-create AM/PM sheets from session dates (Digiforma style)
+  app.post("/api/attendance-sheets/auto-generate", async (req, res) => {
+    try {
+      const { sessionId, splitAmPm } = req.body;
+      if (!sessionId) return res.status(400).json({ message: "sessionId requis" });
+
+      const session = await storage.getSession(sessionId);
+      if (!session) return res.status(404).json({ message: "Session introuvable" });
+
+      const sessionDatesList = await storage.getSessionDates(sessionId);
+      const existingSheets = await storage.getAttendanceSheets(sessionId);
+
+      let created = 0;
+      let existing = 0;
+
+      const sheetExists = (dateStr: string, period: string) =>
+        existingSheets.some((s: any) => {
+          const sheetDate = typeof s.date === "string" ? s.date : new Date(s.date).toISOString().split("T")[0];
+          return sheetDate === dateStr && s.period === period;
+        });
+
+      const createSheets = async (dateStr: string, sdStartTime?: string, sdEndTime?: string) => {
+        if (splitAmPm !== false) {
+          // Create AM + PM sheets with time slots (Digiforma style)
+          const amStart = sdStartTime || "09:00";
+          const amEnd = "12:30";
+          const pmStart = "13:30";
+          const pmEnd = sdEndTime || "17:00";
+
+          if (!sheetExists(dateStr, "matin")) {
+            await storage.createAttendanceSheet({ sessionId, date: dateStr, period: "matin", startTime: amStart, endTime: amEnd } as any);
+            created++;
+          } else existing++;
+
+          if (!sheetExists(dateStr, "apres-midi")) {
+            await storage.createAttendanceSheet({ sessionId, date: dateStr, period: "apres-midi", startTime: pmStart, endTime: pmEnd } as any);
+            created++;
+          } else existing++;
+        } else {
+          // Single day sheet
+          if (!sheetExists(dateStr, "journee")) {
+            await storage.createAttendanceSheet({ sessionId, date: dateStr, period: "journee", startTime: sdStartTime || "09:00", endTime: sdEndTime || "17:00" } as any);
+            created++;
+          } else existing++;
+        }
+      };
+
+      if (sessionDatesList.length > 0) {
+        for (const sd of sessionDatesList) {
+          const dateStr = typeof sd.date === "string" ? sd.date : new Date(sd.date).toISOString().split("T")[0];
+          await createSheets(dateStr, sd.startTime || undefined, sd.endTime || undefined);
+        }
+      } else {
+        const start = new Date(session.startDate);
+        const end = new Date(session.endDate);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dayOfWeek = d.getDay();
+          if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+          const dateStr = d.toISOString().split("T")[0];
+          await createSheets(dateStr);
+        }
+      }
+
+      res.json({ created, existing });
+    } catch (err) {
+      console.error("[attendance-sheets] auto-generate error:", err);
+      res.status(500).json({ message: "Erreur lors de la génération" });
+    }
+  });
+
   // ============================================================
   // ATTENDANCE RECORDS
   // ============================================================
@@ -5734,19 +6411,50 @@ Le contenu doit être en français, clair et bien structuré.`;
     const absent = allRecords.filter(r => r.status === "absent").length;
     const late = allRecords.filter(r => r.status === "late").length;
     const excused = allRecords.filter(r => r.status === "excused").length;
+    const early_departure = allRecords.filter(r => r.status === "early_departure").length;
     res.json({
       totalRecords: total,
       present,
       absent,
       late,
       excused,
+      early_departure,
       percentPresent: total > 0 ? (present / total) * 100 : 0,
       percentAbsent: total > 0 ? (absent / total) * 100 : 0,
       percentLate: total > 0 ? (late / total) * 100 : 0,
       percentExcused: total > 0 ? (excused / total) * 100 : 0,
+      percentEarlyDeparture: total > 0 ? (early_departure / total) * 100 : 0,
       rate: total > 0 ? Math.round((present / total) * 100) : 0,
       sheets: sheets.length,
     });
+  });
+
+  // POST /api/attendance-records/mark-all — mark all trainees for a sheet with a given status
+  app.post("/api/attendance-records/mark-all", async (req, res) => {
+    try {
+      const { sheetId, status, traineeIds } = req.body;
+      if (!sheetId || !status || !traineeIds?.length) {
+        return res.status(400).json({ message: "sheetId, status et traineeIds requis" });
+      }
+
+      const existingRecords = await storage.getAttendanceRecords(sheetId);
+      let updated = 0;
+
+      for (const traineeId of traineeIds) {
+        const existing = existingRecords.find((r: any) => r.traineeId === traineeId);
+        if (existing) {
+          await storage.updateAttendanceRecord(existing.id, { status });
+        } else {
+          await storage.createAttendanceRecord({ sheetId, traineeId, status });
+        }
+        updated++;
+      }
+
+      res.json({ updated });
+    } catch (err) {
+      console.error("[attendance] mark-all error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
   });
 
   app.post("/api/attendance-records", async (req, res) => {
@@ -5857,7 +6565,7 @@ Le contenu doit être en français, clair et bien structuré.`;
         const trainee = await storage.getTrainee(enrollment.traineeId);
         if (!trainee) continue;
 
-        let present = 0, absent = 0, late = 0, excused = 0, total = 0;
+        let present = 0, absent = 0, late = 0, excused = 0, early_departure = 0, total = 0;
         const sheetEntries: any[] = [];
 
         for (const sheet of sheets) {
@@ -5869,6 +6577,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           else if (status === "absent") absent++;
           else if (status === "late") late++;
           else if (status === "excused") excused++;
+          else if (status === "early_departure") early_departure++;
 
           sheetEntries.push({
             date: sheet.date,
@@ -5876,6 +6585,9 @@ Le contenu doit être en français, clair et bien structuré.`;
             status,
             signedAt: record?.signedAt || null,
             hasSignature: !!(record as any)?.signatureData,
+            notes: record?.notes || null,
+            lateArrivalTime: (record as any)?.lateArrivalTime || null,
+            earlyDepartureTime: (record as any)?.earlyDepartureTime || null,
           });
         }
 
@@ -5892,6 +6604,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           absent,
           late,
           excused,
+          early_departure,
           rate: total > 0 ? Math.round((present / total) * 100) : 0,
           sheets: sheetEntries,
         });
@@ -5993,15 +6706,15 @@ Le contenu doit être en français, clair et bien structuré.`;
           const status = record?.status || "absent";
           total++;
           if (status === "present") present++;
-          const color = status === "present" ? "#16a34a" : status === "late" ? "#d97706" : status === "excused" ? "#2563eb" : "#dc2626";
-          const label = status === "present" ? "P" : status === "late" ? "R" : status === "excused" ? "E" : "A";
+          const color = status === "present" ? "#16a34a" : status === "late" ? "#d97706" : status === "excused" ? "#2563eb" : status === "early_departure" ? "#9333ea" : "#dc2626";
+          const label = status === "present" ? "P" : status === "late" ? "R" : status === "excused" ? "E" : status === "early_departure" ? "D" : "A";
           html += `<td style="border:1px solid #999;padding:6px;text-align:center;color:${color};font-weight:600;font-size:12px;">${label}</td>`;
         }
         const rate = total > 0 ? Math.round((present / total) * 100) : 0;
         html += `<td style="border:1px solid #999;padding:6px;text-align:center;font-weight:600;">${rate}%</td></tr>`;
       }
       html += `</tbody></table>`;
-      html += `<p style="margin-top:15px;font-size:11px;color:#666;">P = Present, A = Absent, R = Retard, E = Excuse</p>`;
+      html += `<p style="margin-top:15px;font-size:11px;color:#666;">P = Present, A = Absent, R = Retard, E = Excuse, D = Depart anticipe</p>`;
       html += `<p style="margin-top:20px;font-size:12px;color:#666;">Rapport genere le ${new Date().toLocaleDateString("fr-FR")} a ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>`;
       html += `</div>`;
 
@@ -6518,8 +7231,16 @@ Le contenu doit être en français, clair et bien structuré.`;
   });
 
   app.get("/api/trainers/:id/sessions", async (req, res) => {
-    const trainerSessions = await storage.getSessionsByTrainer(req.params.id);
-    res.json(trainerSessions);
+    // Get sessions from both legacy trainerId and session_trainers junction table
+    const legacySessions = await storage.getSessionsByTrainer(req.params.id);
+    const multiSessions = await storage.getSessionsByTrainerMulti(req.params.id);
+    // Merge and deduplicate
+    const seen = new Set<string>();
+    const merged = [];
+    for (const s of [...legacySessions, ...multiSessions]) {
+      if (!seen.has(s.id)) { seen.add(s.id); merged.push(s); }
+    }
+    res.json(merged);
   });
 
   // ============================================================

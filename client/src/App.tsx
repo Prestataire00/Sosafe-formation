@@ -87,6 +87,9 @@ import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 import PublicEnrollment from "@/pages/public-enrollment";
 import AfgsuSimulator from "@/pages/afgsu-simulator";
+import QuizManager from "@/pages/quiz-manager";
+import QuizPresenter from "@/pages/quiz-presenter";
+import QuizPlay from "@/pages/quiz-play";
 import PublicEmargement from "@/pages/public-emargement";
 import PublicEnterpriseRegistration from "@/pages/public-enterprise-registration";
 import PublicEvaluation from "@/pages/public-evaluation";
@@ -97,6 +100,7 @@ import QualityImprovement from "@/pages/quality-improvement";
 import CertificationsBadges from "@/pages/certifications-badges";
 import AdvancedFeatures from "@/pages/advanced-features";
 import TaskListsPage from "@/pages/task-lists";
+import TrainingLocations from "@/pages/training-locations";
 import IntegrationWebsite from "@/pages/integration-website";
 import DataMigration from "@/pages/data-migration";
 import CommandPalette from "@/components/CommandPalette";
@@ -148,6 +152,9 @@ function Router() {
       <Route path="/certifications-badges">{() => <RoleGuard allowedRoles={["admin"]}><CertificationsBadges /></RoleGuard>}</Route>
       <Route path="/advanced-features">{() => <RoleGuard allowedRoles={["admin"]}><AdvancedFeatures /></RoleGuard>}</Route>
       <Route path="/task-lists">{() => <RoleGuard allowedRoles={["admin", "trainer"]}><TaskListsPage /></RoleGuard>}</Route>
+      <Route path="/training-locations">{() => <RoleGuard allowedRoles={["admin"]}><TrainingLocations /></RoleGuard>}</Route>
+      <Route path="/quiz-manager">{() => <RoleGuard allowedRoles={["admin"]}><QuizManager /></RoleGuard>}</Route>
+      <Route path="/quiz/presenter/:id" component={QuizPresenter} />
       <Route path="/integration">{() => <RoleGuard allowedRoles={["admin"]}><IntegrationWebsite /></RoleGuard>}</Route>
       <Route path="/data-migration">{() => <RoleGuard allowedRoles={["admin"]}><DataMigration /></RoleGuard>}</Route>
       <Route path="/settings" component={SettingsPage} />
@@ -236,6 +243,7 @@ function App() {
               <Route path="/inscription-entreprise" component={PublicEnterpriseRegistration} />
               <Route path="/emargement/:token" component={PublicEmargement} />
               <Route path="/evaluation/:token" component={PublicEvaluation} />
+              <Route path="/quiz/join" component={QuizPlay} />
               <Route>
                 <AuthProvider>
                   <ErrorBoundary>

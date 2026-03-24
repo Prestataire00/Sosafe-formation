@@ -48,7 +48,24 @@ import {
   Download,
   Loader2,
   FileBarChart,
+  LogOut,
+  ShieldCheck,
+  MessageSquare,
+  CheckCheck,
+  Sparkles,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import type {
   Session,
   AttendanceSheet,
@@ -74,10 +91,12 @@ interface AttendanceReport {
   absent: number;
   late: number;
   excused: number;
+  early_departure: number;
   percentPresent: number;
   percentAbsent: number;
   percentLate: number;
   percentExcused: number;
+  percentEarlyDeparture: number;
 }
 
 // ============================================================
@@ -98,9 +117,11 @@ function AttendanceStatusBadge({ status }: { status: string }) {
 // Helper: Period label
 // ============================================================
 
-function periodLabel(period: string): string {
+function periodLabel(period: string, startTime?: string | null, endTime?: string | null): string {
   const p = ATTENDANCE_PERIODS.find((ap) => ap.value === period);
-  return p ? p.label : period;
+  const label = p ? p.label : period;
+  if (startTime && endTime) return `${label} (${startTime}-${endTime})`;
+  return label;
 }
 
 // ============================================================
@@ -257,12 +278,60 @@ function AttendanceGrid({
     value: string;
     label: string;
     icon: typeof CheckCircle;
-    variant: "default" | "outline" | "destructive" | "secondary" | "ghost" | "link";
+    activeColor: string;
   }> = [
-    { value: "present", label: "P", icon: CheckCircle, variant: "outline" },
-    { value: "absent", label: "A", icon: XCircle, variant: "outline" },
-    { value: "late", label: "R", icon: Clock, variant: "outline" },
+    { value: "present", label: "P", icon: CheckCircle, activeColor: "bg-green-600 hover:bg-green-700 text-white" },
+    { value: "absent", label: "A", icon: XCircle, activeColor: "bg-red-600 hover:bg-red-700 text-white" },
+    { value: "late", label: "R", icon: Clock, activeColor: "bg-amber-500 hover:bg-amber-600 text-white" },
+    { value: "excused", label: "E", icon: ShieldCheck, activeColor: "bg-blue-600 hover:bg-blue-700 text-white" },
+    { value: "early_departure", label: "D", icon: LogOut, activeColor: "bg-purple-600 hover:bg-purple-700 text-white" },
   ];
+
+  // Note editing mutation
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ recordId, notes }: { recordId: string; notes: string }) => {
+      return apiRequest("PATCH", `/api/attendance-records/${recordId}`, { notes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/attendance-records", "sheets", sheetIdsKey],
+      });
+    },
+  });
+
+  // Late arrival time mutation
+  const updateTimeMutation = useMutation({
+    mutationFn: async ({ recordId, field, value }: { recordId: string; field: string; value: string }) => {
+      return apiRequest("PATCH", `/api/attendance-records/${recordId}`, { [field]: value });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/attendance-records", "sheets", sheetIdsKey],
+      });
+    },
+  });
+
+  // Mark all present for a sheet
+  const markAllPresentMutation = useMutation({
+    mutationFn: async (sheetId: string) => {
+      return apiRequest("POST", `/api/attendance-records/mark-all`, {
+        sheetId,
+        status: "present",
+        traineeIds: traineeIds,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/attendance-records", "sheets", sheetIdsKey],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/attendance-records/report"],
+      });
+      toast({ title: "Tous marqués présents" });
+    },
+    onError: () =>
+      toast({ title: "Erreur", variant: "destructive" }),
+  });
 
   if (traineeIds.length === 0) {
     return (
@@ -284,20 +353,44 @@ function AttendanceGrid({
   }
 
   return (
+    <TooltipProvider>
     <div className="overflow-x-auto">
+      {/* Mark all present buttons */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs text-muted-foreground font-medium">Actions rapides :</span>
+        {sheets.map((sheet) => (
+          <Button
+            key={sheet.id}
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={() => markAllPresentMutation.mutate(sheet.id)}
+            disabled={markAllPresentMutation.isPending}
+          >
+            <CheckCheck className="w-3.5 h-3.5" />
+            Tous présents — {new Date(sheet.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} {periodLabel(sheet.period, (sheet as any).startTime, (sheet as any).endTime)}
+          </Button>
+        ))}
+      </div>
+
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="min-w-[180px]">Stagiaire</TableHead>
             {sheets.map((sheet) => (
-              <TableHead key={sheet.id} className="text-center min-w-[200px]">
+              <TableHead key={sheet.id} className="text-center min-w-[240px]">
                 <div className="flex flex-col items-center gap-0.5">
                   <span className="text-xs font-medium">
                     {new Date(sheet.date).toLocaleDateString("fr-FR")}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {periodLabel(sheet.period)}
+                    {periodLabel(sheet.period, (sheet as any).startTime, (sheet as any).endTime)}
                   </span>
+                  {(sheet as any).trainerSignedAt && (
+                    <Badge variant="outline" className="text-[10px] px-1 py-0 text-green-600 border-green-300">
+                      <PenLine className="w-2.5 h-2.5 mr-0.5" />Formateur signé
+                    </Badge>
+                  )}
                 </div>
               </TableHead>
             ))}
@@ -326,62 +419,132 @@ function AttendanceGrid({
                   return (
                     <TableCell key={sheet.id} className="text-center">
                       <div className="flex flex-col items-center gap-1.5">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5">
                           {statusButtons.map((btn) => {
                             const isActive = currentStatus === btn.value;
                             const Icon = btn.icon;
                             return (
-                              <Button
-                                key={btn.value}
-                                size="sm"
-                                variant={isActive ? "default" : "outline"}
-                                className={`h-7 w-7 p-0 ${
-                                  isActive && btn.value === "present"
-                                    ? "bg-green-600 hover:bg-green-700 text-white"
-                                    : isActive && btn.value === "absent"
-                                      ? "bg-red-600 hover:bg-red-700 text-white"
-                                      : isActive && btn.value === "late"
-                                        ? "bg-amber-500 hover:bg-amber-600 text-white"
-                                        : ""
-                                }`}
-                                title={
-                                  ATTENDANCE_STATUSES.find(
-                                    (s) => s.value === btn.value
-                                  )?.label || btn.value
-                                }
-                                onClick={() =>
-                                  upsertRecordMutation.mutate({
-                                    sheetId: sheet.id,
-                                    traineeId,
-                                    status: btn.value,
-                                    existingRecordId: record?.id,
-                                  })
-                                }
-                                disabled={upsertRecordMutation.isPending}
-                              >
-                                <Icon className="w-3.5 h-3.5" />
-                              </Button>
+                              <Tooltip key={btn.value}>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant={isActive ? "default" : "outline"}
+                                    className={`h-7 w-7 p-0 ${isActive ? btn.activeColor : ""}`}
+                                    onClick={() =>
+                                      upsertRecordMutation.mutate({
+                                        sheetId: sheet.id,
+                                        traineeId,
+                                        status: btn.value,
+                                        existingRecordId: record?.id,
+                                      })
+                                    }
+                                    disabled={upsertRecordMutation.isPending}
+                                  >
+                                    <Icon className="w-3.5 h-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {ATTENDANCE_STATUSES.find((s) => s.value === btn.value)?.label || btn.value}
+                                </TooltipContent>
+                              </Tooltip>
                             );
                           })}
                         </div>
 
-                        {/* Signer button */}
-                        <Button
-                          size="sm"
-                          variant={isSigned ? "secondary" : "outline"}
-                          className="h-6 text-xs gap-1"
-                          onClick={() =>
-                            signRecordMutation.mutate({
-                              sheetId: sheet.id,
-                              traineeId,
-                              existingRecordId: record?.id,
-                            })
-                          }
-                          disabled={isSigned || signRecordMutation.isPending}
-                        >
-                          <PenLine className="w-3 h-3" />
-                          {isSigned ? "Signe" : "Signer"}
-                        </Button>
+                        {/* Late arrival / early departure time */}
+                        {currentStatus === "late" && record && (
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-500" />
+                            <Input
+                              type="time"
+                              className="h-6 w-20 text-xs px-1"
+                              defaultValue={(record as any).lateArrivalTime || ""}
+                              onBlur={(e) => updateTimeMutation.mutate({
+                                recordId: record.id,
+                                field: "lateArrivalTime",
+                                value: e.target.value,
+                              })}
+                              placeholder="HH:MM"
+                            />
+                          </div>
+                        )}
+                        {currentStatus === "early_departure" && record && (
+                          <div className="flex items-center gap-1">
+                            <LogOut className="w-3 h-3 text-purple-500" />
+                            <Input
+                              type="time"
+                              className="h-6 w-20 text-xs px-1"
+                              defaultValue={(record as any).earlyDepartureTime || ""}
+                              onBlur={(e) => updateTimeMutation.mutate({
+                                recordId: record.id,
+                                field: "earlyDepartureTime",
+                                value: e.target.value,
+                              })}
+                              placeholder="HH:MM"
+                            />
+                          </div>
+                        )}
+
+                        {/* Entry/Exit signature indicators */}
+                        {record && ((record as any).entrySignedAt || (record as any).exitSignedAt) && (
+                          <div className="flex items-center gap-1 text-[10px]">
+                            {(record as any).entrySignedAt && (
+                              <Badge variant="outline" className="h-4 px-1 text-[9px] text-green-600 border-green-300">E</Badge>
+                            )}
+                            {(record as any).exitSignedAt && (
+                              <Badge variant="outline" className="h-4 px-1 text-[9px] text-blue-600 border-blue-300">S</Badge>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-1">
+                          {/* Signer button */}
+                          <Button
+                            size="sm"
+                            variant={isSigned ? "secondary" : "outline"}
+                            className="h-6 text-xs gap-1"
+                            onClick={() =>
+                              signRecordMutation.mutate({
+                                sheetId: sheet.id,
+                                traineeId,
+                                existingRecordId: record?.id,
+                              })
+                            }
+                            disabled={isSigned || signRecordMutation.isPending}
+                          >
+                            <PenLine className="w-3 h-3" />
+                            {isSigned ? "Signé" : "Signer"}
+                          </Button>
+
+                          {/* Notes popover */}
+                          {record && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className={`h-6 w-6 p-0 ${record.notes ? "text-blue-500" : "text-muted-foreground"}`}
+                                >
+                                  <MessageSquare className="w-3 h-3" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-64 p-3" align="center">
+                                <div className="space-y-2">
+                                  <Label className="text-xs font-medium">Notes / Motif</Label>
+                                  <Textarea
+                                    className="h-16 text-xs resize-none"
+                                    placeholder="Motif d'absence, remarque..."
+                                    defaultValue={record.notes || ""}
+                                    onBlur={(e) => updateNoteMutation.mutate({
+                                      recordId: record.id,
+                                      notes: e.target.value,
+                                    })}
+                                  />
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
+                        </div>
 
                         {/* Show current status badge if set */}
                         {currentStatus && (
@@ -397,11 +560,120 @@ function AttendanceGrid({
         </TableBody>
       </Table>
     </div>
+    </TooltipProvider>
   );
 }
 
 // ============================================================
 // Inline component: AttendanceReport
+// ============================================================
+
+function TrainerSignatureSection({ sheets }: { sheets: AttendanceSheet[] }) {
+  const { toast } = useToast();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [selectedSheetId, setSelectedSheetId] = useState<string>("");
+
+  const getCtx = useCallback(() => canvasRef.current?.getContext("2d") || null, []);
+
+  const startDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const ctx = getCtx(); if (!ctx) return;
+    setIsDrawing(true); setHasSignature(true);
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const cx = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const cy = "touches" in e ? e.touches[0].clientY : e.clientY;
+    ctx.beginPath(); ctx.moveTo(cx - rect.left, cy - rect.top);
+  }, [getCtx]);
+
+  const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const ctx = getCtx(); if (!ctx) return;
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const cx = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const cy = "touches" in e ? e.touches[0].clientY : e.clientY;
+    ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.strokeStyle = "#1a1a1a";
+    ctx.lineTo(cx - rect.left, cy - rect.top); ctx.stroke();
+  }, [isDrawing, getCtx]);
+
+  const endDraw = useCallback(() => setIsDrawing(false), []);
+  const clearCanvas = useCallback(() => {
+    const c = canvasRef.current; if (!c) return;
+    c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+    setHasSignature(false);
+  }, []);
+
+  const signMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedSheetId || !canvasRef.current) return;
+      const resp = await apiRequest("POST", `/api/attendance-sheets/${selectedSheetId}/trainer-sign`, {
+        signatureData: canvasRef.current.toDataURL("image/png"),
+      });
+      return resp.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Signature formateur enregistrée" });
+      clearCanvas();
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance-sheets"] });
+    },
+  });
+
+  const unsignedSheets = sheets.filter((s) => !(s as any).trainerSignedAt);
+  const signedSheets = sheets.filter((s) => !!(s as any).trainerSignedAt);
+
+  return (
+    <div className="space-y-4">
+      {signedSheets.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground font-medium">Feuilles déjà signées :</p>
+          <div className="flex flex-wrap gap-1">
+            {signedSheets.map((s) => (
+              <Badge key={s.id} variant="outline" className="text-green-600 border-green-300 gap-1">
+                <CheckCircle className="w-3 h-3" />
+                {new Date(s.date).toLocaleDateString("fr-FR")} {periodLabel(s.period, (s as any).startTime, (s as any).endTime)}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+      {unsignedSheets.length > 0 ? (
+        <div className="space-y-3">
+          <Select value={selectedSheetId} onValueChange={setSelectedSheetId}>
+            <SelectTrigger><SelectValue placeholder="Sélectionner une feuille à signer" /></SelectTrigger>
+            <SelectContent>
+              {unsignedSheets.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {new Date(s.date).toLocaleDateString("fr-FR")} - {periodLabel(s.period, (s as any).startTime, (s as any).endTime)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedSheetId && (
+            <>
+              <p className="text-sm text-muted-foreground">Tracez votre signature :</p>
+              <div className="border rounded-lg p-1 bg-white">
+                <canvas ref={canvasRef} width={460} height={150} className="w-full cursor-crosshair touch-none"
+                  onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+                  onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
+                />
+              </div>
+              <div className="flex justify-between">
+                <Button variant="outline" size="sm" onClick={clearCanvas}>Effacer</Button>
+                <Button size="sm" onClick={() => signMutation.mutate()} disabled={!hasSignature || signMutation.isPending}>
+                  {signMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <PenLine className="w-4 h-4 mr-1" />}
+                  Signer la feuille
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Toutes les feuilles ont été signées par le formateur.</p>
+      )}
+    </div>
+  );
+}
+
 // ============================================================
 
 function AttendanceReportSection({ sessionId }: { sessionId: string }) {
@@ -431,7 +703,7 @@ function AttendanceReportSection({ sessionId }: { sessionId: string }) {
 
   const stats = [
     {
-      label: "Presents",
+      label: "Présents",
       value: report.present,
       percent: report.percentPresent,
       color: "text-green-600 dark:text-green-400",
@@ -452,16 +724,23 @@ function AttendanceReportSection({ sessionId }: { sessionId: string }) {
       bg: "bg-amber-50 dark:bg-amber-900/20",
     },
     {
-      label: "Excuses",
+      label: "Excusés",
       value: report.excused,
       percent: report.percentExcused,
       color: "text-blue-600 dark:text-blue-400",
       bg: "bg-blue-50 dark:bg-blue-900/20",
     },
+    {
+      label: "Départs anticipés",
+      value: report.early_departure || 0,
+      percent: report.percentEarlyDeparture || 0,
+      color: "text-purple-600 dark:text-purple-400",
+      bg: "bg-purple-50 dark:bg-purple-900/20",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
       {stats.map((stat) => (
         <Card key={stat.label} className={stat.bg}>
           <CardContent className="p-4 text-center">
@@ -1351,8 +1630,9 @@ interface DetailedReport {
     absent: number;
     late: number;
     excused: number;
+    early_departure: number;
     rate: number;
-    sheets: Array<{ date: string; period: string; status: string; signedAt: string | null; hasSignature: boolean }>;
+    sheets: Array<{ date: string; period: string; status: string; signedAt: string | null; hasSignature: boolean; notes: string | null; lateArrivalTime: string | null; earlyDepartureTime: string | null }>;
   }>;
 }
 
@@ -1519,7 +1799,8 @@ function ReportEmargement({
                   <TableHead className="text-center">Present</TableHead>
                   <TableHead className="text-center">Absent</TableHead>
                   <TableHead className="text-center">Retard</TableHead>
-                  <TableHead className="text-center">Excuse</TableHead>
+                  <TableHead className="text-center">Excusé</TableHead>
+                  <TableHead className="text-center">Départ</TableHead>
                   <TableHead className="text-center">Taux</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1537,6 +1818,7 @@ function ReportEmargement({
                     <TableCell className="text-center text-red-600 font-medium">{t.absent}</TableCell>
                     <TableCell className="text-center text-amber-600 font-medium">{t.late}</TableCell>
                     <TableCell className="text-center text-blue-600 font-medium">{t.excused}</TableCell>
+                    <TableCell className="text-center text-purple-600 font-medium">{t.early_departure || 0}</TableCell>
                     <TableCell className="text-center">
                       <Badge variant={t.rate >= 80 ? "default" : t.rate >= 50 ? "secondary" : "destructive"}>
                         {t.rate}%
@@ -1692,6 +1974,19 @@ export default function Attendance() {
       }),
   });
 
+  // Auto-generate sheets from session dates
+  const autoGenerateMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const resp = await apiRequest("POST", "/api/attendance-sheets/auto-generate", { sessionId });
+      return resp.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance-sheets"] });
+      toast({ title: `${data.created} feuille(s) créée(s)${data.existing > 0 ? `, ${data.existing} existante(s)` : ""}` });
+    },
+    onError: () => toast({ title: "Erreur lors de la génération", variant: "destructive" }),
+  });
+
   const selectedSession = sessions?.find((s) => s.id === selectedSessionId);
 
   return (
@@ -1749,14 +2044,29 @@ export default function Attendance() {
                     </Badge>
                   )}
                 </CardTitle>
-                <Button
-                  size="sm"
-                  onClick={() => setSheetDialogOpen(true)}
-                  data-testid="button-create-sheet"
-                >
-                  <Plus className="w-4 h-4 mr-1" />
-                  Nouvelle feuille
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => autoGenerateMutation.mutate(selectedSessionId)}
+                    disabled={autoGenerateMutation.isPending}
+                  >
+                    {autoGenerateMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 mr-1" />
+                    )}
+                    Auto-générer
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setSheetDialogOpen(true)}
+                    data-testid="button-create-sheet"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Nouvelle feuille
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1834,6 +2144,18 @@ export default function Attendance() {
                     sessionId={selectedSessionId}
                     sheets={sheets || []}
                   />
+                </CardContent>
+              </Card>
+              {/* Trainer Signature Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <PenLine className="w-4 h-4" />
+                    Signature formateur
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <TrainerSignatureSection sheets={sheets || []} />
                 </CardContent>
               </Card>
               <Card>

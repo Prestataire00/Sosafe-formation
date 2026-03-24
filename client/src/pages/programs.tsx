@@ -68,7 +68,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Program, InsertProgram, Session, ProgramPrerequisite } from "@shared/schema";
+import type { Program, InsertProgram, Session, ProgramPrerequisite, ProgramCustomField } from "@shared/schema";
 import { PROGRAM_CATEGORIES, PROGRAM_CATEGORY_GROUPS, MODALITIES, TRAINEE_PROFESSIONS, FUNDING_TYPES } from "@shared/schema";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -159,6 +159,27 @@ function ProgramForm({
   const [referentHandicap, setReferentHandicap] = useState(program?.referentHandicap || "");
   const [selectedFunding, setSelectedFunding] = useState<string[]>(program?.fundingTypes || []);
   const [imageUrl, setImageUrl] = useState(program?.imageUrl || "");
+  const [customFields, setCustomFields] = useState<ProgramCustomField[]>(program?.customFields || []);
+
+  const addCustomField = () => {
+    setCustomFields([...customFields, {
+      id: crypto.randomUUID(),
+      label: "",
+      type: "text",
+      required: false,
+      placeholder: "",
+      options: [],
+      helpText: "",
+    }]);
+  };
+
+  const updateCustomField = (index: number, updates: Partial<ProgramCustomField>) => {
+    setCustomFields(customFields.map((f, i) => i === index ? { ...f, ...updates } : f));
+  };
+
+  const removeCustomField = (index: number) => {
+    setCustomFields(customFields.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,6 +208,7 @@ function ProgramForm({
       referentHandicap: referentHandicap || null,
       fundingTypes: selectedFunding,
       imageUrl: imageUrl || null,
+      customFields: customFields.filter(f => f.label.trim()),
     });
   };
 
@@ -451,6 +473,83 @@ function ProgramForm({
         </div>
       </div>
 
+      {/* Section: Champs personnalisés pour l'inscription */}
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+          Informations demandées à l'inscription
+        </h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Configurez les informations spécifiques à demander aux stagiaires lors de leur inscription à cette formation.
+        </p>
+        <div className="space-y-3">
+          {customFields.map((field, index) => (
+            <div key={field.id} className="border rounded-lg p-3 space-y-2 bg-muted/30">
+              <div className="flex items-start gap-2">
+                <div className="flex-1 grid grid-cols-2 gap-2">
+                  <Input
+                    value={field.label}
+                    onChange={(e) => updateCustomField(index, { label: e.target.value })}
+                    placeholder="Nom du champ (ex: N° de diplôme, Poste occupé...)"
+                    className="text-sm"
+                  />
+                  <Select value={field.type} onValueChange={(v) => updateCustomField(index, { type: v as ProgramCustomField["type"] })}>
+                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Texte court</SelectItem>
+                      <SelectItem value="textarea">Texte long</SelectItem>
+                      <SelectItem value="number">Nombre</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="phone">Téléphone</SelectItem>
+                      <SelectItem value="date">Date</SelectItem>
+                      <SelectItem value="select">Liste déroulante</SelectItem>
+                      <SelectItem value="checkbox">Case à cocher</SelectItem>
+                      <SelectItem value="file">Fichier / Document</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive" onClick={() => removeCustomField(index)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  value={field.placeholder || ""}
+                  onChange={(e) => updateCustomField(index, { placeholder: e.target.value })}
+                  placeholder="Texte d'aide (placeholder)"
+                  className="text-xs"
+                />
+                <Input
+                  value={field.helpText || ""}
+                  onChange={(e) => updateCustomField(index, { helpText: e.target.value })}
+                  placeholder="Description pour le stagiaire"
+                  className="text-xs"
+                />
+              </div>
+              {field.type === "select" && (
+                <Input
+                  value={(field.options || []).join(", ")}
+                  onChange={(e) => updateCustomField(index, { options: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+                  placeholder="Options séparées par des virgules (ex: Oui, Non, Ne sait pas)"
+                  className="text-xs"
+                />
+              )}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={field.required}
+                  onCheckedChange={(checked) => updateCustomField(index, { required: !!checked })}
+                  id={`req-${field.id}`}
+                />
+                <Label htmlFor={`req-${field.id}`} className="text-xs">Obligatoire</Label>
+              </div>
+            </div>
+          ))}
+          <Button type="button" variant="outline" size="sm" onClick={addCustomField} className="w-full">
+            <Plus className="w-4 h-4 mr-2" />
+            Ajouter un champ
+          </Button>
+        </div>
+      </div>
+
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isPending} data-testid="button-program-submit">
           {isPending ? "Enregistrement..." : program ? "Modifier" : "Créer"}
@@ -566,6 +665,10 @@ function ProgramDetail({
         </div>
         <div className="flex items-center gap-2">
           <ProgramStatusBadge status={program.status} />
+          <Button variant="outline" onClick={() => window.open(`/api/programs/${program.id}/pdf`, "_blank")}>
+            <FileDown className="w-4 h-4 mr-2" />
+            Télécharger le programme
+          </Button>
           <Button onClick={onEdit}>
             <Pencil className="w-4 h-4 mr-2" />
             Modifier
@@ -1098,6 +1201,11 @@ export default function Programs() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { setEditProgram(program); setDialogOpen(true); }}>
                                   <Pencil className="w-4 h-4 mr-2" /> Modifier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  window.open(`/api/programs/${program.id}/pdf`, "_blank");
+                                }}>
+                                  <FileDown className="w-4 h-4 mr-2" /> Télécharger le programme
                                 </DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
                                   <Trash2 className="w-4 h-4 mr-2" /> Supprimer

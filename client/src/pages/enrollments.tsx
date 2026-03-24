@@ -54,7 +54,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AlertTriangle } from "lucide-react";
-import type { Enrollment, InsertEnrollment, Session, Trainee, Enterprise, Program, ProgramPrerequisite } from "@shared/schema";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { FileText } from "lucide-react";
+import type { Enrollment, InsertEnrollment, Session, Trainee, Enterprise, Program, ProgramPrerequisite, ProgramCustomField } from "@shared/schema";
 import { VAE_STATUSES } from "@shared/schema";
 
 const ENROLLMENT_STATUSES = [
@@ -458,7 +464,32 @@ export default function Enrollments() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="text-sm font-medium">{trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium">{trainee ? `${trainee.firstName} ${trainee.lastName}` : "Inconnu"}</p>
+                            {enrollment.customData && Object.keys(enrollment.customData).length > 0 && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 cursor-help">
+                                    <FileText className="w-3 h-3" />
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <p className="font-medium text-xs mb-1">Informations complémentaires</p>
+                                  {(() => {
+                                    const customFields = program?.customFields as ProgramCustomField[] | undefined;
+                                    return Object.entries(enrollment.customData!).map(([key, val]) => {
+                                      const field = customFields?.find((f) => f.id === key);
+                                      const label = field?.label || key;
+                                      const display = typeof val === "object" && val?.fileName ? val.fileName : typeof val === "boolean" ? (val ? "Oui" : "Non") : String(val);
+                                      return (
+                                        <p key={key} className="text-xs"><span className="text-muted-foreground">{label}:</span> {display}</p>
+                                      );
+                                    });
+                                  })()}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
                           {trainee?.email ? <a href={`mailto:${trainee.email}`} className="text-xs text-primary hover:underline">{trainee.email}</a> : null}
                         </div>
                       </TableCell>

@@ -78,6 +78,8 @@ import {
   type DataArchive, type InsertDataArchive,
   type SessionDate, type InsertSessionDate,
   type Notification, type InsertNotification,
+  type SessionTrainer, type InsertSessionTrainer,
+  type TrainingLocation, type InsertTrainingLocation,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
   emailTemplates, emailLogs, emailTrackingEvents, documentTemplates, generatedDocuments,
   prospects, quotes, invoices, payments, paymentSchedules, bankTransactions, connectionLogs,
@@ -102,6 +104,9 @@ import {
   dataImports, dataArchives,
   sessionDates,
   notifications,
+  sessionTrainers,
+  trainingLocations,
+  quizzes, quizSessions, quizParticipants, quizAnswers,
 } from "@shared/schema";
 import { eq, and, or, sql, desc, asc, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -803,6 +808,66 @@ export class DatabaseStorage implements IStorage {
         sql`${sessions.startDate} <= ${toStr}`
       )
     );
+  }
+
+  // ---- Session Trainers (many-to-many) ----
+  async getSessionTrainers(sessionId: string): Promise<SessionTrainer[]> {
+    return db.select().from(sessionTrainers).where(eq(sessionTrainers.sessionId, sessionId));
+  }
+
+  async getAllSessionTrainers(): Promise<SessionTrainer[]> {
+    return db.select().from(sessionTrainers);
+  }
+
+  async addSessionTrainer(data: InsertSessionTrainer): Promise<SessionTrainer> {
+    const [result] = await db.insert(sessionTrainers).values(data).returning();
+    return result;
+  }
+
+  async removeSessionTrainer(sessionId: string, trainerId: string): Promise<void> {
+    await db.delete(sessionTrainers).where(
+      and(eq(sessionTrainers.sessionId, sessionId), eq(sessionTrainers.trainerId, trainerId))
+    );
+  }
+
+  async setSessionTrainers(sessionId: string, trainerIds: { trainerId: string; role?: string }[]): Promise<SessionTrainer[]> {
+    // Remove all existing
+    await db.delete(sessionTrainers).where(eq(sessionTrainers.sessionId, sessionId));
+    if (trainerIds.length === 0) return [];
+    // Insert all new
+    const values = trainerIds.map((t) => ({ sessionId, trainerId: t.trainerId, role: t.role || "trainer" }));
+    return db.insert(sessionTrainers).values(values).returning();
+  }
+
+  async getSessionsByTrainerMulti(trainerId: string): Promise<Session[]> {
+    const assignments = await db.select().from(sessionTrainers).where(eq(sessionTrainers.trainerId, trainerId));
+    if (assignments.length === 0) return [];
+    const sessionIds = assignments.map((a) => a.sessionId);
+    return db.select().from(sessions).where(inArray(sessions.id, sessionIds)).orderBy(desc(sessions.startDate));
+  }
+
+  // ---- Training Locations ----
+  async getTrainingLocations(): Promise<TrainingLocation[]> {
+    return db.select().from(trainingLocations).orderBy(asc(trainingLocations.name));
+  }
+
+  async getTrainingLocation(id: string): Promise<TrainingLocation | undefined> {
+    const [result] = await db.select().from(trainingLocations).where(eq(trainingLocations.id, id));
+    return result;
+  }
+
+  async createTrainingLocation(data: InsertTrainingLocation): Promise<TrainingLocation> {
+    const [result] = await db.insert(trainingLocations).values(data).returning();
+    return result;
+  }
+
+  async updateTrainingLocation(id: string, data: Partial<InsertTrainingLocation>): Promise<TrainingLocation | undefined> {
+    const [result] = await db.update(trainingLocations).set(data).where(eq(trainingLocations.id, id)).returning();
+    return result;
+  }
+
+  async deleteTrainingLocation(id: string): Promise<void> {
+    await db.delete(trainingLocations).where(eq(trainingLocations.id, id));
   }
 
   // ---- Enrollments ----
@@ -2731,6 +2796,113 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNotification(id: string): Promise<void> {
     await db.delete(notifications).where(eq(notifications.id, id));
+  }
+
+  // ============================================================
+  // QUIZ SYSTEM (Kahoot-style)
+  // ============================================================
+
+  async getQuizzes(): Promise<any[]> {
+    return db.select().from(quizzes).orderBy(desc(quizzes.createdAt));
+  }
+
+  async getQuiz(id: string): Promise<any | undefined> {
+    const [result] = await db.select().from(quizzes).where(eq(quizzes.id, id));
+    return result;
+  }
+
+  async createQuiz(data: any): Promise<any> {
+    const [result] = await db.insert(quizzes).values(data).returning();
+    return result;
+  }
+
+  async updateQuiz(id: string, data: any): Promise<any | undefined> {
+    const [result] = await db.update(quizzes).set(data).where(eq(quizzes.id, id)).returning();
+    return result;
+  }
+
+  async deleteQuiz(id: string): Promise<void> {
+    await db.delete(quizAnswers).where(
+      sql`${quizAnswers.quizSessionId} IN (SELECT id FROM quiz_sessions WHERE quiz_id = ${id})`
+    );
+    await db.delete(quizParticipants).where(
+      sql`${quizParticipants.quizSessionId} IN (SELECT id FROM quiz_sessions WHERE quiz_id = ${id})`
+    );
+    await db.delete(quizSessions).where(eq(quizSessions.quizId, id));
+    await db.delete(quizQuestions).where(eq(quizQuestions.quizId, id));
+    await db.delete(quizzes).where(eq(quizzes.id, id));
+  }
+
+  async getQuizQuestions(quizId: string): Promise<any[]> {
+    return db.select().from(quizQuestions).where(eq(quizQuestions.quizId, quizId)).orderBy(asc(quizQuestions.order));
+  }
+
+  async createQuizQuestion(data: any): Promise<any> {
+    const [result] = await db.insert(quizQuestions).values(data).returning();
+    return result;
+  }
+
+  async updateQuizQuestion(id: string, data: any): Promise<any | undefined> {
+    const [result] = await db.update(quizQuestions).set(data).where(eq(quizQuestions.id, id)).returning();
+    return result;
+  }
+
+  async deleteQuizQuestion(id: string): Promise<void> {
+    await db.delete(quizAnswers).where(eq(quizAnswers.questionId, id));
+    await db.delete(quizQuestions).where(eq(quizQuestions.id, id));
+  }
+
+  async getQuizSession(id: string): Promise<any | undefined> {
+    const [result] = await db.select().from(quizSessions).where(eq(quizSessions.id, id));
+    return result;
+  }
+
+  async getQuizSessionByCode(code: string): Promise<any | undefined> {
+    const [result] = await db.select().from(quizSessions).where(eq(quizSessions.code, code));
+    return result;
+  }
+
+  async getQuizSessions(quizId?: string): Promise<any[]> {
+    if (quizId) return db.select().from(quizSessions).where(eq(quizSessions.quizId, quizId)).orderBy(desc(quizSessions.createdAt));
+    return db.select().from(quizSessions).orderBy(desc(quizSessions.createdAt));
+  }
+
+  async createQuizSession(data: any): Promise<any> {
+    const [result] = await db.insert(quizSessions).values(data).returning();
+    return result;
+  }
+
+  async updateQuizSession(id: string, data: any): Promise<any | undefined> {
+    const [result] = await db.update(quizSessions).set(data).where(eq(quizSessions.id, id)).returning();
+    return result;
+  }
+
+  async getQuizParticipants(quizSessionId: string): Promise<any[]> {
+    return db.select().from(quizParticipants).where(eq(quizParticipants.quizSessionId, quizSessionId)).orderBy(desc(quizParticipants.score));
+  }
+
+  async createQuizParticipant(data: any): Promise<any> {
+    const [result] = await db.insert(quizParticipants).values(data).returning();
+    return result;
+  }
+
+  async updateQuizParticipant(id: string, data: any): Promise<any | undefined> {
+    const [result] = await db.update(quizParticipants).set(data).where(eq(quizParticipants.id, id)).returning();
+    return result;
+  }
+
+  async getQuizAnswers(quizSessionId: string, questionId?: string): Promise<any[]> {
+    if (questionId) {
+      return db.select().from(quizAnswers).where(
+        and(eq(quizAnswers.quizSessionId, quizSessionId), eq(quizAnswers.questionId, questionId))
+      );
+    }
+    return db.select().from(quizAnswers).where(eq(quizAnswers.quizSessionId, quizSessionId));
+  }
+
+  async createQuizAnswer(data: any): Promise<any> {
+    const [result] = await db.insert(quizAnswers).values(data).returning();
+    return result;
   }
 }
 

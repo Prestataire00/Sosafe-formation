@@ -148,33 +148,51 @@ function InlineStatusBadge({
 function InlineTrainerSelect({
   session,
   trainers,
-  currentTrainer,
-  onTrainerChange,
+  sessionTrainerIds,
+  onTrainersChange,
 }: {
   session: Session;
   trainers: Trainer[];
-  currentTrainer?: Trainer;
-  onTrainerChange: (sessionId: string, trainerId: string | null) => void;
+  sessionTrainerIds: string[];
+  onTrainersChange: (sessionId: string, trainerIds: string[]) => void;
 }) {
+  const currentTrainers = sessionTrainerIds.length > 0
+    ? sessionTrainerIds.map((id) => trainers.find((t) => t.id === id)).filter(Boolean) as Trainer[]
+    : session.trainerId ? [trainers.find((t) => t.id === session.trainerId)].filter(Boolean) as Trainer[] : [];
+
+  const toggleTrainer = (trainerId: string) => {
+    const currentIds = currentTrainers.map((t) => t.id);
+    const newIds = currentIds.includes(trainerId)
+      ? currentIds.filter((id) => id !== trainerId)
+      : [...currentIds, trainerId];
+    onTrainersChange(session.id, newIds);
+  };
+
   return (
     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
       <UserCheck className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-      <Select
-        value={session.trainerId || "none"}
-        onValueChange={(val) => onTrainerChange(session.id, val === "none" ? null : val)}
-      >
-        <SelectTrigger className="h-6 text-xs border-none shadow-none px-1 py-0 min-w-0 w-auto gap-1 hover:bg-accent/50 transition-colors">
-          <SelectValue placeholder="Assigner un formateur" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">
-            <span className="text-muted-foreground">Aucun formateur</span>
-          </SelectItem>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="h-6 text-xs px-1 py-0 min-w-0 w-auto hover:bg-accent/50 transition-colors rounded flex items-center gap-1">
+            {currentTrainers.length > 0
+              ? currentTrainers.map((t) => `${t.firstName} ${t.lastName}`).join(", ")
+              : <span className="text-muted-foreground">Assigner</span>}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-[250px] overflow-y-auto">
           {trainers.map((t) => (
-            <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
+            <DropdownMenuItem key={t.id} onClick={(e) => { e.preventDefault(); toggleTrainer(t.id); }} className="flex items-center gap-2 cursor-pointer">
+              <div className={cn(
+                "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0",
+                currentTrainers.some((ct) => ct.id === t.id) ? "bg-primary border-primary" : "border-input"
+              )}>
+                {currentTrainers.some((ct) => ct.id === t.id) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+              </div>
+              <span className="text-xs">{t.firstName} {t.lastName}</span>
+            </DropdownMenuItem>
           ))}
-        </SelectContent>
-      </Select>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -225,24 +243,32 @@ function ModalityIcon({ modality }: { modality: string }) {
   );
 }
 
+type TrainingLocationInfo = { id: string; name: string; address: string | null; city: string | null; postalCode: string | null; rooms: string[] | null };
+
 function SessionForm({
   session,
   programs,
   trainers,
+  trainingLocations,
   onSubmit,
   isPending,
   existingDates,
+  existingTrainerIds,
 }: {
   session?: Session;
   programs: Program[];
   trainers: Trainer[];
-  onSubmit: (data: InsertSession, interventionDates: string[]) => void;
+  trainingLocations: TrainingLocationInfo[];
+  onSubmit: (data: InsertSession, interventionDates: string[], trainerIds: string[]) => void;
   isPending: boolean;
   existingDates?: string[];
+  existingTrainerIds?: string[];
 }) {
   const [title, setTitle] = useState(session?.title || "");
   const [programId, setProgramId] = useState(session?.programId || "");
-  const [trainerId, setTrainerId] = useState(session?.trainerId || "");
+  const [selectedTrainerIds, setSelectedTrainerIds] = useState<string[]>(
+    existingTrainerIds || (session?.trainerId ? [session.trainerId] : [])
+  );
   const [startDate, setStartDate] = useState(session?.startDate || "");
   const [endDate, setEndDate] = useState(session?.endDate || "");
   const [location, setLocation] = useState(session?.location || "");
@@ -256,13 +282,20 @@ function SessionForm({
   const [interventionDates, setInterventionDates] = useState<Date[]>(
     (existingDates || []).map((d) => parseISO(d))
   );
+
+  const toggleTrainer = (id: string) => {
+    setSelectedTrainerIds((prev) =>
+      prev.includes(id) ? prev.filter((tid) => tid !== id) : [...prev, id]
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const dateStrings = interventionDates.map((d) => format(d, "yyyy-MM-dd")).sort();
     onSubmit({
       title,
       programId,
-      trainerId: trainerId || null,
+      trainerId: selectedTrainerIds[0] || null,
       startDate,
       endDate,
       location: location || null,
@@ -273,7 +306,7 @@ function SessionForm({
       status,
       notes: notes || null,
       virtualClassUrl: virtualClassUrl || null,
-    }, dateStrings);
+    }, dateStrings, selectedTrainerIds);
   };
 
   return (
@@ -294,15 +327,54 @@ function SessionForm({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Formateur</Label>
-        <Select value={trainerId} onValueChange={setTrainerId}>
-          <SelectTrigger data-testid="select-session-trainer"><SelectValue placeholder="Sélectionner un formateur" /></SelectTrigger>
-          <SelectContent>
+        <Label>Formateur(s)</Label>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full justify-between font-normal" data-testid="select-session-trainer">
+              {selectedTrainerIds.length === 0
+                ? <span className="text-muted-foreground">Sélectionner un ou plusieurs formateurs</span>
+                : <span className="truncate">
+                    {selectedTrainerIds.map((id) => {
+                      const t = trainers.find((tr) => tr.id === id);
+                      return t ? `${t.firstName} ${t.lastName}` : "";
+                    }).filter(Boolean).join(", ")}
+                  </span>
+              }
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-[300px] max-h-[300px] overflow-y-auto" align="start">
             {trainers.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
+              <DropdownMenuItem
+                key={t.id}
+                onClick={(e) => { e.preventDefault(); toggleTrainer(t.id); }}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <div className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center shrink-0",
+                  selectedTrainerIds.includes(t.id) ? "bg-primary border-primary" : "border-input"
+                )}>
+                  {selectedTrainerIds.includes(t.id) && <Check className="w-3 h-3 text-primary-foreground" />}
+                </div>
+                {t.firstName} {t.lastName}
+                {t.specialty && <span className="text-xs text-muted-foreground ml-auto">{t.specialty}</span>}
+              </DropdownMenuItem>
             ))}
-          </SelectContent>
-        </Select>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {selectedTrainerIds.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {selectedTrainerIds.map((id) => {
+              const t = trainers.find((tr) => tr.id === id);
+              if (!t) return null;
+              return (
+                <Badge key={id} variant="secondary" className="text-xs gap-1">
+                  {t.firstName} {t.lastName}
+                  <button type="button" className="ml-0.5 hover:text-destructive" onClick={() => toggleTrainer(id)}>×</button>
+                </Badge>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -373,6 +445,39 @@ function SessionForm({
           <Input id="max-participants" type="number" value={maxParticipants} onChange={(e) => setMaxParticipants(e.target.value)} min="1" data-testid="input-session-max" />
         </div>
       </div>
+      {trainingLocations.length > 0 && (
+        <div className="space-y-2">
+          <Label>Lieu de formation (bibliothèque)</Label>
+          <Select
+            value="none"
+            onValueChange={(locId) => {
+              if (locId === "none") return;
+              const loc = trainingLocations.find((l) => l.id === locId);
+              if (loc) {
+                setLocation(loc.name);
+                setLocationAddress([loc.address, loc.postalCode, loc.city].filter(Boolean).join(", "));
+                setLocationRoom("");
+              }
+            }}
+          >
+            <SelectTrigger><SelectValue placeholder="Sélectionner un lieu existant..." /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">
+                <span className="text-muted-foreground">Saisie manuelle</span>
+              </SelectItem>
+              {trainingLocations.map((loc) => (
+                <SelectItem key={loc.id} value={loc.id}>
+                  <span className="flex items-center gap-2">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    {loc.name}
+                    {loc.city && <span className="text-muted-foreground text-xs">— {loc.city}</span>}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="location">Lieu</Label>
         <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex: Paris, CHU Bordeaux..." data-testid="input-session-location" />
@@ -384,7 +489,24 @@ function SessionForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor="location-room">Salle</Label>
-          <Input id="location-room" value={locationRoom} onChange={(e) => setLocationRoom(e.target.value)} placeholder="Ex: Salle A - RDC" data-testid="input-session-room" />
+          <Select
+            value={locationRoom || "none"}
+            onValueChange={(v) => setLocationRoom(v === "none" ? "" : v)}
+          >
+            <SelectTrigger data-testid="input-session-room">
+              <SelectValue placeholder="Sélectionner ou saisir..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none"><span className="text-muted-foreground">Aucune salle</span></SelectItem>
+              {(() => {
+                const loc = trainingLocations.find((l) => l.name === location);
+                return (loc?.rooms || []).map((room) => (
+                  <SelectItem key={room} value={room}>{room}</SelectItem>
+                ));
+              })()}
+            </SelectContent>
+          </Select>
+          <Input value={locationRoom} onChange={(e) => setLocationRoom(e.target.value)} placeholder="Ou saisir manuellement..." className="text-xs h-8" />
         </div>
       </div>
       {(modality === "distanciel" || modality === "blended") && (
@@ -488,14 +610,14 @@ function TrombinoscopeDialog({
   session,
   trainees,
   enterprises,
-  trainer,
+  sessionTrainersList,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   session: Session | undefined;
   trainees: Trainee[];
   enterprises: Enterprise[];
-  trainer?: Trainer;
+  sessionTrainersList: Trainer[];
 }) {
   if (!session) return null;
 
@@ -524,20 +646,26 @@ function TrombinoscopeDialog({
         </DialogHeader>
 
         {/* Trainer section */}
-        {trainer && (
+        {sessionTrainersList.length > 0 && (
           <div className="mb-4 p-3 rounded-lg bg-primary/5 border">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Formateur</p>
-            <div className="flex items-center gap-3">
-              <Avatar className="w-12 h-12">
-                {trainer.avatarUrl && <AvatarImage src={trainer.avatarUrl} alt={`${trainer.firstName} ${trainer.lastName}`} />}
-                <AvatarFallback className="text-sm bg-primary/10 text-primary">
-                  {trainer.firstName.charAt(0)}{trainer.lastName.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-medium text-sm">{trainer.firstName} {trainer.lastName}</p>
-                <p className="text-xs text-muted-foreground">{trainer.specialty || <a href={`mailto:${trainer.email}`} className="text-primary hover:underline">{trainer.email}</a>}</p>
-              </div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Formateur{sessionTrainersList.length > 1 ? "s" : ""}
+            </p>
+            <div className="space-y-3">
+              {sessionTrainersList.map((trainer) => (
+                <div key={trainer.id} className="flex items-center gap-3">
+                  <Avatar className="w-12 h-12">
+                    {trainer.avatarUrl && <AvatarImage src={trainer.avatarUrl} alt={`${trainer.firstName} ${trainer.lastName}`} />}
+                    <AvatarFallback className="text-sm bg-primary/10 text-primary">
+                      {trainer.firstName.charAt(0)}{trainer.lastName.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium text-sm">{trainer.firstName} {trainer.lastName}</p>
+                    <p className="text-xs text-muted-foreground">{trainer.specialty || <a href={`mailto:${trainer.email}`} className="text-primary hover:underline">{trainer.email}</a>}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -623,6 +751,7 @@ function SessionCalendarView({
   waitlistCounts,
   onSessionClick,
   sessionDatesMap,
+  sessionTrainerIdsMap,
 }: {
   sessions: Session[];
   programs: Program[];
@@ -631,6 +760,7 @@ function SessionCalendarView({
   waitlistCounts: Record<string, number>;
   onSessionClick: (session: Session) => void;
   sessionDatesMap: Record<string, Set<string>>;
+  sessionTrainerIdsMap: Record<string, string[]>;
 }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
@@ -765,7 +895,8 @@ function SessionCalendarView({
               <div className="space-y-3">
                 {selectedDaySessions.map((s) => {
                   const program = programs.find((p) => p.id === s.programId);
-                  const trainer = trainers.find((t) => t.id === s.trainerId);
+                  const calTIds = sessionTrainerIdsMap[s.id] || (s.trainerId ? [s.trainerId] : []);
+                  const calTrainers = calTIds.map((id) => trainers.find((t) => t.id === id)).filter(Boolean) as Trainer[];
                   const enrolled = enrollmentCounts[s.id] || 0;
                   const remaining = s.maxParticipants - enrolled;
                   return (
@@ -785,10 +916,10 @@ function SessionCalendarView({
                               {s.location}{s.locationRoom ? ` - ${s.locationRoom}` : ""}
                             </span>
                           )}
-                          {trainer && (
+                          {calTrainers.length > 0 && (
                             <span className="flex items-center gap-1">
                               <UserCheck className="w-3 h-3" />
-                              {trainer.firstName} {trainer.lastName}
+                              {calTrainers.map((t) => `${t.firstName} ${t.lastName}`).join(", ")}
                             </span>
                           )}
                           <span className="flex items-center gap-1">
@@ -855,6 +986,12 @@ export default function Sessions() {
   const { data: allSessionDates } = useQuery<SessionDate[]>({
     queryKey: ["/api/session-dates"],
   });
+  const { data: trainingLocationsList } = useQuery<TrainingLocationInfo[]>({
+    queryKey: ["/api/training-locations"],
+  });
+  const { data: allSessionTrainers } = useQuery<{ id: string; sessionId: string; trainerId: string; role: string }[]>({
+    queryKey: ["/api/session-trainers"],
+  });
 
   // Compute enrollment counts and per-session trainees from the enrollments + trainees data
   const { enrollmentCounts, waitlistCounts, sessionTraineesMap } = useMemo(() => {
@@ -891,6 +1028,17 @@ export default function Sessions() {
     }
     return map;
   }, [allSessionDates]);
+
+  // Build map of sessionId → trainer IDs from the junction table
+  const sessionTrainerIdsMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    if (!allSessionTrainers) return map;
+    for (const st of allSessionTrainers) {
+      if (!map[st.sessionId]) map[st.sessionId] = [];
+      map[st.sessionId].push(st.trainerId);
+    }
+    return map;
+  }, [allSessionTrainers]);
 
   const sessionFilters = useMemo(() => [
     {
@@ -937,12 +1085,23 @@ export default function Sessions() {
     queryClient.invalidateQueries({ queryKey: ["/api/session-dates"] });
   };
 
+  // Helper to save session trainers
+  const saveSessionTrainers = async (sessionId: string, trainerIds: string[]) => {
+    await apiRequest("PUT", `/api/sessions/${sessionId}/trainers`, {
+      trainerIds: trainerIds.map((id) => ({ trainerId: id })),
+    });
+    queryClient.invalidateQueries({ queryKey: ["/api/session-trainers"] });
+  };
+
   const createMutation = useMutation({
-    mutationFn: async ({ data, interventionDates }: { data: InsertSession; interventionDates: string[] }) => {
+    mutationFn: async ({ data, interventionDates, trainerIds }: { data: InsertSession; interventionDates: string[]; trainerIds: string[] }) => {
       const res = await apiRequest("POST", "/api/sessions", data);
       const created = await res.json();
       if (interventionDates.length > 0) {
         await saveSessionDates(created.id, interventionDates);
+      }
+      if (trainerIds.length > 0) {
+        await saveSessionTrainers(created.id, trainerIds);
       }
       return created;
     },
@@ -955,13 +1114,15 @@ export default function Sessions() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data, interventionDates }: { id: string; data: InsertSession; interventionDates: string[] }) => {
+    mutationFn: async ({ id, data, interventionDates, trainerIds }: { id: string; data: InsertSession; interventionDates: string[]; trainerIds: string[] }) => {
       await apiRequest("PATCH", `/api/sessions/${id}`, data);
       await saveSessionDates(id, interventionDates);
+      await saveSessionTrainers(id, trainerIds);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/session-dates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/session-trainers"] });
       setDialogOpen(false);
       setEditSession(undefined);
       toast({ title: "Session modifiée avec succès" });
@@ -998,18 +1159,17 @@ export default function Sessions() {
     );
   };
 
-  const handleInlineTrainerChange = (sessionId: string, trainerId: string | null) => {
-    patchMutation.mutate(
-      { id: sessionId, data: { trainerId } },
-      {
-        onSuccess: () => {
-          const trainerName = trainerId
-            ? (() => { const t = trainers?.find((t) => t.id === trainerId); return t ? `${t.firstName} ${t.lastName}` : ""; })()
-            : null;
-          toast({ title: trainerName ? `Formateur assigné : ${trainerName}` : "Formateur retiré" });
-        },
-      }
-    );
+  const handleInlineTrainersChange = async (sessionId: string, trainerIds: string[]) => {
+    try {
+      await apiRequest("PUT", `/api/sessions/${sessionId}/trainers`, {
+        trainerIds: trainerIds.map((id) => ({ trainerId: id })),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/session-trainers"] });
+      toast({ title: trainerIds.length > 0 ? `${trainerIds.length} formateur(s) assigné(s)` : "Formateurs retirés" });
+    } catch {
+      toast({ title: "Erreur lors de l'assignation", variant: "destructive" });
+    }
   };
 
   const handleCardClick = (session: Session) => {
@@ -1122,13 +1282,15 @@ export default function Sessions() {
         </Card>
       ) : viewMode === "kanban" ? (
         (() => {
-          const toplan = filtered.filter((s) => s.status === "planned" && (!s.trainerId || !s.startDate));
-          const planned = filtered.filter((s) => (s.status === "planned" && s.trainerId && s.startDate) || s.status === "ongoing");
+          const hasTrainer = (s: Session) => (sessionTrainerIdsMap[s.id]?.length > 0) || !!s.trainerId;
+          const toplan = filtered.filter((s) => s.status === "planned" && (!hasTrainer(s) || !s.startDate));
+          const planned = filtered.filter((s) => (s.status === "planned" && hasTrainer(s) && s.startDate) || s.status === "ongoing");
           const done = filtered.filter((s) => s.status === "completed" || s.status === "cancelled");
 
           const renderKanbanCard = (session: Session) => {
             const program = programs?.find((p) => p.id === session.programId);
-            const trainer = trainers?.find((t) => t.id === session.trainerId);
+            const kanbanTIds = sessionTrainerIdsMap[session.id] || (session.trainerId ? [session.trainerId] : []);
+            const kanbanTrainers = kanbanTIds.map((id) => trainers?.find((t) => t.id === id)).filter(Boolean) as Trainer[];
             const enrolledCount = enrollmentCounts[session.id] || 0;
             return (
               <Card
@@ -1151,7 +1313,9 @@ export default function Sessions() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <UserCheck className="w-3 h-3 shrink-0" />
-                      {trainer ? `${trainer.firstName} ${trainer.lastName}` : <span className="text-amber-600">Non assigné</span>}
+                      {kanbanTrainers.length > 0
+                        ? kanbanTrainers.map((t) => `${t.firstName} ${t.lastName}`).join(", ")
+                        : <span className="text-amber-600">Non assigné</span>}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Users className="w-3 h-3 shrink-0" />
@@ -1198,6 +1362,7 @@ export default function Sessions() {
           waitlistCounts={waitlistCounts}
           onSessionClick={handleCardClick}
           sessionDatesMap={sessionDatesMap}
+          sessionTrainerIdsMap={sessionTrainerIdsMap}
         />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16">
@@ -1232,7 +1397,8 @@ export default function Sessions() {
                 <tbody>
                   {filtered.map((session) => {
                     const program = programs?.find((p) => p.id === session.programId);
-                    const trainer = trainers?.find((t) => t.id === session.trainerId);
+                    const sessionTIds = sessionTrainerIdsMap[session.id] || (session.trainerId ? [session.trainerId] : []);
+                    const sessionTrainersList = sessionTIds.map((id) => trainers?.find((t) => t.id === id)).filter(Boolean) as Trainer[];
                     const enrolledCount = enrollmentCounts[session.id] || 0;
                     return (
                       <tr
@@ -1245,7 +1411,15 @@ export default function Sessions() {
                           <span className="font-medium text-sm">{program?.title || session.title}</span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-sm">{trainer ? `${trainer.firstName} ${trainer.lastName}` : <span className="text-muted-foreground">Non assigné</span>}</span>
+                          {sessionTrainersList.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {sessionTrainersList.map((t) => (
+                                <Badge key={t.id} variant="outline" className="text-xs">{t.firstName} {t.lastName}</Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Non assigné</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="text-sm">
@@ -1302,11 +1476,13 @@ export default function Sessions() {
             session={editSession}
             programs={programs || []}
             trainers={trainers || []}
+            trainingLocations={trainingLocationsList || []}
             existingDates={editSession ? Array.from(sessionDatesMap[editSession.id] || []) : undefined}
-            onSubmit={(data, interventionDates) =>
+            existingTrainerIds={editSession ? sessionTrainerIdsMap[editSession.id] : undefined}
+            onSubmit={(data, interventionDates, trainerIds) =>
               editSession
-                ? updateMutation.mutate({ id: editSession.id, data, interventionDates })
-                : createMutation.mutate({ data, interventionDates })
+                ? updateMutation.mutate({ id: editSession.id, data, interventionDates, trainerIds })
+                : createMutation.mutate({ data, interventionDates, trainerIds })
             }
             isPending={createMutation.isPending || updateMutation.isPending}
           />
@@ -1319,7 +1495,13 @@ export default function Sessions() {
         session={sessions?.find((s) => s.id === trombiSessionId)}
         trainees={trombiSessionId ? (sessionTraineesMap[trombiSessionId] || []) : []}
         enterprises={enterprises || []}
-        trainer={trainers?.find((t) => t.id === sessions?.find((s) => s.id === trombiSessionId)?.trainerId)}
+        sessionTrainersList={(() => {
+          if (!trombiSessionId) return [];
+          const tIds = sessionTrainerIdsMap[trombiSessionId] || [];
+          const session = sessions?.find((s) => s.id === trombiSessionId);
+          const fallbackIds = tIds.length > 0 ? tIds : (session?.trainerId ? [session.trainerId] : []);
+          return fallbackIds.map((id) => trainers?.find((t) => t.id === id)).filter(Boolean) as Trainer[];
+        })()}
       />
 
       <AlertDialog open={!!deleteSessionId} onOpenChange={(open) => { if (!open) setDeleteSessionId(null); }}>

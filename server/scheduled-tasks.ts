@@ -3,7 +3,7 @@ import { triggerSessionAutomation, triggerAutomation } from "./automation-engine
 import { sendEmailNow } from "./email-service";
 import { log } from "./index";
 
-const SCAN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes (was 1h, reduced for emargement scheduling)
 
 // Deduplication: track which items we already triggered this day
 let processedKeys = new Set<string>();
@@ -270,6 +270,168 @@ async function scanVeilleDeadlines(): Promise<void> {
 }
 
 /**
+ * Scan for sessions starting in the next 15-25 minutes and auto-send emargement emails.
+ * For each session date (or session startDate), if the start time is within the window:
+ *  1. Auto-create attendance sheet if it doesn't exist
+ *  2. Create emargement records for all enrolled trainees
+ *  3. Send emargement email links to each trainee
+ */
+const processedEmargementKeys = new Set<string>();
+
+async function scanAutoEmargement(): Promise<void> {
+  try {
+    const now = new Date();
+    const allSessions = await storage.getSessions();
+
+    // Get app URL for emargement links
+    const appUrl = process.env.APP_URL
+      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+      || `http://localhost:${process.env.PORT || 3000}`;
+
+    for (const session of allSessions) {
+      if (session.status === "completed" || session.status === "cancelled") continue;
+
+      // Get session dates (explicit intervention dates)
+      const sessionDates = await storage.getSessionDates(session.id);
+
+      // Build list of { date, startTime } to check
+      const datesToCheck: Array<{ dateStr: string; startTime: string; period: string }> = [];
+
+      if (sessionDates.length > 0) {
+        for (const sd of sessionDates) {
+          const dateStr = typeof sd.date === "string" ? sd.date : new Date(sd.date).toISOString().split("T")[0];
+          datesToCheck.push({
+            dateStr,
+            startTime: sd.startTime || "09:00",
+            period: "journee",
+          });
+        }
+      } else {
+        // Fallback: use session startDate/endDate, one per day
+        const start = new Date(session.startDate + "T00:00:00");
+        const end = new Date(session.endDate + "T00:00:00");
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dayOfWeek = d.getDay();
+          if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+          datesToCheck.push({
+            dateStr: d.toISOString().split("T")[0],
+            startTime: "09:00",
+            period: "journee",
+          });
+        }
+      }
+
+      for (const { dateStr, startTime, period } of datesToCheck) {
+        // Parse date + time into a timestamp
+        const [hours, minutes] = startTime.split(":").map(Number);
+        const sessionStart = new Date(dateStr + "T00:00:00");
+        sessionStart.setHours(hours || 9, minutes || 0, 0, 0);
+
+        // Calculate time until session starts (in minutes)
+        const minutesUntilStart = (sessionStart.getTime() - now.getTime()) / (1000 * 60);
+
+        // Send emails when session starts in 10-20 minutes (captures ~15 min before)
+        if (minutesUntilStart < 10 || minutesUntilStart > 20) continue;
+
+        const emargKey = `emargement_auto:${session.id}:${dateStr}:${period}`;
+        if (processedEmargementKeys.has(emargKey)) continue;
+        processedEmargementKeys.add(emargKey);
+
+        log(`Auto-emargement pour session "${session.title}" le ${dateStr} (debut dans ${Math.round(minutesUntilStart)} min)`, "scheduled");
+
+        // 1. Auto-create attendance sheet if it doesn't exist
+        const existingSheets = await storage.getAttendanceSheets(session.id);
+        let sheet = existingSheets.find((s: any) => {
+          const sheetDate = typeof s.date === "string" ? s.date : new Date(s.date).toISOString().split("T")[0];
+          return sheetDate === dateStr && s.period === period;
+        });
+
+        if (!sheet) {
+          sheet = await storage.createAttendanceSheet({
+            sessionId: session.id,
+            date: dateStr,
+            period,
+          });
+          log(`Feuille d'emargement auto-creee pour ${dateStr}`, "scheduled");
+        }
+
+        // 2. Get enrolled trainees and send emargement emails
+        const enrollments = await storage.getEnrollments(session.id);
+        const activeEnrollments = enrollments.filter((e: any) => e.status !== "cancelled");
+
+        const existingRecords = await storage.getAttendanceRecords(sheet.id);
+
+        let sentCount = 0;
+        for (const enrollment of activeEnrollments) {
+          const trainee = await storage.getTrainee(enrollment.traineeId);
+          if (!trainee?.email) continue;
+
+          // Check if record already exists and has a token
+          let record = existingRecords.find((r: any) => r.traineeId === enrollment.traineeId);
+          if (record?.signedAt) continue; // Already signed
+
+          // Create record if needed
+          if (!record) {
+            record = await storage.createAttendanceRecord({
+              sheetId: sheet.id,
+              traineeId: enrollment.traineeId,
+              status: "absent",
+            });
+          }
+
+          // Generate token if needed
+          let token = record.emargementToken;
+          if (!token) {
+            const crypto = await import("crypto");
+            token = crypto.randomUUID();
+            await storage.updateAttendanceRecord(record.id, { emargementToken: token } as any);
+          }
+
+          const signUrl = `${appUrl}/emargement/${token}`;
+          const periodLabel = period === "matin" ? "Matin" : period === "apres-midi" ? "Apres-midi" : "Journee entiere";
+          const dateDisplay = new Date(dateStr + "T00:00:00").toLocaleDateString("fr-FR");
+
+          const subject = `Emargement — ${session.title} — ${dateDisplay}`;
+          const body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+            <h2 style="color:#1a1a1a;">Emargement de presence</h2>
+            <p>Bonjour ${trainee.firstName},</p>
+            <p>Votre formation <strong>${session.title}</strong> commence bientot.</p>
+            <p>Merci de confirmer votre presence en cliquant sur le bouton ci-dessous :</p>
+            <ul>
+              <li><strong>Date :</strong> ${dateDisplay}</li>
+              <li><strong>Periode :</strong> ${periodLabel}</li>
+              <li><strong>Heure :</strong> ${startTime}</li>
+              ${session.location ? `<li><strong>Lieu :</strong> ${session.location}</li>` : ""}
+            </ul>
+            <p style="margin:25px 0;">
+              <a href="${signUrl}" style="display:inline-block;padding:14px 28px;background:#16a34a;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
+                Confirmer ma presence
+              </a>
+            </p>
+            <p style="color:#666;font-size:12px;">Ce lien est personnel et unique. Ne le partagez pas.</p>
+          </div>`;
+
+          await storage.createEmailLog({
+            templateId: null,
+            recipient: trainee.email,
+            subject,
+            body,
+            status: "pending",
+          });
+          sentCount++;
+        }
+
+        if (sentCount > 0) {
+          log(`${sentCount} email(s) d'emargement programme(s) pour session "${session.title}" (${dateStr})`, "scheduled");
+        }
+      }
+    }
+  } catch (err: any) {
+    log(`Erreur scan auto-emargement: ${err.message}`, "scheduled");
+  }
+}
+
+/**
  * Run all scheduled scans.
  */
 async function runScheduledScans(): Promise<void> {
@@ -280,6 +442,7 @@ async function runScheduledScans(): Promise<void> {
     await scanRecyclingReminders();
     await scanPendingEvaluations();
     await scanVeilleDeadlines();
+    await scanAutoEmargement();
   } catch (err: any) {
     log(`Erreur globale scheduled scans: ${err.message}`, "scheduled");
   }
@@ -292,7 +455,7 @@ let scanInterval: ReturnType<typeof setInterval> | null = null;
  */
 export function startScheduledTasks(): void {
   if (scanInterval) return;
-  log("Démarrage du scanner de rappels (intervalle: 60min)", "scheduled");
+  log("Démarrage du scanner de rappels et emargement (intervalle: 10min)", "scheduled");
   scanInterval = setInterval(runScheduledScans, SCAN_INTERVAL_MS);
   // Run once after a short delay to let the app stabilize
   setTimeout(runScheduledScans, 10_000);

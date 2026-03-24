@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, uploadFile } from "@/lib/queryClient";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
@@ -19,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TRAINEE_PROFESSIONS } from "@shared/schema";
+import type { ProgramCustomField } from "@shared/schema";
 import {
   GraduationCap, CalendarDays, MapPin, Users, Search,
   ArrowLeft, CheckCircle2, Clock, Euro, Monitor, Building2,
@@ -57,6 +60,7 @@ type PublicSession = {
     fundingTypes: string[] | null;
     certifying: boolean | null;
     recyclingMonths: number | null;
+    customFields: ProgramCustomField[] | null;
   } | null;
   prerequisites: Prerequisite[];
 };
@@ -102,6 +106,7 @@ export default function PublicEnrollment() {
   const [confirmationData, setConfirmationData] = useState<any>(null);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [prerequisitesWarnings, setPrerequisitesWarnings] = useState<string[]>([]);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [uploadedDocs, setUploadedDocs] = useState<Array<{ title: string; fileUrl: string; fileName: string; fileSize: number; mimeType: string }>>([]);
   const [uploading, setUploading] = useState(false);
   // Prerequisite verification state
@@ -344,6 +349,7 @@ export default function PublicEnrollment() {
       rppsNumber: rppsNumber.trim() || undefined,
       profession: formData.profession || undefined,
       documents: allDocs.length > 0 ? allDocs : undefined,
+      customData: Object.keys(customFieldValues).length > 0 ? customFieldValues : undefined,
     });
   };
 
@@ -993,6 +999,123 @@ export default function PublicEnrollment() {
                         <p className="text-xs text-muted-foreground">
                           Cette formation exige une profession spécifique pour l'inscription
                         </p>
+                      </div>
+                    )}
+
+                    {/* Custom fields from program */}
+                    {selectedSession?.program?.customFields && selectedSession.program.customFields.length > 0 && (
+                      <div className="space-y-4 pt-2 border-t">
+                        <p className="text-sm font-medium">Informations complémentaires</p>
+                        {selectedSession.program.customFields.map((field) => (
+                          <div key={field.id} className="space-y-2">
+                            <Label htmlFor={`custom-${field.id}`}>
+                              {field.label} {field.required && "*"}
+                            </Label>
+                            {field.helpText && (
+                              <p className="text-xs text-muted-foreground">{field.helpText}</p>
+                            )}
+                            {field.type === "text" && (
+                              <Input
+                                id={`custom-${field.id}`}
+                                value={customFieldValues[field.id] || ""}
+                                onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
+                                placeholder={field.placeholder}
+                                required={field.required}
+                              />
+                            )}
+                            {field.type === "textarea" && (
+                              <Textarea
+                                id={`custom-${field.id}`}
+                                value={customFieldValues[field.id] || ""}
+                                onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
+                                placeholder={field.placeholder}
+                                required={field.required}
+                                className="resize-none"
+                                rows={3}
+                              />
+                            )}
+                            {field.type === "number" && (
+                              <Input
+                                id={`custom-${field.id}`}
+                                type="number"
+                                value={customFieldValues[field.id] || ""}
+                                onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
+                                placeholder={field.placeholder}
+                                required={field.required}
+                              />
+                            )}
+                            {field.type === "email" && (
+                              <Input
+                                id={`custom-${field.id}`}
+                                type="email"
+                                value={customFieldValues[field.id] || ""}
+                                onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
+                                placeholder={field.placeholder}
+                                required={field.required}
+                              />
+                            )}
+                            {field.type === "phone" && (
+                              <Input
+                                id={`custom-${field.id}`}
+                                type="tel"
+                                value={customFieldValues[field.id] || ""}
+                                onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
+                                placeholder={field.placeholder}
+                                required={field.required}
+                              />
+                            )}
+                            {field.type === "date" && (
+                              <Input
+                                id={`custom-${field.id}`}
+                                type="date"
+                                value={customFieldValues[field.id] || ""}
+                                onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
+                                required={field.required}
+                              />
+                            )}
+                            {field.type === "select" && (
+                              <Select
+                                value={customFieldValues[field.id] || ""}
+                                onValueChange={(v) => setCustomFieldValues({ ...customFieldValues, [field.id]: v })}
+                              >
+                                <SelectTrigger><SelectValue placeholder={field.placeholder || "Sélectionner..."} /></SelectTrigger>
+                                <SelectContent>
+                                  {(field.options || []).map((opt) => (
+                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {field.type === "checkbox" && (
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`custom-${field.id}`}
+                                  checked={!!customFieldValues[field.id]}
+                                  onCheckedChange={(checked) => setCustomFieldValues({ ...customFieldValues, [field.id]: !!checked })}
+                                />
+                                <Label htmlFor={`custom-${field.id}`} className="text-sm font-normal">{field.placeholder || field.label}</Label>
+                              </div>
+                            )}
+                            {field.type === "file" && (
+                              <Input
+                                id={`custom-${field.id}`}
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const result = await uploadFile(file);
+                                    setCustomFieldValues({ ...customFieldValues, [field.id]: { fileName: file.name, fileUrl: result.url } });
+                                  } catch {
+                                    // silently fail
+                                  }
+                                }}
+                                required={field.required}
+                              />
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
 

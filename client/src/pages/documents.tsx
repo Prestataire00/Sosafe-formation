@@ -69,6 +69,7 @@ import {
   FileUp,
   Loader2,
   Wand2,
+  Copy,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1262,6 +1263,18 @@ export default function Documents() {
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
 
+  const duplicateTemplateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const resp = await apiRequest("POST", `/api/document-templates/${id}/duplicate`, {});
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/document-templates"] });
+      toast({ title: "Template dupliqué — vous pouvez maintenant le modifier" });
+    },
+    onError: () => toast({ title: "Erreur lors de la duplication", variant: "destructive" }),
+  });
+
   // --- Generate Mutations ---
 
   const generateMutation = useMutation({
@@ -1535,6 +1548,12 @@ export default function Documents() {
                           >
                             <Pencil className="w-4 h-4 mr-2" />
                             Modifier
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => duplicateTemplateMutation.mutate(template.id)}
+                          >
+                            <Copy className="w-4 h-4 mr-2" />
+                            Dupliquer
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive"
