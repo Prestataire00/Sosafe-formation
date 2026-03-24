@@ -186,7 +186,9 @@ function TrainerForm({
   const [lastName, setLastName] = useState(trainer?.lastName || "");
   const [email, setEmail] = useState(trainer?.email || "");
   const [phone, setPhone] = useState(trainer?.phone || "");
-  const [specialty, setSpecialty] = useState(trainer?.specialty || "");
+  const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>(
+    trainer?.specialties?.length ? trainer.specialties as string[] : trainer?.specialty ? [trainer.specialty] : []
+  );
   const [bio, setBio] = useState(trainer?.bio || "");
   const [status, setStatus] = useState(trainer?.status || "active");
   const [password, setPassword] = useState("");
@@ -208,7 +210,8 @@ function TrainerForm({
       lastName,
       email,
       phone: phone || null,
-      specialty: specialty || null,
+      specialty: selectedSpecialties[0] || null,
+      specialties: selectedSpecialties,
       bio: bio || null,
       status,
       avatarUrl: null,
@@ -241,13 +244,29 @@ function TrainerForm({
           <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="input-trainer-phone" />
         </div>
         <div className="space-y-2">
-          <Label>Spécialité</Label>
-          <Select value={specialty} onValueChange={setSpecialty}>
-            <SelectTrigger data-testid="select-trainer-specialty"><SelectValue placeholder="Choisir" /></SelectTrigger>
-            <SelectContent>
-              {specialties.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-            </SelectContent>
-          </Select>
+          <Label>Spécialités</Label>
+          <div className="grid grid-cols-2 gap-1.5 border rounded-md p-3 max-h-48 overflow-y-auto">
+            {specialties.map((s) => (
+              <label key={s} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                <input
+                  type="checkbox"
+                  checked={selectedSpecialties.includes(s)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedSpecialties([...selectedSpecialties, s]);
+                    } else {
+                      setSelectedSpecialties(selectedSpecialties.filter((x) => x !== s));
+                    }
+                  }}
+                  className="rounded"
+                />
+                {s}
+              </label>
+            ))}
+          </div>
+          {selectedSpecialties.length > 0 && (
+            <p className="text-xs text-muted-foreground">{selectedSpecialties.length} sélectionnée(s)</p>
+          )}
         </div>
       </div>
       <div className="space-y-2">
@@ -564,7 +583,7 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
         </Avatar>
         <div>
           <h1 className="text-2xl font-bold">{trainer.firstName} {trainer.lastName}</h1>
-          <p className="text-muted-foreground text-sm">{trainer.specialty || "Formateur"}</p>
+          <p className="text-muted-foreground text-sm">{(trainer.specialties as string[] | undefined)?.length ? (trainer.specialties as string[]).join(", ") : trainer.specialty || "Formateur"}</p>
         </div>
         {(() => {
           const statusInfo = TRAINER_STATUSES.find((s) => s.value === trainer.status) || TRAINER_STATUSES[0];
@@ -593,7 +612,7 @@ function TrainerDetail({ trainer, onBack }: { trainer: Trainer; onBack: () => vo
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Email</span><a href={`mailto:${trainer.email}`} className="text-primary hover:underline">{trainer.email}</a></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Téléphone</span><span>{trainer.phone || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Spécialité</span><span>{trainer.specialty || "—"}</span></div>
+                <div className="flex justify-between items-start"><span className="text-muted-foreground">Spécialités</span><span className="text-right">{(trainer.specialties as string[] | undefined)?.length ? (trainer.specialties as string[]).join(", ") : trainer.specialty || "—"}</span></div>
               </CardContent>
             </Card>
             <Card>
@@ -1398,7 +1417,8 @@ export default function Trainers() {
     (t) =>
       `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
       (t.email || "").toLowerCase().includes(search.toLowerCase()) ||
-      (t.specialty || "").toLowerCase().includes(search.toLowerCase())
+      (t.specialty || "").toLowerCase().includes(search.toLowerCase()) ||
+      ((t.specialties as string[] | undefined) || []).some(s => s.toLowerCase().includes(search.toLowerCase()))
   ) || [];
 
   return (
@@ -1482,10 +1502,15 @@ export default function Trainers() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                {trainer.specialty && (
-                  <div className="flex items-center gap-1.5 text-sm mb-2">
+                {((trainer.specialties as string[] | undefined)?.length || trainer.specialty) && (
+                  <div className="flex items-center gap-1.5 text-sm mb-2 flex-wrap">
                     <Award className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-muted-foreground">{trainer.specialty}</span>
+                    {(trainer.specialties as string[] | undefined)?.length
+                      ? (trainer.specialties as string[]).map((s) => (
+                          <Badge key={s} variant="secondary" className="text-xs font-normal">{s}</Badge>
+                        ))
+                      : <span className="text-muted-foreground">{trainer.specialty}</span>
+                    }
                   </div>
                 )}
                 <div className="space-y-1 text-xs text-muted-foreground">

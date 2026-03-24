@@ -76,7 +76,8 @@ export const trainers = pgTable("trainers", {
   lastName: text("last_name").notNull(),
   email: text("email").unique(),
   phone: text("phone"),
-  specialty: text("specialty"),
+  specialty: text("specialty"), // legacy single
+  specialties: jsonb("specialties").$type<string[]>().default([]),
   bio: text("bio"),
   status: text("status").notNull().default("active"),
   avatarUrl: text("avatar_url"),
