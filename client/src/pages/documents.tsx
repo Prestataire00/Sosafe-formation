@@ -1514,12 +1514,16 @@ export default function Documents() {
             <div className="space-y-6">
               {(() => {
                 const TEMPLATE_CATEGORIES: Record<string, { label: string; types: string[] }> = {
-                  conventions: { label: "Conventions & Contrats", types: ["convention", "contrat_particulier", "contrat_vae", "convention_intervention", "contrat_cadre", "politique_confidentialite", "cgv", "reglement"] },
-                  commercial: { label: "Devis & Factures", types: ["devis", "devis_sous_traitance", "facture", "facture_blended", "facture_specifique"] },
-                  formation: { label: "Formation & Programme", types: ["programme", "convocation", "livret_accueil", "protocole_individuel", "rapport_emargement"] },
-                  attestations: { label: "Attestations & Certificats", types: ["attestation", "certificat", "certificat_realisation", "attestation_assiduite", "attestation_dpc", "attestation_fifpl", "admissibilite_vae", "bpf", "badge"] },
-                  evaluations: { label: "Évaluations & Qualité", types: ["questionnaire_satisfaction", "evaluation_pre_formation", "evaluation_acquis"] },
-                  divers: { label: "Autres", types: ["etiquette_envoi", "fiche_fipl", "autorisation_image", "autre"] },
+                  micro_certifications: { label: "Micro-certifications", types: ["certificat", "certificat_realisation"] },
+                  reglement_cgv: { label: "Règlement intérieur et CGV", types: ["reglement", "cgv", "politique_confidentialite"] },
+                  programmes: { label: "Programmes", types: ["programme", "protocole_individuel"] },
+                  clients: { label: "Documents pour les clients", types: ["convention", "contrat_particulier", "contrat_vae", "contrat_cadre", "attestation", "attestation_assiduite", "attestation_dpc", "attestation_fifpl", "admissibilite_vae", "bpf", "etiquette_envoi", "autorisation_image"] },
+                  factures_devis: { label: "Factures et devis", types: ["devis", "devis_sous_traitance", "facture", "facture_blended", "facture_specifique"] },
+                  intervenant: { label: "Documents pour l'intervenant", types: ["convention_intervention", "convocation"] },
+                  apprenants: { label: "Documents pour les apprenants", types: ["livret_accueil", "fiche_fipl", "attestation"] },
+                  emargement: { label: "Feuilles d'émargement", types: ["rapport_emargement"] },
+                  evaluations: { label: "Évaluations", types: ["questionnaire_satisfaction", "evaluation_pre_formation", "evaluation_acquis"] },
+                  badges: { label: "Badges", types: ["badge"] },
                 };
                 const categorizedTypes = new Set(Object.values(TEMPLATE_CATEGORIES).flatMap(c => c.types));
                 const groups: { key: string; label: string; items: typeof filteredTemplates }[] = [];
