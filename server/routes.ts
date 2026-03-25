@@ -7814,6 +7814,18 @@ Le contenu doit être en français, clair et bien structuré.`;
     }
   });
 
+  // Seed all Digiforma programs
+  app.post("/api/settings/seed-digiforma-programs", async (_req, res) => {
+    try {
+      const { seedDigiformaPrograms } = await import("./seed-templates");
+      const results = await seedDigiformaPrograms();
+      res.json({ success: true, ...results });
+    } catch (err: any) {
+      console.error("Error seeding programs:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Email log detail
   app.get("/api/email-logs/:id", async (req, res) => {
     const emailLog = await storage.getEmailLog(req.params.id);
