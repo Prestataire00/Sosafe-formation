@@ -7142,9 +7142,9 @@ Le contenu doit être en français, clair et bien structuré.`;
         status: "pending",
       });
 
-      await sendEmailNow(emailLog.id);
-      const updated = await storage.getEmailLog(emailLog.id);
-      res.json({ success: true, emailLog: updated });
+      // Send asynchronously to avoid SMTP timeout blocking the response
+      sendEmailNow(emailLog.id).catch(err => console.error("Test email send error:", err));
+      res.json({ success: true, message: "Email mis en file d'attente", emailLogId: emailLog.id });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
