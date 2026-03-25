@@ -1191,6 +1191,8 @@ export default function Documents() {
   const [signDialogOpen, setSignDialogOpen] = useState(false);
   const [paperSignDoc, setPaperSignDoc] = useState<GeneratedDocument | null>(null);
   const [paperSignDialogOpen, setPaperSignDialogOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<DocumentTemplate | null>(null);
+  const [previewTemplateOpen, setPreviewTemplateOpen] = useState(false);
   const [aiTemplateDialogOpen, setAiTemplateDialogOpen] = useState(false);
   const [aiTemplateType, setAiTemplateType] = useState("convention");
   const [aiTemplateDesc, setAiTemplateDesc] = useState("");
@@ -1554,13 +1556,13 @@ export default function Documents() {
                           </TableHeader>
                           <TableBody>
                             {group.items.map((template) => (
-                              <TableRow key={template.id} data-testid={`row-template-${template.id}`}>
+                              <TableRow key={template.id} data-testid={`row-template-${template.id}`} className="cursor-pointer hover:bg-muted/50" onClick={() => { setPreviewTemplate(template); setPreviewTemplateOpen(true); }}>
                                 <TableCell className="font-medium">{template.name}</TableCell>
                                 <TableCell><DocTypeBadge type={template.type} /></TableCell>
                                 <TableCell className="text-sm text-muted-foreground">
                                   {template.createdAt ? new Date(template.createdAt).toLocaleDateString("fr-FR") : ""}
                                 </TableCell>
-                                <TableCell>
+                                <TableCell onClick={(e) => e.stopPropagation()}>
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button variant="ghost" size="icon" data-testid={`button-template-menu-${template.id}`}>
@@ -2114,6 +2116,36 @@ export default function Documents() {
           if (!open) setPreviewDoc(null);
         }}
       />
+
+      {/* Preview Template */}
+      {previewTemplate && (
+        <Dialog open={previewTemplateOpen} onOpenChange={(open) => { setPreviewTemplateOpen(open); if (!open) setPreviewTemplate(null); }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+            <DialogHeader className="px-6 pt-5 pb-3 border-b">
+              <DialogTitle className="flex items-center justify-between gap-3">
+                <span className="truncate">{previewTemplate.name}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <DocTypeBadge type={previewTemplate.type} />
+                  <Button variant="outline" size="sm" onClick={() => { setEditTemplate(previewTemplate); setTemplateDialogOpen(true); setPreviewTemplateOpen(false); }} className="gap-1.5">
+                    <Pencil className="w-4 h-4" /> Modifier
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => printDocumentHtml(previewTemplate.content, previewTemplate.name)} className="gap-1.5">
+                    <Printer className="w-4 h-4" /> Imprimer
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={async () => { await downloadPdfFromHtml(previewTemplate.content, previewTemplate.name); }} className="gap-1.5">
+                    <Download className="w-4 h-4" /> PDF
+                  </Button>
+                </div>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto bg-neutral-100 p-6">
+              <div className="shadow-md bg-white rounded min-h-[1000px] p-8" style={{ fontFamily: "Arial, sans-serif", fontSize: "13px", lineHeight: "1.7", color: "#1a1a1a" }}>
+                <div dangerouslySetInnerHTML={{ __html: previewTemplate.content }} />
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* =================================================================
           Dialog: Edit Document Content
