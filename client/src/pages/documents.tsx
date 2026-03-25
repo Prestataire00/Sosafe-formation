@@ -1511,85 +1511,113 @@ export default function Documents() {
               ) : undefined}
             />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredTemplates.map((template) => (
-                <Card
-                  key={template.id}
-                  className="hover-elevate"
-                  data-testid={`card-template-${template.id}`}
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold truncate">{template.name}</h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {template.createdAt
-                            ? new Date(template.createdAt).toLocaleDateString("fr-FR")
-                            : ""}
-                        </p>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            data-testid={`button-template-menu-${template.id}`}
-                          >
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditTemplate(template);
-                              setTemplateDialogOpen(true);
-                            }}
-                            data-testid={`button-edit-template-${template.id}`}
-                          >
-                            <Pencil className="w-4 h-4 mr-2" />
-                            Modifier
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => duplicateTemplateMutation.mutate(template.id)}
-                          >
-                            <Copy className="w-4 h-4 mr-2" />
-                            Dupliquer
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => deleteTemplateMutation.mutate(template.id)}
-                            data-testid={`button-delete-template-${template.id}`}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Supprimer
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+            <div className="space-y-6">
+              {(() => {
+                const TEMPLATE_CATEGORIES: Record<string, { label: string; types: string[] }> = {
+                  conventions: { label: "Conventions & Contrats", types: ["convention", "contrat_particulier", "contrat_vae", "convention_intervention", "contrat_cadre", "politique_confidentialite", "cgv", "reglement"] },
+                  commercial: { label: "Devis & Factures", types: ["devis", "devis_sous_traitance", "facture", "facture_blended", "facture_specifique"] },
+                  formation: { label: "Formation & Programme", types: ["programme", "convocation", "livret_accueil", "protocole_individuel", "rapport_emargement"] },
+                  attestations: { label: "Attestations & Certificats", types: ["attestation", "certificat", "certificat_realisation", "attestation_assiduite", "attestation_dpc", "attestation_fifpl", "admissibilite_vae", "bpf", "badge"] },
+                  evaluations: { label: "Évaluations & Qualité", types: ["questionnaire_satisfaction", "evaluation_pre_formation", "evaluation_acquis"] },
+                  divers: { label: "Autres", types: ["etiquette_envoi", "fiche_fipl", "autorisation_image", "autre"] },
+                };
+                const categorizedTypes = new Set(Object.values(TEMPLATE_CATEGORIES).flatMap(c => c.types));
+                const groups: { key: string; label: string; items: typeof filteredTemplates }[] = [];
+                for (const [key, cat] of Object.entries(TEMPLATE_CATEGORIES)) {
+                  const items = filteredTemplates.filter(t => cat.types.includes(t.type));
+                  if (items.length > 0) groups.push({ key, label: cat.label, items });
+                }
+                const uncategorized = filteredTemplates.filter(t => !categorizedTypes.has(t.type));
+                if (uncategorized.length > 0) groups.push({ key: "uncategorized", label: "Autres", items: uncategorized });
+                return groups.map(group => (
+                  <div key={group.key}>
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                      {group.label}
+                      <Badge variant="secondary" className="text-[10px]">{group.items.length}</Badge>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {group.items.map((template) => (
+                        <Card
+                          key={template.id}
+                          className="hover-elevate"
+                          data-testid={`card-template-${template.id}`}
+                        >
+                          <CardContent className="p-5">
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-semibold truncate">{template.name}</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {template.createdAt
+                                    ? new Date(template.createdAt).toLocaleDateString("fr-FR")
+                                    : ""}
+                                </p>
+                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    data-testid={`button-template-menu-${template.id}`}
+                                  >
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEditTemplate(template);
+                                      setTemplateDialogOpen(true);
+                                    }}
+                                    data-testid={`button-edit-template-${template.id}`}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Modifier
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => duplicateTemplateMutation.mutate(template.id)}
+                                  >
+                                    <Copy className="w-4 h-4 mr-2" />
+                                    Dupliquer
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => deleteTemplateMutation.mutate(template.id)}
+                                    data-testid={`button-delete-template-${template.id}`}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Supprimer
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                              <DocTypeBadge type={template.type} />
+                            </div>
+                            <p className="text-xs text-muted-foreground line-clamp-3 font-mono">
+                              {template.content.substring(0, 120)}
+                              {template.content.length > 120 ? "..." : ""}
+                            </p>
+                            {template.variables && (template.variables as string[]).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {(template.variables as string[]).slice(0, 3).map((v) => (
+                                  <Badge key={v} variant="secondary" className="text-[10px]">
+                                    {v}
+                                  </Badge>
+                                ))}
+                                {(template.variables as string[]).length > 3 && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    +{(template.variables as string[]).length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <DocTypeBadge type={template.type} />
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-3 font-mono">
-                      {template.content.substring(0, 120)}
-                      {template.content.length > 120 ? "..." : ""}
-                    </p>
-                    {template.variables && (template.variables as string[]).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {(template.variables as string[]).slice(0, 3).map((v) => (
-                          <Badge key={v} variant="secondary" className="text-[10px]">
-                            {v}
-                          </Badge>
-                        ))}
-                        {(template.variables as string[]).length > 3 && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            +{(template.variables as string[]).length - 3}
-                          </Badge>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                ));
+              })()}
             </div>
           )}
         </TabsContent>
