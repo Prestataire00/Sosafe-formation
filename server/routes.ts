@@ -10460,7 +10460,6 @@ Le contenu doit être en français, clair et bien structuré.`;
           modality: p.modality,
           price: p.price,
           certifying: p.certifying || false,
-          featured: p.featured || false,
           targetAudience: p.targetAudience,
           teachingMethods: p.teachingMethods,
           evaluationMethods: p.evaluationMethods,
