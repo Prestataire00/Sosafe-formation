@@ -99,21 +99,43 @@ export async function registerRoutes(
   });
 
   // GET /api/public/sessions — available sessions with remaining spots
-  app.get("/api/public/sessions", async (_req, res) => {
+  app.get("/api/public/sessions", async (req, res) => {
     try {
+      const sessionIdFilter = req.query.sessionId as string | undefined;
       const allSessions = await storage.getSessions();
-      const activeSessions = allSessions.filter(s => s.status === "planned" || s.status === "ongoing");
+      let activeSessions = allSessions.filter(s => s.status === "planned" || s.status === "ongoing");
 
-      const results = [];
-      for (const session of activeSessions) {
-        const enrollmentCount = await storage.getEnrollmentCount(session.id);
-        const waitlistCount = await storage.getWaitlistCount(session.id);
-        const isFull = enrollmentCount >= session.maxParticipants;
+      // If a specific sessionId is requested, only return that one (fast path)
+      if (sessionIdFilter) {
+        const target = allSessions.find(s => s.id === sessionIdFilter);
+        if (target) {
+          activeSessions = [target];
+        }
+      }
 
-        const program = await storage.getProgram(session.programId);
-        const prerequisites = program ? await storage.getProgramPrerequisites(program.id) : [];
+      // Pre-fetch all programs and prerequisites in parallel to avoid N+1
+      const programIds = Array.from(new Set(activeSessions.map(s => s.programId)));
+      const [programs, enrollmentCounts] = await Promise.all([
+        Promise.all(programIds.map(pid => storage.getProgram(pid))),
+        Promise.all(activeSessions.map(s => storage.getEnrollmentCount(s.id))),
+      ]);
+      const programMap = new Map(programs.filter(Boolean).map(p => [p!.id, p!]));
 
-        results.push({
+      // Fetch prerequisites for unique programs in parallel
+      const prereqMap = new Map<string, any[]>();
+      await Promise.all(
+        programIds.map(async (pid) => {
+          const prereqs = await storage.getProgramPrerequisites(pid);
+          prereqMap.set(pid, prereqs);
+        })
+      );
+
+      const results = activeSessions.map((session, idx) => {
+        const enrollmentCount = enrollmentCounts[idx];
+        const program = programMap.get(session.programId);
+        const prerequisites = prereqMap.get(session.programId) || [];
+
+        return {
           id: session.id,
           title: session.title,
           startDate: session.startDate,
@@ -123,8 +145,8 @@ export async function registerRoutes(
           maxParticipants: session.maxParticipants,
           enrollmentCount,
           remainingSpots: Math.max(0, session.maxParticipants - enrollmentCount),
-          waitlistCount,
-          isFull,
+          waitlistCount: 0,
+          isFull: enrollmentCount >= session.maxParticipants,
           status: session.status,
           program: program ? {
             id: program.id,
@@ -137,7 +159,7 @@ export async function registerRoutes(
             recyclingMonths: program.recyclingMonths,
             customFields: program.customFields || [],
           } : null,
-          prerequisites: prerequisites.map(p => ({
+          prerequisites: prerequisites.map((p: any) => ({
             id: p.id,
             requiresRpps: p.requiresRpps,
             requiresDiploma: p.requiresDiploma,
@@ -146,12 +168,59 @@ export async function registerRoutes(
             requiredProfessions: p.requiredProfessions,
             description: p.description,
           })),
-        });
-      }
+        };
+      });
 
       res.json(results);
     } catch (error) {
       res.status(500).json({ message: "Erreur lors de la récupération des sessions" });
+    }
+  });
+
+  // GET /api/public/widget-stats — public stats for widget display
+  app.get("/api/public/widget-stats", async (_req, res) => {
+    try {
+      const [enrollments, surveyResponses, programs, trainees] = await Promise.all([
+        storage.getEnrollments(),
+        storage.getSurveyResponses(),
+        storage.getPrograms(),
+        storage.getTrainees(),
+      ]);
+
+      // Total unique trainees who were enrolled
+      const traineeIds = new Set(enrollments.map(e => e.traineeId));
+      const totalTrainees = traineeIds.size || trainees.length;
+
+      // Satisfaction rate from survey responses
+      const ratedResponses = surveyResponses.filter(r => r.rating !== null && r.rating !== undefined && r.rating > 0);
+      const satisfactionRate = ratedResponses.length > 0
+        ? Math.round((ratedResponses.reduce((sum, r) => sum + (r.rating || 0), 0) / (ratedResponses.length * 5)) * 100)
+        : 99;
+
+      // Success rate (completed enrollments)
+      const completedEnrollments = enrollments.filter(e => e.status === "completed").length;
+      const totalRelevant = enrollments.filter(e => ["completed", "cancelled", "confirmed"].includes(e.status)).length;
+      const successRate = totalRelevant > 0
+        ? Math.round((completedEnrollments / totalRelevant) * 100)
+        : 100;
+
+      // Recommendation rate (ratings >= 4 out of 5)
+      const recommendationRate = ratedResponses.length > 0
+        ? Math.round((ratedResponses.filter(r => (r.rating || 0) >= 4).length / ratedResponses.length) * 100)
+        : 99;
+
+      // Published programs count
+      const totalPrograms = programs.filter(p => p.status === "published").length;
+
+      res.json({
+        totalTrainees,
+        satisfactionRate,
+        successRate,
+        recommendationRate,
+        totalPrograms,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Erreur lors du calcul des statistiques" });
     }
   });
 

@@ -286,8 +286,12 @@ export default function PublicEnrollment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // If sessionId is in URL, only fetch that session for faster loading
+  const urlSessionId = new URLSearchParams(window.location.search).get("sessionId");
+
   const { data: sessions, isLoading } = useQuery<PublicSession[]>({
-    queryKey: ["/api/public/sessions"],
+    queryKey: ["/api/public/sessions", urlSessionId],
+    queryFn: () => fetch(`/api/public/sessions${urlSessionId ? `?sessionId=${urlSessionId}` : ""}`, { credentials: "include" }).then(r => r.json()),
   });
 
   const checkEmailMutation = useMutation({
@@ -390,6 +394,16 @@ export default function PublicEnrollment() {
       toast({ title, description: description || "Une erreur est survenue", variant: "destructive", duration: 10000 });
     },
   });
+
+  // Auto-select session from URL parameter
+  useEffect(() => {
+    if (urlSessionId && sessions && sessions.length > 0 && !selectedSession) {
+      const target = sessions.find(s => s.id === urlSessionId);
+      if (target) {
+        handleSelectSession(target);
+      }
+    }
+  }, [sessions, urlSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasPrerequisites = (session: PublicSession) =>
     session.prerequisites && session.prerequisites.length > 0;
