@@ -117,7 +117,11 @@ export async function registerRoutes(
     try {
       const sessionIdFilter = req.query.sessionId as string | undefined;
       const allSessions = await storage.getSessions();
-      let activeSessions = allSessions.filter(s => s.status === "planned" || s.status === "ongoing");
+      const today = new Date().toISOString().split("T")[0];
+      let activeSessions = allSessions.filter(s =>
+        (s.status === "planned" || s.status === "ongoing") &&
+        (s.endDate ? s.endDate >= today : !s.startDate || s.startDate >= today)
+      );
 
       // If a specific sessionId is requested, only return that one (fast path)
       if (sessionIdFilter) {
@@ -10404,7 +10408,10 @@ Le contenu doit être en français, clair et bien structuré.`;
       const trainers = await storage.getTrainers();
       const activePrograms = programs.filter((p: any) => p.status === "published");
       res.json(await Promise.all(activePrograms.map(async (p: any) => {
-        const programSessions = sessions.filter((s: any) => s.programId === p.id && (s.status === "planned" || s.status === "ongoing"));
+        const today = new Date().toISOString().split("T")[0];
+        const programSessions = sessions
+          .filter((s: any) => s.programId === p.id && (s.status === "planned" || s.status === "ongoing") && s.endDate >= today)
+          .sort((a: any, b: any) => a.startDate.localeCompare(b.startDate));
         const upcomingSessions = [];
         for (const s of programSessions) {
           const enrollmentCount = await storage.getEnrollmentCount(s.id);
@@ -10413,6 +10420,8 @@ Le contenu doit être en français, clair et bien structuré.`;
             startDate: s.startDate,
             endDate: s.endDate,
             location: s.location,
+            locationAddress: s.locationAddress,
+            locationRoom: s.locationRoom,
             maxParticipants: s.maxParticipants || 12,
             remainingSpots: (s.maxParticipants || 12) - enrollmentCount,
             isFull: ((s.maxParticipants || 12) - enrollmentCount) <= 0,
@@ -10471,9 +10480,11 @@ Le contenu doit être en français, clair et bien structuré.`;
       const programs = await storage.getPrograms();
       const programMap = new Map(programs.map((p: any) => [p.id, p]));
 
+      const today = new Date().toISOString().split("T")[0];
       const availableSessions = [];
       for (const session of sessions) {
         if (session.status !== "planned" && session.status !== "ongoing") continue;
+        if (session.endDate < today) continue;
         const enrollmentCount = await storage.getEnrollmentCount(session.id);
         const maxCapacity = session.maxParticipants || 12;
         const remainingSpots = maxCapacity - enrollmentCount;
@@ -10486,6 +10497,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           endDate: session.endDate,
           location: session.location,
           locationAddress: session.locationAddress,
+          locationRoom: session.locationRoom,
           status: session.status,
           maxParticipants: maxCapacity,
           remainingSpots,
@@ -10495,6 +10507,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           price: program?.price || null,
         });
       }
+      availableSessions.sort((a, b) => a.startDate.localeCompare(b.startDate));
       res.json(availableSessions);
     } catch (error) {
       res.status(500).json({ message: "Erreur serveur" });
