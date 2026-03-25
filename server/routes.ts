@@ -10402,6 +10402,7 @@ Le contenu doit être en français, clair et bien structuré.`;
 
   app.get("/api/v1/catalog/programs", requireApiKey, async (_req, res) => {
     try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=600");
       const programs = await storage.getPrograms();
       const sessions = await storage.getSessions();
       const sessionTrainers = await storage.getAllSessionTrainers();

@@ -36,7 +36,7 @@
   function buildStyles(theme) {
     var t = Object.assign({}, defaultTheme, theme || {});
     return (
-      "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');" +
+      "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap&text=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789%C3%A0%C3%A9%C3%A8%C3%AA%C3%AE%C3%B4%C3%BB%C3%BC%C3%A7');" +
       "*{box-sizing:border-box;margin:0;padding:0}" +
       ":host{display:block}" +
       ".sosafe-widget{font-family:" + t.fontFamily + ";color:#000;margin:0;padding:0}" +
@@ -53,11 +53,7 @@
       ".sosafe-page-results{font-size:.9rem;color:rgba(255,255,255,.9)}" +
       ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:2rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}" +
       ".sosafe-stat{text-align:center;min-width:140px;display:flex;flex-direction:column;align-items:center}" +
-      ".sosafe-stat-circle{position:relative;width:90px;height:90px;margin-bottom:.5rem}" +
-      ".sosafe-stat-circle svg{transform:rotate(-90deg);width:90px;height:90px}" +
-      ".sosafe-stat-circle .bg{fill:none;stroke:rgba(0,0,0,.1);stroke-width:6}" +
-      ".sosafe-stat-circle .fg{fill:none;stroke:#000;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1.5s ease-out}" +
-      ".sosafe-stat-circle-value{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:1.1rem;font-weight:700;color:#000}" +
+      ".sosafe-stat-value{font-size:2.5rem;font-weight:800;color:#000;line-height:1.1;margin-bottom:.3rem}" +
       ".sosafe-stat-label{font-size:.75rem;color:#000;text-transform:uppercase;letter-spacing:.03em;font-weight:600;max-width:120px}" +
 
       // Content wrapper (centered below banner)
@@ -105,6 +101,8 @@
       ".sosafe-card-date-row{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem}" +
       ".sosafe-card-date-bullet{width:6px;height:6px;border-radius:50%;background:#fec700;flex-shrink:0}" +
       ".sosafe-card-date-text{font-size:.8rem;color:#333;font-weight:500}" +
+      ".sosafe-card-location{font-size:.8rem;color:#6b7280;margin-bottom:.5rem;display:flex;align-items:center;gap:.3rem}" +
+      ".sosafe-card-location svg{width:14px;height:14px;flex-shrink:0}" +
       ".sosafe-card-subtitle{font-size:.8rem;color:#6b7280;margin-bottom:.3rem;font-style:italic}" +
       ".sosafe-card-spots{display:inline-block;font-size:.75rem;font-weight:600;padding:.2rem .6rem;border-radius:9999px;margin-bottom:.6rem}" +
       ".sosafe-card-spots.available{color:#059669;background:#ecfdf5}" +
@@ -233,7 +231,7 @@
 
     // Page header: banner image + breadcrumb/title overlay + KPI bar
     html += '<header class="sosafe-page-header">';
-    html += '<img class="sosafe-banner-img" src="' + bannerImage + '" alt="SO\'SAFE Formations">';
+    html += '<img class="sosafe-banner-img" src="' + bannerImage + '" alt="SO\'SAFE Formations" fetchpriority="high" width="1200" height="400">';
     html += '<div class="sosafe-header-overlay">';
     html += '<nav class="sosafe-breadcrumb"><a href="https://www.so-safe.fr/" target="_top">Accueil</a><span class="sosafe-breadcrumb-sep">\u203A</span> Formation</nav>';
     html += '<h1 class="sosafe-page-title">Formation</h1>';
@@ -241,27 +239,16 @@
     html += '</div>';
     html += '<div class="sosafe-stats-bar">';
     var stats = widgetStats || { totalTrainees: 668, totalPrograms: programs.length, successRate: 100, satisfactionRate: 99, recommendationRate: 99 };
-    var circum = 2 * Math.PI * 38;
-    function circleHtml(value, label, isPercent, maxVal) {
-      var pct = isPercent ? value : (maxVal > 0 ? Math.min(100, (value / maxVal) * 100) : 0);
-      var offset = circum - (pct / 100) * circum;
+    function statHtml(value, label, isPercent) {
       var displayVal = isPercent ? value + '%' : value;
-      return '<div class="sosafe-stat"><div class="sosafe-stat-circle"><svg viewBox="0 0 90 90"><circle class="bg" cx="45" cy="45" r="38"/><circle class="fg" cx="45" cy="45" r="38" stroke-dasharray="' + circum.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '"/></svg><div class="sosafe-stat-circle-value">' + displayVal + '</div></div><div class="sosafe-stat-label">' + label + '</div></div>';
+      return '<div class="sosafe-stat"><div class="sosafe-stat-value">' + displayVal + '</div><div class="sosafe-stat-label">' + label + '</div></div>';
     }
-    html += circleHtml(stats.totalTrainees, 'Stagiaires form\u00E9s', false, Math.max(stats.totalTrainees, 1000));
-    html += circleHtml(stats.totalPrograms, 'Formations', false, Math.max(stats.totalPrograms, 30));
-    html += circleHtml(stats.successRate, 'Taux de r\u00E9ussite', true, 100);
-    html += circleHtml(stats.satisfactionRate, 'Taux de satisfaction', true, 100);
+    html += statHtml(stats.totalTrainees, 'Stagiaires form\u00E9s', false);
+    html += statHtml(stats.totalPrograms, 'Formations', false);
+    html += statHtml(stats.successRate, 'Taux de r\u00E9ussite', true);
+    html += statHtml(stats.satisfactionRate, 'Taux de satisfaction', true);
     html += '</div>';
     html += '</header>';
-
-    // Under construction banner
-    html += '<div class="sosafe-wip-banner">';
-    html += '<div class="sosafe-wip-icon">\u26A0\uFE0F</div>';
-    html += '<div class="sosafe-wip-title">Page en cours de construction \u2014 <a href="https://www.so-safe.fr/formations/" target="_top" style="color:#b45309;text-decoration:underline">Consultez nos formations ici</a></div>';
-    html += '<div class="sosafe-wip-text">Les informations affich\u00E9es sur cette page ne sont pas \u00E0 jour. Merci de vous r\u00E9f\u00E9rer \u00E0 <a href="https://www.so-safe.fr/formations/" target="_top" style="color:#b45309;font-weight:600;text-decoration:underline">notre page formations</a> pour des informations actualis\u00E9es.</div>';
-    html += '<a class="sosafe-wip-btn" href="https://www.so-safe.fr/formations/" target="_top">Voir nos formations \u00E0 jour</a>';
-    html += '</div>';
 
     // Content wrapper
     html += '<div class="sosafe-content">';
@@ -314,7 +301,7 @@
       // Image with modality badge
       html += '<div class="sosafe-card-img-wrap">';
       var img = p.imageUrl || defaultImage;
-      html += '<img class="sosafe-card-img" src="' + img + '" alt="' + (p.title || "Formation") + '" onerror="this.src=\'' + defaultImage + '\'">';
+      html += '<img class="sosafe-card-img" src="' + img + '" alt="' + (p.title || "Formation") + '" loading="lazy" onerror="this.src=\'' + defaultImage + '\'">';
       if (p.modality) {
         html += '<div class="sosafe-card-modality">' + modalityLabel(p.modality) + '</div>';
       }
@@ -338,6 +325,9 @@
           html += '<span class="sosafe-card-date-bullet"></span>';
           html += '<span class="sosafe-card-date-text">' + formatDate(firstAvail.startDate) + ' \u2013 ' + firstAvail.remainingSpots + ' place' + (firstAvail.remainingSpots > 1 ? 's' : '') + '</span>';
           html += '</div></div>';
+          if (firstAvail.location) {
+            html += '<div class="sosafe-card-location"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' + firstAvail.location + '</div>';
+          }
         } else {
           html += '<div class="sosafe-card-dates-title" style="color:#dc2626">Complet</div>';
           html += '<div class="sosafe-card-dates"><div class="sosafe-card-date-row"><span class="sosafe-card-date-text" style="font-style:italic;color:#6b7280">Contactez-nous pour les prochaines dates</span></div></div>';
@@ -464,7 +454,8 @@
     if (p.sessions && p.sessions.length > 0) {
       html += '<div class="sosafe-modal-section"><h3>Sessions \u00E0 venir</h3></div>';
       html += '<div class="sosafe-modal-sessions">';
-      p.sessions.forEach(function (s) {
+      var sortedSessions = p.sessions.slice().sort(function(a, b) { return (a.startDate || "").localeCompare(b.startDate || ""); });
+      sortedSessions.forEach(function (s) {
         html += '<div class="sosafe-modal-session">';
         html += '<div>';
         html += '<div class="sosafe-modal-session-date">' + formatDateLong(s.startDate);
