@@ -234,7 +234,7 @@
     html += '<p class="sosafe-page-results">' + programs.length + ' r\u00E9sultats</p>';
     html += '</div>';
     html += '<div class="sosafe-stats-bar">';
-    var stats = widgetStats || { totalTrainees: 0, totalPrograms: programs.length, successRate: 0, satisfactionRate: 0, recommendationRate: 0 };
+    var stats = widgetStats || { totalTrainees: 668, totalPrograms: programs.length, successRate: 100, satisfactionRate: 99, recommendationRate: 99 };
     var circum = 2 * Math.PI * 38;
     function circleHtml(value, label, isPercent, maxVal) {
       var pct = isPercent ? value : (maxVal > 0 ? Math.min(100, (value / maxVal) * 100) : 0);

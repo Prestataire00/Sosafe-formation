@@ -74,6 +74,20 @@ export async function registerRoutes(
   // PUBLIC ROUTES (no auth required)
   // ============================================================
 
+  // CORS middleware for /api/public/ routes — allow widget cross-origin requests
+  app.use("/api/public", (req: any, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    }
+    if (req.method === "OPTIONS") {
+      return res.status(204).end();
+    }
+    next();
+  });
+
   // 1x1 transparent GIF pixel (pre-allocated buffer)
   const TRANSPARENT_GIF = Buffer.from(
     "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
