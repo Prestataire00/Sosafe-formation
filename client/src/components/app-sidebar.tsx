@@ -35,8 +35,6 @@ import {
   Database,
   Wrench,
   MapPin,
-  Zap,
-  Calculator,
 } from "lucide-react";
 import {
   Sheet,
@@ -67,8 +65,6 @@ export const allNav: NavItem[] = [
   { title: "Émargement", url: "/attendance", icon: CheckSquare, roles: ["admin"], permission: "manage_attendance", group: "formation" },
   { title: "E-Learning", url: "/elearning", icon: MonitorPlay, roles: ["admin"], permission: "manage_elearning", group: "formation" },
   { title: "Lieux de formation", url: "/training-locations", icon: MapPin, roles: ["admin"], group: "formation" },
-  { title: "Quiz & Autopositionnement", url: "/quiz-manager", icon: Zap, roles: ["admin"], group: "formation" },
-  { title: "Simulateur AFGSU", url: "/simulateur-afgsu", icon: Calculator, roles: ["admin"], group: "formation" },
   { title: "Listes de tâches", url: "/task-lists", icon: ListChecks, roles: ["admin"], group: "formation" },
   { title: "Portail Entreprise", url: "/enterprise-portal", icon: Building2, roles: ["enterprise"], group: "formation" },
 
