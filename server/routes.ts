@@ -7615,12 +7615,15 @@ Le contenu doit être en français, clair et bien structuré.`;
     const settings = req.body as Record<string, string>;
     const smtpKeys = ["smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email"];
     const brevoSmsKeys = ["brevo_api_key", "brevo_sms_sender"];
+    const tiimeKeys = ["tiime_client_id", "tiime_client_secret", "tiime_access_token", "tiime_refresh_token", "tiime_company_id", "tiime_base_url"];
     let smtpChanged = false;
     let brevoSmsChanged = false;
+    let tiimeChanged = false;
     for (const [key, value] of Object.entries(settings)) {
       await storage.upsertOrganizationSetting({ key, value });
       if (smtpKeys.includes(key)) smtpChanged = true;
       if (brevoSmsKeys.includes(key)) brevoSmsChanged = true;
+      if (tiimeKeys.includes(key)) tiimeChanged = true;
     }
     if (smtpChanged) {
       const { resetTransporter } = await import("./email-service");
@@ -7629,6 +7632,10 @@ Le contenu doit être en français, clair et bien structuré.`;
     if (brevoSmsChanged) {
       const { resetBrevoSmsConfig } = await import("./sms-service");
       resetBrevoSmsConfig();
+    }
+    if (tiimeChanged) {
+      const { resetTiimeConfig } = await import("./tiime-service");
+      resetTiimeConfig();
     }
     const result = await storage.getOrganizationSettings();
     const settingsMap = Object.fromEntries(result.map(s => [s.key, s.value]));
@@ -7640,6 +7647,104 @@ Le contenu doit être en français, clair et bien structuré.`;
     const { testSmtpConnection } = await import("./email-service");
     const result = await testSmtpConnection();
     res.json(result);
+  });
+
+  // ---- TIIME Integration Routes ----
+
+  app.post("/api/settings/tiime-test", async (_req, res) => {
+    try {
+      const { getTiimeConfig, testConnection } = await import("./tiime-service");
+      const config = await getTiimeConfig(storage);
+      if (!config) {
+        return res.json({ success: false, message: "TIIME non configuré. Renseignez vos identifiants API." });
+      }
+      const result = await testConnection(config);
+      res.json(result);
+    } catch (error: any) {
+      res.json({ success: false, message: error.message || "Erreur de connexion" });
+    }
+  });
+
+  app.post("/api/integrations/tiime/sync-clients", async (_req, res) => {
+    try {
+      const { getTiimeConfig, createClient, enterpriseToTiimeClient } = await import("./tiime-service");
+      const config = await getTiimeConfig(storage);
+      if (!config) return res.status(400).json({ message: "TIIME non configuré" });
+
+      const enterprises = await storage.getEnterprises();
+      const results = { synced: 0, errors: 0, details: [] as string[] };
+
+      for (const enterprise of enterprises) {
+        try {
+          const tiimeClient = enterpriseToTiimeClient(enterprise);
+          await createClient(config, tiimeClient);
+          results.synced++;
+          results.details.push(`✓ ${enterprise.name}`);
+        } catch (err: any) {
+          results.errors++;
+          results.details.push(`✗ ${enterprise.name}: ${err.message}`);
+        }
+      }
+
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/integrations/tiime/sync-invoices", async (_req, res) => {
+    try {
+      const { getTiimeConfig, createInvoice, invoiceToTiime } = await import("./tiime-service");
+      const config = await getTiimeConfig(storage);
+      if (!config) return res.status(400).json({ message: "TIIME non configuré" });
+
+      const invoices = await storage.getInvoices();
+      const unsyncedInvoices = invoices.filter((i: any) => i.status === "paid" || i.status === "sent");
+      const results = { synced: 0, errors: 0, details: [] as string[] };
+
+      for (const invoice of unsyncedInvoices) {
+        try {
+          const tiimeInvoice = invoiceToTiime(invoice, invoice.enterpriseId || "");
+          await createInvoice(config, tiimeInvoice);
+          results.synced++;
+          results.details.push(`✓ Facture ${invoice.number}`);
+        } catch (err: any) {
+          results.errors++;
+          results.details.push(`✗ Facture ${invoice.number}: ${err.message}`);
+        }
+      }
+
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/integrations/tiime/sync-quotes", async (_req, res) => {
+    try {
+      const { getTiimeConfig, createQuote, quoteToTiime } = await import("./tiime-service");
+      const config = await getTiimeConfig(storage);
+      if (!config) return res.status(400).json({ message: "TIIME non configuré" });
+
+      const quotes = await storage.getQuotes();
+      const results = { synced: 0, errors: 0, details: [] as string[] };
+
+      for (const quote of quotes) {
+        try {
+          const tiimeQuote = quoteToTiime(quote, quote.enterpriseId || "");
+          await createQuote(config, tiimeQuote);
+          results.synced++;
+          results.details.push(`✓ Devis ${quote.number}`);
+        } catch (err: any) {
+          results.errors++;
+          results.details.push(`✗ Devis ${quote.number}: ${err.message}`);
+        }
+      }
+
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   // Send test newsletter email (Le Point article) — public for one-time test
@@ -7687,6 +7792,19 @@ Le contenu doit être en français, clair et bien structuré.`;
       sendEmailNow(emailLog.id).catch(err => console.error("Test email send error:", err));
       res.json({ success: true, message: "Email mis en file d'attente", emailLogId: emailLog.id });
     } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Seed ALL templates (emails, SMS, documents, surveys, automation rules)
+  app.post("/api/settings/seed-all-templates", async (_req, res) => {
+    try {
+      const { seedAllTemplates } = await import("./seed-templates");
+      const { DOCUMENT_DEFAULTS } = await import("../client/src/lib/document-templates-defaults");
+      const results = await seedAllTemplates(DOCUMENT_DEFAULTS);
+      res.json({ success: true, ...results });
+    } catch (err: any) {
+      console.error("Error seeding templates:", err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
