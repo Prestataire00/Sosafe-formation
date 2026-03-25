@@ -235,8 +235,8 @@
     // Under construction banner
     html += '<div class="sosafe-wip-banner">';
     html += '<div class="sosafe-wip-icon">\u26A0\uFE0F</div>';
-    html += '<div class="sosafe-wip-title">Page en cours de construction</div>';
-    html += '<div class="sosafe-wip-text">Les informations affich\u00E9es sur cette page ne sont pas \u00E0 jour. Pour consulter nos formations actualis\u00E9es et vous inscrire, rendez-vous sur notre page d\u00E9di\u00E9e.</div>';
+    html += '<div class="sosafe-wip-title">Page en cours de construction \u2014 <a href="https://www.so-safe.fr/formations/" target="_top" style="color:#b45309;text-decoration:underline">Consultez nos formations ici</a></div>';
+    html += '<div class="sosafe-wip-text">Les informations affich\u00E9es sur cette page ne sont pas \u00E0 jour. Merci de vous r\u00E9f\u00E9rer \u00E0 <a href="https://www.so-safe.fr/formations/" target="_top" style="color:#b45309;font-weight:600;text-decoration:underline">notre page formations</a> pour des informations actualis\u00E9es.</div>';
     html += '<a class="sosafe-wip-btn" href="https://www.so-safe.fr/formations/" target="_top">Voir nos formations \u00E0 jour</a>';
     html += '</div>';
 
