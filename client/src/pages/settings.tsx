@@ -67,6 +67,7 @@ import {
   Upload,
   Calculator,
   RefreshCw,
+  Database,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type {
@@ -163,6 +164,7 @@ function OrganismeTab() {
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
@@ -284,6 +286,51 @@ function OrganismeTab() {
             </Button>
           </div>
         </form>
+      </CardContent>
+    </Card>
+
+    <SeedTemplatesCard />
+    </>
+  );
+}
+
+function SeedTemplatesCard() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const handleSeed = async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/settings/seed-all-templates");
+      const data = await res.json();
+      toast({
+        title: "Modèles chargés avec succès",
+        description: `${data.emails} emails, ${data.sms} SMS, ${data.documents} documents, ${data.surveys} évaluations, ${data.automations} automatisations`,
+      });
+    } catch {
+      toast({ title: "Erreur lors du chargement", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Database className="w-5 h-5" />
+          Modèles par défaut (Digiforma)
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground mb-4">
+          Chargez tous les modèles pré-configurés : 26 emails, 6 SMS, 28 documents, 6 évaluations et les règles d'automatisation associées.
+          Les modèles déjà existants ne seront pas écrasés.
+        </p>
+        <Button onClick={handleSeed} disabled={loading} variant="outline">
+          <Download className="w-4 h-4 mr-2" />
+          {loading ? "Chargement en cours..." : "Charger tous les modèles Digiforma"}
+        </Button>
       </CardContent>
     </Card>
   );
