@@ -143,6 +143,12 @@
       ".sosafe-modal-section p,.sosafe-modal-section ul{font-size:.9rem;color:#4b5563;line-height:1.7}" +
       ".sosafe-modal-section ul{padding-left:1.2rem}" +
       ".sosafe-modal-section li{margin-bottom:.3rem}" +
+      ".sosafe-accessibility-header{display:flex;align-items:center;gap:.5rem}" +
+      ".sosafe-accessibility-icon{width:28px;height:28px;flex-shrink:0}" +
+      ".sosafe-accessibility-box{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:1rem 1.2rem;margin-top:.5rem}" +
+      ".sosafe-accessibility-box p{margin-bottom:.5rem;font-size:.9rem;color:#4b5563;line-height:1.6}" +
+      ".sosafe-accessibility-box p:last-child{margin-bottom:0}" +
+      ".sosafe-accessibility-box strong{color:#000}" +
       ".sosafe-modal-sessions{margin-bottom:1.5rem}" +
       ".sosafe-modal-session{display:flex;justify-content:space-between;align-items:center;padding:.7rem 1rem;background:#f9fafb;border-radius:4px;margin-bottom:.4rem;font-size:.9rem}" +
       ".sosafe-modal-session-date{font-weight:600;color:#000}" +
@@ -244,10 +250,10 @@
       var displayVal = isPercent ? value + '%' : value;
       return '<div class="sosafe-stat"><div class="sosafe-stat-value">' + displayVal + '</div><div class="sosafe-stat-label">' + label + '</div></div>';
     }
-    html += statHtml(stats.totalTrainees, 'Stagiaires form\u00E9s', false);
-    html += statHtml(stats.totalPrograms, 'Formations', false);
-    html += statHtml(stats.successRate, 'Taux de r\u00E9ussite', true);
     html += statHtml(stats.satisfactionRate, 'Taux de satisfaction', true);
+    html += statHtml(stats.recommendationRate, 'Taux de recommandation', true);
+    html += statHtml(stats.successRate, 'Taux de r\u00E9ussite', true);
+    html += statHtml(stats.totalTrainees, 'Nombre d\'apprenants', false);
     html += '</div>';
     html += '</header>';
 
@@ -277,7 +283,7 @@
     html += '<select class="sosafe-select" data-role="cat-select">';
     html += '<option value="all">Indiff\u00E9rent</option>';
     categories.forEach(function (cat) {
-      html += '<option value="' + cat + '">Formations ' + cat + '</option>';
+      html += '<option value="' + cat + '">' + cat + '</option>';
     });
     html += '</select>';
     html += '<label class="sosafe-filter-label">Sur-mesure</label>';
