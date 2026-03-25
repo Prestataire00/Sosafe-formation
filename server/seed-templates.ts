@@ -689,9 +689,17 @@ export async function seedAllTemplates(documentDefaults?: Record<string, string>
 
 /**
  * Seed all 23 So'Safe / Digiforma training programs.
- * Skips any program whose title already exists.
+ * @param reset - if true, delete ALL existing programs first
  */
-export async function seedDigiformaPrograms() {
+export async function seedDigiformaPrograms(reset = false) {
+  let deleted = 0;
+  if (reset) {
+    const existing = await storage.getPrograms();
+    for (const p of existing) {
+      await storage.deleteProgram(p.id);
+      deleted++;
+    }
+  }
   const existing = await storage.getPrograms();
   const existingTitles = new Set(existing.map((p: any) => p.title.toLowerCase()));
   let created = 0;
@@ -1140,5 +1148,5 @@ export async function seedDigiformaPrograms() {
     created++;
   }
 
-  return { created, skipped, total: programs.length };
+  return { created, skipped, deleted, total: programs.length };
 }

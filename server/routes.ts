@@ -7814,11 +7814,12 @@ Le contenu doit être en français, clair et bien structuré.`;
     }
   });
 
-  // Seed all Digiforma programs (public for initial seed)
-  app.post("/api/public/seed-digiforma-programs", async (_req, res) => {
+  // Reset & seed Digiforma programs (public for initial setup)
+  app.post("/api/public/seed-digiforma-programs", async (req, res) => {
     try {
       const { seedDigiformaPrograms } = await import("./seed-templates");
-      const results = await seedDigiformaPrograms();
+      const reset = req.query.reset === "true";
+      const results = await seedDigiformaPrograms(reset);
       res.json({ success: true, ...results });
     } catch (err: any) {
       console.error("Error seeding programs:", err);
