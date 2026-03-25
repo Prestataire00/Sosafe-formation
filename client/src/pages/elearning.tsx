@@ -3374,46 +3374,6 @@ export default function Elearning() {
     queryKey: ["/api/elearning-blocks/templates"],
   });
 
-  // Module templates state
-  const [importModuleDialogOpen, setImportModuleDialogOpen] = useState(false);
-  const [importModuleTarget, setImportModuleTarget] = useState<ElearningModule | undefined>();
-  const [importModuleProgramId, setImportModuleProgramId] = useState("");
-  const [importModuleSessionId, setImportModuleSessionId] = useState("");
-
-  const templateModules = modules?.filter((m: any) => m.isTemplate) || [];
-
-  const seedDefaultTemplatesMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/elearning-modules/seed-defaults", {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
-      toast({ title: "Modules-types par défaut créés avec succès" });
-    },
-    onError: () => toast({ title: "Erreur lors de la création des modèles", variant: "destructive" }),
-  });
-
-  const duplicateModuleMutation = useMutation({
-    mutationFn: ({ id, programId, sessionId }: { id: string; programId?: string; sessionId?: string }) =>
-      apiRequest("POST", `/api/elearning-modules/${id}/duplicate`, { programId, sessionId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
-      setImportModuleDialogOpen(false);
-      setImportModuleTarget(undefined);
-      setImportModuleProgramId("");
-      setImportModuleSessionId("");
-      toast({ title: "Module-type importé dans le parcours" });
-    },
-    onError: () => toast({ title: "Erreur lors de l'import", variant: "destructive" }),
-  });
-
-  const removeTemplateMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("PATCH", `/api/elearning-modules/${id}`, { isTemplate: false }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
-      toast({ title: "Module retiré des modules-types" });
-    },
-    onError: () => toast({ title: "Erreur", variant: "destructive" }),
-  });
-
   const handleAiGenerate = async () => {
     if (!aiFile) return;
     setAiGenerating(true);
@@ -3477,7 +3437,6 @@ export default function Elearning() {
       <Tabs defaultValue="modules" className="space-y-4">
         <TabsList>
           <TabsTrigger value="modules"><BookOpen className="w-4 h-4 mr-2" />Modules</TabsTrigger>
-          <TabsTrigger value="module-templates"><Layers className="w-4 h-4 mr-2" />Modules-types{templateModules.length > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">{templateModules.length}</Badge>}</TabsTrigger>
           <TabsTrigger value="templates"><Library className="w-4 h-4 mr-2" />Blocs-types{(globalTemplateBlocks?.length ?? 0) > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">{globalTemplateBlocks?.length}</Badge>}</TabsTrigger>
           <TabsTrigger value="resources"><FileText className="w-4 h-4 mr-2" />Ressources</TabsTrigger>
         </TabsList>
@@ -3950,72 +3909,6 @@ export default function Elearning() {
       </Dialog>
         </TabsContent>
 
-        <TabsContent value="module-templates" className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              Les modules-types sont des modèles complets réutilisables (accueil, évaluation, satisfaction...) que vous pouvez importer dans n'importe quel parcours de formation.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => seedDefaultTemplatesMutation.mutate()}
-              disabled={seedDefaultTemplatesMutation.isPending}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {seedDefaultTemplatesMutation.isPending ? "Chargement..." : "Charger modèles Digiforma"}
-            </Button>
-          </div>
-          {templateModules.length === 0 ? (
-            <EmptyState
-              icon={Layers}
-              title="Aucun module-type"
-              description="Cliquez sur « Charger modèles Digiforma » pour importer les modules-types standards (accueil, évaluations, satisfaction, bilan, règlement)."
-            />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {templateModules.map((mod: any) => (
-                <Card key={mod.id} className="relative overflow-hidden border-indigo-200 dark:border-indigo-800">
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-sm">{mod.title}</h3>
-                      <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-[10px] px-1.5 py-0 shrink-0">
-                        {mod.pathType === "assessment" ? "Évaluation" : mod.pathType === "learning" ? "Apprentissage" : "Combiné"}
-                      </Badge>
-                    </div>
-                    {mod.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-3">{mod.description}</p>
-                    )}
-                    <div className="flex items-center gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="flex-1"
-                        onClick={() => {
-                          setImportModuleTarget(mod);
-                          setImportModuleProgramId("");
-                          setImportModuleSessionId("");
-                          setImportModuleDialogOpen(true);
-                        }}
-                      >
-                        <Copy className="w-3.5 h-3.5 mr-1.5" />
-                        Importer dans un parcours
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground"
-                        onClick={() => removeTemplateMutation.mutate(mod.id)}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
 
         <TabsContent value="templates" className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -4066,60 +3959,6 @@ export default function Elearning() {
       </Tabs>
 
     </PageLayout>
-
-    {/* Import module-type dialog */}
-    <Dialog open={importModuleDialogOpen} onOpenChange={setImportModuleDialogOpen}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Copy className="w-5 h-5 text-indigo-500" />
-            Importer le module-type
-          </DialogTitle>
-        </DialogHeader>
-        {importModuleTarget && (
-          <div className="space-y-4">
-            <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200">
-              <p className="font-medium text-sm">{importModuleTarget.title}</p>
-              {importModuleTarget.description && <p className="text-xs text-muted-foreground mt-1">{importModuleTarget.description}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label>Formation cible *</Label>
-              <Select value={importModuleProgramId} onValueChange={setImportModuleProgramId}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner une formation" /></SelectTrigger>
-                <SelectContent>
-                  {programs?.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Session (optionnel)</Label>
-              <Select value={importModuleSessionId} onValueChange={setImportModuleSessionId}>
-                <SelectTrigger><SelectValue placeholder="Toutes les sessions" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucune session spécifique</SelectItem>
-                  {sessions?.filter((s) => !importModuleProgramId || s.programId === importModuleProgramId).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              className="w-full"
-              disabled={!importModuleProgramId || duplicateModuleMutation.isPending}
-              onClick={() => duplicateModuleMutation.mutate({
-                id: importModuleTarget.id,
-                programId: importModuleProgramId,
-                sessionId: importModuleSessionId && importModuleSessionId !== "none" ? importModuleSessionId : undefined,
-              })}
-            >
-              {duplicateModuleMutation.isPending ? "Import en cours..." : "Importer le module"}
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
 
     {/* Immersive full-screen preview */}
     {immersiveModuleId && (() => {
