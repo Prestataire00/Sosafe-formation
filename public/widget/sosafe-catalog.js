@@ -324,35 +324,21 @@
         html += '<div class="sosafe-card-duration">' + formatDuration(p.duration) + '</div>';
       }
       if (p.sessions && p.sessions.length > 0) {
-        // Show spots status for the next available session
-        var nextSess = p.sessions[0];
-        if (nextSess.isFull) {
-          var hasAvailable = p.sessions.some(function(s) { return !s.isFull; });
-          if (hasAvailable) {
-            html += '<span class="sosafe-card-spots low">Session proche compl\u00E8te</span>';
-          } else {
-            html += '<span class="sosafe-card-spots full">Complet</span>';
-          }
-        } else if (nextSess.remainingSpots <= 3) {
-          html += '<span class="sosafe-card-spots low">' + nextSess.remainingSpots + ' place' + (nextSess.remainingSpots > 1 ? 's' : '') + ' restante' + (nextSess.remainingSpots > 1 ? 's' : '') + '</span>';
-        } else {
-          html += '<span class="sosafe-card-spots available">' + nextSess.remainingSpots + ' places disponibles</span>';
-        }
-        html += '<div class="sosafe-card-dates-title">Prochaines dates</div>';
-        html += '<div class="sosafe-card-dates">';
-        var maxDates = Math.min(p.sessions.length, 3);
-        for (var si = 0; si < maxDates; si++) {
-          var sess = p.sessions[si];
+        var firstAvail = p.sessions.find(function(s) { return !s.isFull; });
+        if (firstAvail) {
+          html += '<div class="sosafe-card-dates-title">Prochaine session</div>';
+          html += '<div class="sosafe-card-dates">';
           html += '<div class="sosafe-card-date-row">';
           html += '<span class="sosafe-card-date-bullet"></span>';
-          html += '<span class="sosafe-card-date-text">' + formatDate(sess.startDate);
-          if (sess.isFull) {
-            html += ' <span style="color:#dc2626;font-weight:600;font-size:.7rem">(Complet)</span>';
-          }
-          html += '</span>';
-          html += '</div>';
+          html += '<span class="sosafe-card-date-text">' + formatDate(firstAvail.startDate) + ' \u2013 ' + firstAvail.remainingSpots + ' place' + (firstAvail.remainingSpots > 1 ? 's' : '') + '</span>';
+          html += '</div></div>';
+        } else {
+          html += '<div class="sosafe-card-dates-title" style="color:#dc2626">Complet</div>';
+          html += '<div class="sosafe-card-dates"><div class="sosafe-card-date-row"><span class="sosafe-card-date-text" style="font-style:italic;color:#6b7280">Contactez-nous pour les prochaines dates</span></div></div>';
         }
-        html += '</div>';
+      } else {
+        html += '<div class="sosafe-card-dates-title">Prochaine session</div>';
+        html += '<div class="sosafe-card-dates"><div class="sosafe-card-date-row"><span class="sosafe-card-date-text" style="font-style:italic;color:#6b7280"><a href="https://www.so-safe.fr/contact/" target="_top" style="color:#6b7280;text-decoration:underline">Nous contacter</a></span></div></div>';
       }
       html += '<button class="sosafe-card-btn" data-index="' + index + '">Voir le programme</button>';
       html += '</div></div>';
