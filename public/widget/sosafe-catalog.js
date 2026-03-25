@@ -31,6 +31,7 @@
   var bannerImage = "https://www.so-safe.fr/wp-content/uploads/2024/05/HD-11-scaled.jpg";
 
   var allPrograms = [];
+  var widgetStats = null;
 
   function buildStyles(theme) {
     var t = Object.assign({}, defaultTheme, theme || {});
@@ -50,10 +51,14 @@
       ".sosafe-breadcrumb-sep{margin:0 .3rem}" +
       ".sosafe-page-title{font-size:2rem;font-weight:700;color:#fff;margin-bottom:.3rem;text-shadow:0 1px 4px rgba(0,0,0,.3)}" +
       ".sosafe-page-results{font-size:.9rem;color:rgba(255,255,255,.9)}" +
-      ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:1.2rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}" +
-      ".sosafe-stat{text-align:center;min-width:120px}" +
-      ".sosafe-stat-value{font-size:2rem;font-weight:700;color:#000}" +
-      ".sosafe-stat-label{font-size:.75rem;color:#000;text-transform:uppercase;letter-spacing:.03em;font-weight:500}" +
+      ".sosafe-stats-bar{background:linear-gradient(-45deg,#F6DE14,#F7B136);padding:2rem 2rem;display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}" +
+      ".sosafe-stat{text-align:center;min-width:140px;display:flex;flex-direction:column;align-items:center}" +
+      ".sosafe-stat-circle{position:relative;width:90px;height:90px;margin-bottom:.5rem}" +
+      ".sosafe-stat-circle svg{transform:rotate(-90deg);width:90px;height:90px}" +
+      ".sosafe-stat-circle .bg{fill:none;stroke:rgba(0,0,0,.1);stroke-width:6}" +
+      ".sosafe-stat-circle .fg{fill:none;stroke:#000;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1.5s ease-out}" +
+      ".sosafe-stat-circle-value{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:1.1rem;font-weight:700;color:#000}" +
+      ".sosafe-stat-label{font-size:.75rem;color:#000;text-transform:uppercase;letter-spacing:.03em;font-weight:600;max-width:120px}" +
 
       // Content wrapper (centered below banner)
       ".sosafe-content{max-width:1200px;margin:0 auto;padding:0 1rem 2rem}" +
@@ -101,6 +106,10 @@
       ".sosafe-card-date-bullet{width:6px;height:6px;border-radius:50%;background:#fec700;flex-shrink:0}" +
       ".sosafe-card-date-text{font-size:.8rem;color:#333;font-weight:500}" +
       ".sosafe-card-subtitle{font-size:.8rem;color:#6b7280;margin-bottom:.3rem;font-style:italic}" +
+      ".sosafe-card-spots{display:inline-block;font-size:.75rem;font-weight:600;padding:.2rem .6rem;border-radius:9999px;margin-bottom:.6rem}" +
+      ".sosafe-card-spots.available{color:#059669;background:#ecfdf5}" +
+      ".sosafe-card-spots.full{color:#dc2626;background:#fef2f2}" +
+      ".sosafe-card-spots.low{color:#d97706;background:#fffbeb}" +
       ".sosafe-card-btn{display:block;text-align:center;padding:calc(.667em + 2px) calc(1.333em + 2px);background:#fec700;color:#000;text-decoration:none;border-radius:0;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:background .2s;font-family:" + t.fontFamily + ";width:100%}" +
       ".sosafe-card-btn:hover{background:#e6b400}" +
 
@@ -168,7 +177,7 @@
 
       // Responsive
       "@media(max-width:900px){.sosafe-grid{grid-template-columns:repeat(2,1fr)}}" +
-      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner-img{height:250px}.sosafe-header-overlay{padding:1rem}.sosafe-page-title{font-size:1.4rem}.sosafe-stats-bar{gap:1rem;padding:1rem}.sosafe-stat-value{font-size:1.3rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-detail-banner{height:200px}.sosafe-detail-title{font-size:1.4rem}.sosafe-detail-content{padding:1.2rem}.sosafe-detail-meta{flex-direction:column;gap:.5rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
+      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner-img{height:250px}.sosafe-header-overlay{padding:1rem}.sosafe-page-title{font-size:1.4rem}.sosafe-stats-bar{gap:1.5rem;padding:1.5rem 1rem}.sosafe-stat-circle{width:70px;height:70px}.sosafe-stat-circle svg{width:70px;height:70px}.sosafe-stat-circle-value{font-size:.9rem}.sosafe-stat{min-width:100px}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-detail-banner{height:200px}.sosafe-detail-title{font-size:1.4rem}.sosafe-detail-content{padding:1.2rem}.sosafe-detail-meta{flex-direction:column;gap:.5rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
@@ -225,10 +234,18 @@
     html += '<p class="sosafe-page-results">' + programs.length + ' r\u00E9sultats</p>';
     html += '</div>';
     html += '<div class="sosafe-stats-bar">';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">668</div><div class="sosafe-stat-label">Stagiaires form\u00E9s</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programs.length + '</div><div class="sosafe-stat-label">Programmes de formation</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">de taux de r\u00E9ussite</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">de taux de satisfaction</div></div>';
+    var stats = widgetStats || { totalTrainees: 0, totalPrograms: programs.length, successRate: 0, satisfactionRate: 0, recommendationRate: 0 };
+    var circum = 2 * Math.PI * 38;
+    function circleHtml(value, label, isPercent, maxVal) {
+      var pct = isPercent ? value : (maxVal > 0 ? Math.min(100, (value / maxVal) * 100) : 0);
+      var offset = circum - (pct / 100) * circum;
+      var displayVal = isPercent ? value + '%' : value;
+      return '<div class="sosafe-stat"><div class="sosafe-stat-circle"><svg viewBox="0 0 90 90"><circle class="bg" cx="45" cy="45" r="38"/><circle class="fg" cx="45" cy="45" r="38" stroke-dasharray="' + circum.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '"/></svg><div class="sosafe-stat-circle-value">' + displayVal + '</div></div><div class="sosafe-stat-label">' + label + '</div></div>';
+    }
+    html += circleHtml(stats.totalTrainees, 'Stagiaires form\u00E9s', false, Math.max(stats.totalTrainees, 1000));
+    html += circleHtml(stats.totalPrograms, 'Formations', false, Math.max(stats.totalPrograms, 30));
+    html += circleHtml(stats.successRate, 'Taux de r\u00E9ussite', true, 100);
+    html += circleHtml(stats.satisfactionRate, 'Taux de satisfaction', true, 100);
     html += '</div>';
     html += '</header>';
 
@@ -307,6 +324,20 @@
         html += '<div class="sosafe-card-duration">' + formatDuration(p.duration) + '</div>';
       }
       if (p.sessions && p.sessions.length > 0) {
+        // Show spots status for the next available session
+        var nextSess = p.sessions[0];
+        if (nextSess.isFull) {
+          var hasAvailable = p.sessions.some(function(s) { return !s.isFull; });
+          if (hasAvailable) {
+            html += '<span class="sosafe-card-spots low">Session proche compl\u00E8te</span>';
+          } else {
+            html += '<span class="sosafe-card-spots full">Complet</span>';
+          }
+        } else if (nextSess.remainingSpots <= 3) {
+          html += '<span class="sosafe-card-spots low">' + nextSess.remainingSpots + ' place' + (nextSess.remainingSpots > 1 ? 's' : '') + ' restante' + (nextSess.remainingSpots > 1 ? 's' : '') + '</span>';
+        } else {
+          html += '<span class="sosafe-card-spots available">' + nextSess.remainingSpots + ' places disponibles</span>';
+        }
         html += '<div class="sosafe-card-dates-title">Prochaines dates</div>';
         html += '<div class="sosafe-card-dates">';
         var maxDates = Math.min(p.sessions.length, 3);
@@ -314,7 +345,11 @@
           var sess = p.sessions[si];
           html += '<div class="sosafe-card-date-row">';
           html += '<span class="sosafe-card-date-bullet"></span>';
-          html += '<span class="sosafe-card-date-text">' + formatDate(sess.startDate) + '</span>';
+          html += '<span class="sosafe-card-date-text">' + formatDate(sess.startDate);
+          if (sess.isFull) {
+            html += ' <span style="color:#dc2626;font-weight:600;font-size:.7rem">(Complet)</span>';
+          }
+          html += '</span>';
           html += '</div>';
         }
         html += '</div>';
@@ -605,10 +640,18 @@
       return r.json();
     });
 
-    Promise.all([configPromise, programsPromise])
+    var statsPromise = fetch(baseUrl + "/api/public/widget-stats").then(function (r) {
+      return r.ok ? r.json() : null;
+    }).catch(function () { return null; });
+
+    Promise.all([configPromise, programsPromise, statsPromise])
       .then(function (results) {
         var config = results[0];
         var programs = results[1];
+        widgetStats = results[2];
+        if (widgetStats) {
+          widgetStats.totalPrograms = programs.length;
+        }
         allPrograms = programs;
         var style = document.createElement("style");
         style.textContent = buildStyles(config.theme);
@@ -633,5 +676,4 @@
 
   shadow.innerHTML = '<div style="text-align:center;padding:3rem;color:#9ca3af;font-size:.9rem">Chargement des formations...</div>';
   fetchData();
-  setInterval(fetchData, 5 * 60 * 1000);
 })();

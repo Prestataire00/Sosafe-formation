@@ -46,6 +46,7 @@ import {
   Layers,
   ArrowLeft,
   Eye,
+  EyeOff,
   Calendar,
   Target,
   ClipboardList,
@@ -987,6 +988,16 @@ export default function Programs() {
     onError: () => toast({ title: "Erreur lors de la suppression", variant: "destructive" }),
   });
 
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, currentStatus }: { id: string; currentStatus: string }) =>
+      apiRequest("PATCH", `/api/programs/${id}`, { status: currentStatus === "published" ? "draft" : "published" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
+      toast({ title: "Statut mis à jour" });
+    },
+    onError: () => toast({ title: "Erreur lors du changement de statut", variant: "destructive" }),
+  });
+
   // Published programs count for catalog preview
   const publishedPrograms = programs?.filter((p) => p.status === "published") || [];
   const catalogFilteredCount = catalogCategories.length === 0
@@ -1207,6 +1218,13 @@ export default function Programs() {
                                 }}>
                                   <FileDown className="w-4 h-4 mr-2" /> Télécharger le programme
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => toggleStatusMutation.mutate({ id: program.id, currentStatus: program.status })}>
+                                  {program.status === "published" ? (
+                                    <><EyeOff className="w-4 h-4 mr-2" /> Masquer du site</>
+                                  ) : (
+                                    <><Eye className="w-4 h-4 mr-2" /> Publier sur le site</>
+                                  )}
+                                </DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
                                   <Trash2 className="w-4 h-4 mr-2" /> Supprimer
                                 </DropdownMenuItem>
@@ -1262,6 +1280,9 @@ export default function Programs() {
                         </Button>
                         <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setEditProgram(program); setDialogOpen(true); }}>
                           <Pencil className="w-3 h-3 mr-1" /> Modifier
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => toggleStatusMutation.mutate({ id: program.id, currentStatus: program.status })}>
+                          {program.status === "published" ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                         </Button>
                         <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
                           <Trash2 className="w-3 h-3" />
