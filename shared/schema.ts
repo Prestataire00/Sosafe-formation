@@ -792,6 +792,8 @@ export const elearningModules = pgTable("elearning_modules", {
   status: text("status").notNull().default("draft"),
   requireSequential: boolean("require_sequential").default(true),
   pathType: text("path_type").notNull().default("combined"),
+  isTemplate: boolean("is_template").default(false),
+  templateSourceId: varchar("template_source_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

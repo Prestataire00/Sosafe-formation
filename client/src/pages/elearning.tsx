@@ -97,6 +97,8 @@ import {
   Maximize2,
   GitBranch,
   Gamepad2,
+  Library,
+  Copy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -3214,6 +3216,9 @@ export default function Elearning() {
   const [aiDurationMinutes, setAiDurationMinutes] = useState<number | "">("");
   const [aiBlockTypes, setAiBlockTypes] = useState<string[]>(["text", "quiz", "flashcard"]);
   const aiFileRef = useRef<HTMLInputElement>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importTargetProgramId, setImportTargetProgramId] = useState("");
+  const [importTargetSessionId, setImportTargetSessionId] = useState("");
   const { toast } = useToast();
 
   const { data: modules, isLoading } = useQuery<ElearningModule[]>({
@@ -3269,6 +3274,31 @@ export default function Elearning() {
     },
     onError: () => toast({ title: "Erreur lors du changement de statut", variant: "destructive" }),
   });
+
+  const toggleTemplateMutation = useMutation({
+    mutationFn: ({ id, isTemplate }: { id: string; isTemplate: boolean }) =>
+      apiRequest("PATCH", `/api/elearning-modules/${id}`, { isTemplate }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
+      toast({ title: vars.isTemplate ? "Module sauvegardé comme module-type" : "Module retiré des modules-types" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  const duplicateModuleMutation = useMutation({
+    mutationFn: ({ id, programId, sessionId }: { id: string; programId?: string; sessionId?: string }) =>
+      apiRequest("POST", `/api/elearning-modules/${id}/duplicate`, { programId, sessionId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
+      setImportDialogOpen(false);
+      setImportTargetProgramId("");
+      setImportTargetSessionId("");
+      toast({ title: "Module-type importé avec succès" });
+    },
+    onError: () => toast({ title: "Erreur lors de l'import", variant: "destructive" }),
+  });
+
+  const templateModules = modules?.filter((m) => (m as any).isTemplate) || [];
 
   const handleAiGenerate = async () => {
     if (!aiFile) return;
@@ -3333,6 +3363,7 @@ export default function Elearning() {
       <Tabs defaultValue="modules" className="space-y-4">
         <TabsList>
           <TabsTrigger value="modules"><BookOpen className="w-4 h-4 mr-2" />Modules</TabsTrigger>
+          <TabsTrigger value="templates"><Library className="w-4 h-4 mr-2" />Modules-types{templateModules.length > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">{templateModules.length}</Badge>}</TabsTrigger>
           <TabsTrigger value="resources"><FileText className="w-4 h-4 mr-2" />Ressources</TabsTrigger>
         </TabsList>
 
@@ -3410,6 +3441,11 @@ export default function Elearning() {
                             {(mod as any).pathType === "assessment" && (
                               <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-900/20 text-[10px] px-1.5 py-0">
                                 <Target className="w-3 h-3 mr-1" />Évaluation
+                              </Badge>
+                            )}
+                            {(mod as any).isTemplate && (
+                              <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-[10px] px-1.5 py-0">
+                                <Library className="w-3 h-3 mr-1" />Module-type
                               </Badge>
                             )}
                           </div>
@@ -3511,6 +3547,12 @@ export default function Elearning() {
                               <DropdownMenuItem onClick={() => { setEditModule(mod); setModuleDialogOpen(true); }}>
                                 <Pencil className="w-4 h-4 mr-2" />
                                 Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => toggleTemplateMutation.mutate({ id: mod.id, isTemplate: !(mod as any).isTemplate })}
+                              >
+                                <Library className="w-4 h-4 mr-2" />
+                                {(mod as any).isTemplate ? "Retirer des modules-types" : "Sauvegarder comme module-type"}
                               </DropdownMenuItem>
                               {mod.status !== "archived" && (
                                 <DropdownMenuItem
@@ -3804,10 +3846,144 @@ export default function Elearning() {
       </Dialog>
         </TabsContent>
 
+        <TabsContent value="templates" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Les modules-types sont des modèles réutilisables que vous pouvez importer dans n'importe quel parcours de formation.
+            </p>
+          </div>
+          {templateModules.length === 0 ? (
+            <EmptyState
+              icon={Library}
+              title="Aucun module-type"
+              description="Sauvegardez un module existant comme module-type depuis l'onglet Modules (menu ⋯ → Sauvegarder comme module-type)"
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {templateModules.map((mod) => {
+                const program = programs?.find((p) => p.id === mod.programId);
+                return (
+                  <Card key={mod.id} className="relative overflow-hidden border-indigo-200 dark:border-indigo-800">
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold truncate">{mod.title}</h3>
+                          {mod.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{mod.description}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-[10px] px-1.5 py-0 shrink-0">
+                          <Library className="w-3 h-3 mr-1" />Type
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {program && <span>Formation : {program.title}</span>}
+                        {(mod as any).pathType && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {(mod as any).pathType === "learning" ? "Apprentissage" : (mod as any).pathType === "assessment" ? "Évaluation" : "Combiné"}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => {
+                            setImportDialogOpen(true);
+                            setEditModule(mod);
+                          }}
+                        >
+                          <Copy className="w-3.5 h-3.5 mr-1.5" />
+                          Importer dans un parcours
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground"
+                          onClick={() => toggleTemplateMutation.mutate({ id: mod.id, isTemplate: false })}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
         <TabsContent value="resources">
           <SessionResourceManager />
         </TabsContent>
       </Tabs>
+
+      {/* Import template dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={(open) => { setImportDialogOpen(open); if (!open) { setEditModule(undefined); setImportTargetProgramId(""); setImportTargetSessionId(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Copy className="w-5 h-5 text-indigo-500" />
+              Importer le module-type
+            </DialogTitle>
+          </DialogHeader>
+          {editModule && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200">
+                <p className="font-medium text-sm">{editModule.title}</p>
+                {editModule.description && <p className="text-xs text-muted-foreground mt-1">{editModule.description}</p>}
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Formation cible</Label>
+                  <Select value={importTargetProgramId} onValueChange={setImportTargetProgramId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner une formation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programs?.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Session cible (optionnel)</Label>
+                  <Select value={importTargetSessionId} onValueChange={setImportTargetSessionId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Toutes les sessions" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucune session spécifique</SelectItem>
+                      {sessions?.filter((s) => !importTargetProgramId || s.programId === importTargetProgramId).map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button
+                className="w-full"
+                disabled={!importTargetProgramId || duplicateModuleMutation.isPending}
+                onClick={() => {
+                  duplicateModuleMutation.mutate({
+                    id: editModule.id,
+                    programId: importTargetProgramId || undefined,
+                    sessionId: importTargetSessionId && importTargetSessionId !== "none" ? importTargetSessionId : undefined,
+                  });
+                }}
+              >
+                {duplicateModuleMutation.isPending ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Import en cours...</>
+                ) : (
+                  <><Copy className="w-4 h-4 mr-2" />Importer le module</>
+                )}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </PageLayout>
 
     {/* Immersive full-screen preview */}
