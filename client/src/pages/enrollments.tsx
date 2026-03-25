@@ -60,7 +60,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { FileText } from "lucide-react";
+import { FileText, Eye, Download, ShieldCheck, ShieldAlert, RefreshCw, Loader2, FolderOpen } from "lucide-react";
 import type { Enrollment, InsertEnrollment, Session, Trainee, Enterprise, Program, ProgramPrerequisite, ProgramCustomField } from "@shared/schema";
 import { VAE_STATUSES } from "@shared/schema";
 
@@ -75,6 +75,247 @@ const ENROLLMENT_STATUSES = [
 function EnrollmentStatusBadge({ status }: { status: string }) {
   const st = ENROLLMENT_STATUSES.find((s) => s.value === status) || ENROLLMENT_STATUSES[0];
   return <StatusBadge status={st.value} label={st.label} />;
+}
+
+// ============================================================
+// ENROLLMENT DOSSIER VIEWER (AFGSU + Documents)
+// ============================================================
+
+function EnrollmentDossier({ enrollment, trainee, session }: { enrollment: Enrollment; trainee?: Trainee; session?: Session }) {
+  const { toast } = useToast();
+  const afgsu = (enrollment.customData as any)?.afgsuEligibility;
+
+  const { data: documents, isLoading: docsLoading } = useQuery<any[]>({
+    queryKey: ["/api/user-documents", trainee?.id],
+    queryFn: () => fetch(`/api/user-documents?ownerId=${trainee?.id}&ownerType=trainee`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!trainee?.id,
+  });
+
+  const validateMutation = useMutation({
+    mutationFn: ({ docId, validated, notes }: { docId: string; validated: boolean; notes?: string }) =>
+      apiRequest("PATCH", `/api/user-documents/${docId}`, { isManuallyValidated: validated, validationNotes: notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-documents", trainee?.id] });
+      toast({ title: "Document mis à jour" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  const reanalyzeMutation = useMutation({
+    mutationFn: (docId: string) => apiRequest("POST", `/api/user-documents/${docId}/reanalyze`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-documents", trainee?.id] });
+      toast({ title: "Analyse IA relancée" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  // Filter docs linked to this session
+  const sessionDocs = documents?.filter((d: any) => d.linkedSessionId === session?.id || d.category === "justificatif") || [];
+
+  return (
+    <div className="space-y-5">
+      {/* Stagiaire info */}
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+        <div className="flex-1">
+          <p className="font-semibold">{trainee?.firstName} {trainee?.lastName}</p>
+          <p className="text-xs text-muted-foreground">{trainee?.email}</p>
+        </div>
+        <EnrollmentStatusBadge status={enrollment.status} />
+      </div>
+
+      {/* AFGSU Eligibility */}
+      {afgsu && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-blue-600" />
+            Éligibilité AFGSU
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-lg border bg-card">
+              <p className="text-xs text-muted-foreground">Éligible</p>
+              <p className="font-medium text-sm">
+                {afgsu.eligible === "afgsu2" ? (
+                  <Badge className="bg-green-600">AFGSU 2</Badge>
+                ) : afgsu.eligible === "afgsu1" ? (
+                  <Badge className="bg-blue-600">AFGSU 1</Badge>
+                ) : (
+                  <Badge variant="destructive">Non éligible</Badge>
+                )}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg border bg-card">
+              <p className="text-xs text-muted-foreground">Recyclage</p>
+              <p className="font-medium text-sm">
+                {afgsu.recycling === "needed" ? (
+                  <Badge variant="outline" className="text-amber-600 border-amber-300">Recyclage nécessaire</Badge>
+                ) : afgsu.recycling === "not_needed" ? (
+                  <Badge variant="outline" className="text-green-600 border-green-300">Pas de recyclage</Badge>
+                ) : (
+                  <Badge variant="secondary">N/A</Badge>
+                )}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg border bg-card">
+              <p className="text-xs text-muted-foreground">Profession</p>
+              <p className="font-medium text-sm">{afgsu.profession || "—"}</p>
+            </div>
+            {afgsu.existingLevel && (
+              <div className="p-3 rounded-lg border bg-card">
+                <p className="text-xs text-muted-foreground">AFGSU existant</p>
+                <p className="font-medium text-sm">
+                  {afgsu.existingLevel === "afgsu2" ? "AFGSU 2" : "AFGSU 1"}
+                  {afgsu.existingDate && <span className="text-muted-foreground ml-1">({afgsu.existingDate})</span>}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Custom data (other fields) */}
+      {enrollment.customData && (() => {
+        const otherData = Object.entries(enrollment.customData as Record<string, any>).filter(([k]) => k !== "afgsuEligibility");
+        if (otherData.length === 0) return null;
+        return (
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">Informations complémentaires</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {otherData.map(([key, val]) => (
+                <div key={key} className="p-2 rounded border bg-card">
+                  <p className="text-xs text-muted-foreground">{key}</p>
+                  <p className="text-sm font-medium">{typeof val === "object" ? JSON.stringify(val) : String(val)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Documents */}
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <FolderOpen className="w-4 h-4 text-indigo-600" />
+          Documents déposés
+          {sessionDocs.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{sessionDocs.length}</Badge>}
+        </h4>
+
+        {docsLoading ? (
+          <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" /> Chargement...
+          </div>
+        ) : sessionDocs.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-3">Aucun document déposé pour cette inscription.</p>
+        ) : (
+          <div className="space-y-2">
+            {sessionDocs.map((doc: any) => (
+              <Card key={doc.id} className="border">
+                <CardContent className="p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <p className="text-sm font-medium truncate">{doc.title || doc.fileName}</p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        {/* AI Status */}
+                        {doc.aiStatus === "completed" && doc.aiConfidence && (
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                            doc.aiConfidence === "high" ? "text-green-600 border-green-300 bg-green-50" :
+                            doc.aiConfidence === "medium" ? "text-amber-600 border-amber-300 bg-amber-50" :
+                            "text-red-600 border-red-300 bg-red-50"
+                          }`}>
+                            {doc.aiConfidence === "high" ? "✓ IA: Conforme" : doc.aiConfidence === "medium" ? "⚠ IA: À vérifier" : "✗ IA: Non conforme"}
+                          </Badge>
+                        )}
+                        {doc.aiStatus === "pending" && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            <Loader2 className="w-2.5 h-2.5 mr-1 animate-spin" />Analyse en cours
+                          </Badge>
+                        )}
+                        {doc.aiStatus === "error" && (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Erreur IA</Badge>
+                        )}
+                        {/* Manual validation */}
+                        {doc.isManuallyValidated && (
+                          <Badge className="bg-green-600 text-[10px] px-1.5 py-0">
+                            <ShieldCheck className="w-2.5 h-2.5 mr-1" />Validé manuellement
+                          </Badge>
+                        )}
+                        {doc.status === "rejected" && (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                            <ShieldAlert className="w-2.5 h-2.5 mr-1" />Rejeté
+                          </Badge>
+                        )}
+                        {/* AI extracted date */}
+                        {doc.aiExtractedDate && (
+                          <span className="text-[10px] text-muted-foreground">Date extraite: {new Date(doc.aiExtractedDate).toLocaleDateString("fr-FR")}</span>
+                        )}
+                      </div>
+                      {doc.validationNotes && (
+                        <p className="text-xs text-muted-foreground mt-1 italic">Note: {doc.validationNotes}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {doc.fileUrl && (
+                        <>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                            <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" title="Voir">
+                              <Eye className="w-3.5 h-3.5" />
+                            </a>
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                            <a href={doc.fileUrl} download title="Télécharger">
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Relancer l'analyse IA"
+                        disabled={reanalyzeMutation.isPending}
+                        onClick={() => reanalyzeMutation.mutate(doc.id)}
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${reanalyzeMutation.isPending ? "animate-spin" : ""}`} />
+                      </Button>
+                    </div>
+                  </div>
+                  {/* Validation buttons */}
+                  {!doc.isManuallyValidated && doc.status !== "rejected" && (
+                    <div className="flex gap-2 mt-2 pt-2 border-t">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-green-600 border-green-300 hover:bg-green-50 flex-1"
+                        disabled={validateMutation.isPending}
+                        onClick={() => validateMutation.mutate({ docId: doc.id, validated: true })}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                        Valider
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 border-red-300 hover:bg-red-50 flex-1"
+                        disabled={validateMutation.isPending}
+                        onClick={() => validateMutation.mutate({ docId: doc.id, validated: false, notes: "Document non conforme" })}
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5 mr-1.5" />
+                        Rejeter
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 const ENROLLMENT_MEMORY_KEY = "enrollment_last_values";
@@ -225,6 +466,7 @@ export default function Enrollments() {
   const [moveEnrollment, setMoveEnrollment] = useState<Enrollment | null>(null);
   const [selectedTargetSession, setSelectedTargetSession] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [dossierEnrollment, setDossierEnrollment] = useState<Enrollment | null>(null);
   const { toast } = useToast();
 
   const { data: enrollments, isLoading } = useQuery<Enrollment[]>({
@@ -478,27 +720,35 @@ export default function Enrollments() {
                             ) : (
                               <p className="text-sm font-medium">Inconnu</p>
                             )}
-                            {enrollment.customData && Object.keys(enrollment.customData).length > 0 && (
+                            {(enrollment.customData as any)?.afgsuEligibility && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="text-[10px] px-1 py-0 cursor-help">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-1 py-0 cursor-pointer ${
+                                      (enrollment.customData as any).afgsuEligibility.eligible !== "none"
+                                        ? "text-green-600 border-green-300 bg-green-50"
+                                        : "text-red-600 border-red-300 bg-red-50"
+                                    }`}
+                                    onClick={() => setDossierEnrollment(enrollment)}
+                                  >
+                                    <ShieldCheck className="w-3 h-3" />
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  AFGSU: {(enrollment.customData as any).afgsuEligibility.eligible === "afgsu2" ? "Éligible AFGSU 2" : (enrollment.customData as any).afgsuEligibility.eligible === "afgsu1" ? "Éligible AFGSU 1" : "Non éligible"}
+                                  {" — "}Cliquer pour voir le dossier
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                            {enrollment.customData && Object.keys(enrollment.customData).length > 0 && !(enrollment.customData as any)?.afgsuEligibility && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 cursor-pointer" onClick={() => setDossierEnrollment(enrollment)}>
                                     <FileText className="w-3 h-3" />
                                   </Badge>
                                 </TooltipTrigger>
-                                <TooltipContent side="right" className="max-w-xs">
-                                  <p className="font-medium text-xs mb-1">Informations complémentaires</p>
-                                  {(() => {
-                                    const customFields = program?.customFields as ProgramCustomField[] | undefined;
-                                    return Object.entries(enrollment.customData!).map(([key, val]) => {
-                                      const field = customFields?.find((f) => f.id === key);
-                                      const label = field?.label || key;
-                                      const display = typeof val === "object" && val?.fileName ? val.fileName : typeof val === "boolean" ? (val ? "Oui" : "Non") : String(val);
-                                      return (
-                                        <p key={key} className="text-xs"><span className="text-muted-foreground">{label}:</span> {display}</p>
-                                      );
-                                    });
-                                  })()}
-                                </TooltipContent>
+                                <TooltipContent>Voir le dossier</TooltipContent>
                               </Tooltip>
                             )}
                           </div>
@@ -553,6 +803,10 @@ export default function Enrollments() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setDossierEnrollment(enrollment)}>
+                              <FolderOpen className="w-4 h-4 mr-2" />
+                              Voir le dossier
+                            </DropdownMenuItem>
                             {ENROLLMENT_STATUSES.filter((s) => s.value !== enrollment.status).map((s) => (
                               <DropdownMenuItem
                                 key={s.value}
@@ -699,6 +953,25 @@ export default function Enrollments() {
                 <p className="text-sm text-muted-foreground italic">Aucune session alternative disponible pour ce programme.</p>
               )}
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dossier d'inscription dialog */}
+      <Dialog open={!!dossierEnrollment} onOpenChange={(open) => { if (!open) setDossierEnrollment(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-indigo-600" />
+              Dossier d'inscription
+            </DialogTitle>
+          </DialogHeader>
+          {dossierEnrollment && (
+            <EnrollmentDossier
+              enrollment={dossierEnrollment}
+              trainee={trainees?.find((t) => t.id === dossierEnrollment.traineeId)}
+              session={sessions?.find((s) => s.id === dossierEnrollment.sessionId)}
+            />
           )}
         </DialogContent>
       </Dialog>
