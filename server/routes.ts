@@ -7814,8 +7814,8 @@ Le contenu doit être en français, clair et bien structuré.`;
     }
   });
 
-  // Seed all Digiforma programs
-  app.post("/api/settings/seed-digiforma-programs", async (_req, res) => {
+  // Seed all Digiforma programs (public for initial seed)
+  app.post("/api/public/seed-digiforma-programs", async (_req, res) => {
     try {
       const { seedDigiformaPrograms } = await import("./seed-templates");
       const results = await seedDigiformaPrograms();
