@@ -35,6 +35,7 @@ import {
   Database,
   Wrench,
   MapPin,
+  Zap,
 } from "lucide-react";
 import {
   Sheet,
@@ -64,6 +65,7 @@ export const allNav: NavItem[] = [
   { title: "Inscriptions", url: "/enrollments", icon: ClipboardList, roles: ["admin"], permission: "manage_enrollments", group: "formation" },
   { title: "Émargement", url: "/attendance", icon: CheckSquare, roles: ["admin"], permission: "manage_attendance", group: "formation" },
   { title: "E-Learning", url: "/elearning", icon: MonitorPlay, roles: ["admin"], permission: "manage_elearning", group: "formation" },
+  { title: "Quiz Kahoot (Autopositionnement)", url: "/quiz-manager", icon: Zap, roles: ["admin"], group: "formation" },
   { title: "Lieux de formation", url: "/training-locations", icon: MapPin, roles: ["admin"], group: "formation" },
   { title: "Listes de tâches", url: "/task-lists", icon: ListChecks, roles: ["admin"], group: "formation" },
   { title: "Portail Entreprise", url: "/enterprise-portal", icon: Building2, roles: ["enterprise"], group: "formation" },
