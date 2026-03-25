@@ -4055,6 +4055,269 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
     }
   });
 
+  // POST /api/elearning-modules/seed-defaults — create default Digiforma-style template modules
+  app.post("/api/elearning-modules/seed-defaults", async (req, res) => {
+    try {
+      // Check if templates already exist
+      const existing = await storage.getElearningModules();
+      const existingTemplates = existing.filter((m: any) => m.isTemplate);
+
+      const defaultTemplates = [
+        {
+          title: "Accueil & Présentation de la formation",
+          description: "Module d'introduction : bienvenue, objectifs pédagogiques, présentation du programme et modalités pratiques.",
+          pathType: "learning" as const,
+          blocks: [
+            {
+              type: "text",
+              title: "Bienvenue",
+              content: `<h2>Bienvenue dans votre formation</h2>
+<p>Nous sommes ravis de vous accueillir dans cette formation. Ce module d'introduction vous permettra de :</p>
+<ul>
+<li>Découvrir les <strong>objectifs pédagogiques</strong> de la formation</li>
+<li>Comprendre le <strong>déroulé</strong> et les différentes étapes</li>
+<li>Prendre connaissance des <strong>modalités d'évaluation</strong></li>
+<li>Identifier vos <strong>interlocuteurs</strong> (formateurs, référents)</li>
+</ul>
+<p>N'hésitez pas à poser vos questions tout au long du parcours. Bonne formation !</p>`,
+              orderIndex: 0,
+            },
+            {
+              type: "text",
+              title: "Objectifs pédagogiques",
+              content: `<h2>Objectifs de la formation</h2>
+<p>À l'issue de cette formation, vous serez capable de :</p>
+<ol>
+<li>Maîtriser les compétences fondamentales liées au programme</li>
+<li>Appliquer les connaissances acquises en situation professionnelle</li>
+<li>Identifier les bonnes pratiques et les protocoles à respecter</li>
+</ol>
+<h3>Méthodes pédagogiques</h3>
+<p>La formation alterne entre apports théoriques, mises en situation pratiques et évaluations formatives.</p>
+<h3>Durée et organisation</h3>
+<p>Le détail des horaires et du programme vous sera communiqué par votre formateur.</p>`,
+              orderIndex: 1,
+            },
+          ],
+        },
+        {
+          title: "Évaluation pré-formation (Positionnement)",
+          description: "Questionnaire de positionnement initial pour évaluer le niveau de connaissances avant la formation. Obligatoire Qualiopi.",
+          pathType: "assessment" as const,
+          blocks: [
+            {
+              type: "text",
+              title: "Introduction",
+              content: `<h2>Évaluation de positionnement</h2>
+<p>Ce questionnaire permet d'évaluer vos connaissances <strong>avant le début de la formation</strong>.</p>
+<p>Il n'y a pas de bonne ou mauvaise réponse : l'objectif est de mesurer votre niveau initial afin d'adapter le contenu pédagogique à vos besoins.</p>
+<p>Répondez spontanément et honnêtement. Durée estimée : 5 à 10 minutes.</p>`,
+              orderIndex: 0,
+            },
+            {
+              type: "quiz",
+              title: "Questionnaire de positionnement",
+              quizConfig: { passingScore: 0, allowRetry: false, showOneAtATime: true },
+              orderIndex: 1,
+              questions: [
+                { question: "Comment évaluez-vous votre niveau de connaissances sur le sujet de cette formation ?", type: "qcm", options: ["Débutant — Je découvre le sujet", "Intermédiaire — J'ai quelques notions", "Avancé — Je maîtrise les bases", "Expert — Je pratique régulièrement"], correctAnswer: 0, explanation: "Auto-évaluation de positionnement", points: 0 },
+                { question: "Avez-vous déjà suivi une formation similaire ?", type: "qcm", options: ["Non, c'est ma première formation sur ce sujet", "Oui, il y a plus de 2 ans", "Oui, il y a moins de 2 ans", "Oui, récemment (moins de 6 mois)"], correctAnswer: 0, explanation: "Historique de formation", points: 0 },
+                { question: "Dans votre pratique professionnelle quotidienne, êtes-vous confronté(e) aux thématiques de cette formation ?", type: "qcm", options: ["Jamais", "Rarement", "Régulièrement", "Quotidiennement"], correctAnswer: 0, explanation: "Fréquence d'exposition", points: 0 },
+                { question: "Quelles sont vos attentes principales pour cette formation ?", type: "qcm", options: ["Acquérir les bases théoriques", "Approfondir mes connaissances existantes", "Obtenir une certification / attestation", "Mettre à jour mes compétences (recyclage)"], correctAnswer: 0, explanation: "Identification des attentes", points: 0 },
+              ],
+            },
+          ],
+        },
+        {
+          title: "Évaluation à chaud (post-formation)",
+          description: "Évaluation des acquis immédiatement après la formation. Mesure l'atteinte des objectifs pédagogiques. Obligatoire Qualiopi.",
+          pathType: "assessment" as const,
+          blocks: [
+            {
+              type: "text",
+              title: "Introduction",
+              content: `<h2>Évaluation des acquis — À chaud</h2>
+<p>Félicitations, vous avez terminé la formation !</p>
+<p>Ce questionnaire permet de vérifier l'acquisition des connaissances et compétences visées par la formation.</p>
+<p>Prenez le temps de bien lire chaque question. Durée estimée : 10 à 15 minutes.</p>`,
+              orderIndex: 0,
+            },
+            {
+              type: "quiz",
+              title: "Évaluation des acquis",
+              quizConfig: { passingScore: 70, allowRetry: false, showOneAtATime: true, timerSeconds: 900 },
+              orderIndex: 1,
+              questions: [
+                { question: "Les connaissances acquises lors de cette formation vous semblent-elles directement applicables dans votre pratique professionnelle ?", type: "qcm", options: ["Tout à fait", "En grande partie", "Partiellement", "Pas du tout"], correctAnswer: 0, explanation: "Transférabilité des acquis", points: 25 },
+                { question: "Estimez-vous avoir atteint les objectifs pédagogiques présentés en début de formation ?", type: "qcm", options: ["Tous les objectifs atteints", "La majorité des objectifs", "Quelques objectifs seulement", "Aucun objectif atteint"], correctAnswer: 0, explanation: "Atteinte des objectifs", points: 25 },
+                { question: "Comment évaluez-vous votre progression par rapport à votre niveau initial ?", type: "qcm", options: ["Progression très significative", "Bonne progression", "Progression modérée", "Peu ou pas de progression"], correctAnswer: 0, explanation: "Auto-évaluation de la progression", points: 25 },
+                { question: "Êtes-vous en mesure de restituer les points clés de la formation ?", type: "vrai_faux", options: ["Vrai", "Faux"], correctAnswer: 0, explanation: "Capacité de restitution", points: 25 },
+              ],
+            },
+          ],
+        },
+        {
+          title: "Évaluation à froid (J+60/J+90)",
+          description: "Évaluation différée pour mesurer la rétention des acquis et l'impact sur la pratique professionnelle, 60 à 90 jours après la formation.",
+          pathType: "assessment" as const,
+          blocks: [
+            {
+              type: "text",
+              title: "Introduction",
+              content: `<h2>Évaluation à froid — Suivi post-formation</h2>
+<p>Plusieurs semaines se sont écoulées depuis votre formation. Ce questionnaire permet de mesurer :</p>
+<ul>
+<li>La <strong>rétention</strong> de vos connaissances</li>
+<li>L'<strong>application concrète</strong> dans votre pratique</li>
+<li>L'<strong>impact</strong> sur votre activité professionnelle</li>
+</ul>
+<p>Vos réponses nous aident à améliorer continuellement nos formations. Durée : 5 minutes.</p>`,
+              orderIndex: 0,
+            },
+            {
+              type: "survey",
+              title: "Questionnaire de suivi à froid",
+              quizConfig: { passingScore: 0, allowRetry: false, showOneAtATime: true },
+              orderIndex: 1,
+              questions: [
+                { question: "Avez-vous pu mettre en pratique les compétences acquises lors de la formation ?", type: "qcm", options: ["Oui, régulièrement", "Oui, ponctuellement", "Pas encore, mais je compte le faire", "Non, pas applicable dans mon contexte"], correctAnswer: 0, points: 0 },
+                { question: "Quel est l'impact de la formation sur votre pratique professionnelle ?", type: "qcm", options: ["Impact très positif", "Impact positif", "Impact limité", "Aucun impact"], correctAnswer: 0, points: 0 },
+                { question: "Avez-vous rencontré des difficultés à appliquer les acquis de la formation ?", type: "qcm", options: ["Aucune difficulté", "Quelques difficultés mineures", "Des difficultés significatives", "Je n'ai pas pu appliquer les acquis"], correctAnswer: 0, points: 0 },
+                { question: "Recommanderiez-vous cette formation à un(e) collègue ?", type: "qcm", options: ["Oui, absolument", "Oui, probablement", "Je ne sais pas", "Non"], correctAnswer: 0, points: 0 },
+                { question: "Ressentez-vous le besoin d'une formation complémentaire sur ce sujet ?", type: "vrai_faux", options: ["Oui", "Non"], correctAnswer: 0, points: 0 },
+              ],
+            },
+          ],
+        },
+        {
+          title: "Questionnaire de satisfaction",
+          description: "Enquête de satisfaction stagiaire : qualité de la formation, du formateur, des supports et de l'organisation. Indicateur Qualiopi.",
+          pathType: "assessment" as const,
+          blocks: [
+            {
+              type: "survey",
+              title: "Satisfaction globale",
+              quizConfig: { passingScore: 0, allowRetry: false, showOneAtATime: true },
+              orderIndex: 0,
+              questions: [
+                { question: "Comment évaluez-vous la qualité globale de cette formation ?", type: "qcm", options: ["Très satisfait(e)", "Satisfait(e)", "Moyennement satisfait(e)", "Insatisfait(e)"], correctAnswer: 0, points: 0 },
+                { question: "Le contenu de la formation correspondait-il à vos attentes ?", type: "qcm", options: ["Tout à fait", "En grande partie", "Partiellement", "Pas du tout"], correctAnswer: 0, points: 0 },
+                { question: "Comment évaluez-vous la qualité pédagogique du/des formateur(s) ?", type: "qcm", options: ["Excellent(e)", "Bon(ne)", "Moyen(ne)", "Insuffisant(e)"], correctAnswer: 0, points: 0 },
+                { question: "Les supports pédagogiques étaient-ils adaptés et de qualité ?", type: "qcm", options: ["Très satisfait(e)", "Satisfait(e)", "Moyennement satisfait(e)", "Insatisfait(e)"], correctAnswer: 0, points: 0 },
+                { question: "L'organisation logistique (accueil, locaux, horaires) était-elle satisfaisante ?", type: "qcm", options: ["Très satisfait(e)", "Satisfait(e)", "Moyennement satisfait(e)", "Insatisfait(e)"], correctAnswer: 0, points: 0 },
+                { question: "La durée de la formation était-elle adaptée ?", type: "qcm", options: ["Trop longue", "Adaptée", "Trop courte"], correctAnswer: 1, points: 0 },
+                { question: "Recommanderiez-vous cette formation ?", type: "qcm", options: ["Oui, certainement", "Oui, probablement", "Probablement pas", "Certainement pas"], correctAnswer: 0, points: 0 },
+              ],
+            },
+          ],
+        },
+        {
+          title: "Bilan de formation",
+          description: "Module de clôture : synthèse des acquis, prochaines étapes, informations sur la certification et les ressources complémentaires.",
+          pathType: "learning" as const,
+          blocks: [
+            {
+              type: "text",
+              title: "Synthèse de la formation",
+              content: `<h2>Bilan de votre formation</h2>
+<p>Vous êtes arrivé(e) au terme de cette formation. Voici un récapitulatif :</p>
+<h3>Ce que vous avez appris</h3>
+<ul>
+<li>Les fondamentaux théoriques du domaine</li>
+<li>Les bonnes pratiques et protocoles applicables</li>
+<li>Les gestes et procédures essentiels</li>
+</ul>
+<h3>Prochaines étapes</h3>
+<ul>
+<li><strong>Attestation de formation</strong> : elle vous sera transmise par email</li>
+<li><strong>Certification</strong> : si applicable, les modalités vous seront communiquées</li>
+<li><strong>Recyclage</strong> : pensez à planifier votre mise à jour des compétences</li>
+</ul>
+<h3>Ressources complémentaires</h3>
+<p>Des documents et ressources complémentaires sont disponibles dans votre espace apprenant.</p>
+<p><strong>Merci pour votre participation et bonne continuation !</strong></p>`,
+              orderIndex: 0,
+            },
+          ],
+        },
+        {
+          title: "Règlement intérieur",
+          description: "Présentation du règlement intérieur de l'organisme de formation. Document obligatoire à consulter par les stagiaires.",
+          pathType: "learning" as const,
+          blocks: [
+            {
+              type: "text",
+              title: "Règlement intérieur",
+              content: `<h2>Règlement intérieur de l'organisme de formation</h2>
+<p>Conformément à l'article L.6352-3 du Code du travail, le présent règlement intérieur s'applique à tous les stagiaires participant à une action de formation.</p>
+<h3>Article 1 — Objet et champ d'application</h3>
+<p>Le présent règlement s'applique à toutes les personnes participantes à une action de formation organisée par l'organisme. Chaque stagiaire est considéré comme ayant accepté les termes du présent règlement lorsqu'il suit une formation.</p>
+<h3>Article 2 — Discipline et comportement</h3>
+<p>Les stagiaires s'engagent à respecter les horaires, à avoir un comportement respectueux envers les autres participants et les formateurs, et à ne pas perturber le bon déroulement de la formation.</p>
+<h3>Article 3 — Hygiène et sécurité</h3>
+<p>Les stagiaires sont tenus de respecter les consignes de sécurité, les issues de secours et les équipements de protection. Il est interdit de fumer dans les locaux.</p>
+<h3>Article 4 — Assiduité et absences</h3>
+<p>La participation à l'ensemble des séquences de formation est obligatoire. Toute absence doit être justifiée auprès du responsable de la formation.</p>
+<h3>Article 5 — Sanctions</h3>
+<p>Tout manquement au présent règlement pourra faire l'objet de sanctions disciplinaires conformément aux dispositions légales.</p>`,
+              orderIndex: 0,
+            },
+          ],
+        },
+      ];
+
+      const created = [];
+      for (const tmpl of defaultTemplates) {
+        // Skip if a template with same title already exists
+        if (existingTemplates.find((e: any) => e.title === tmpl.title)) continue;
+
+        const { blocks, ...moduleData } = tmpl;
+        const mod = await storage.createElearningModule({
+          ...moduleData,
+          isTemplate: true,
+          status: "published",
+          requireSequential: true,
+          orderIndex: 0,
+        });
+
+        for (const block of blocks) {
+          const { questions, ...blockData } = block as any;
+          const createdBlock = await storage.createElearningBlock({
+            ...blockData,
+            moduleId: mod.id,
+          });
+
+          if (questions && questions.length > 0) {
+            for (let i = 0; i < questions.length; i++) {
+              await storage.createQuizQuestion({
+                blockId: createdBlock.id,
+                quizId: null,
+                question: questions[i].question,
+                type: questions[i].type || "qcm",
+                options: questions[i].options,
+                correctAnswer: questions[i].correctAnswer,
+                explanation: questions[i].explanation || null,
+                orderIndex: i,
+                order: i,
+                timecode: null,
+                timeLimit: 30,
+                points: questions[i].points ?? 100,
+                imageUrl: null,
+              });
+            }
+          }
+        }
+
+        created.push(mod);
+      }
+
+      res.status(201).json({ message: `${created.length} modules-types créés`, modules: created });
+    } catch (err: any) {
+      console.error("Error seeding default templates:", err);
+      res.status(500).json({ message: err?.message || "Erreur lors de la création des modèles" });
+    }
+  });
+
   // POST /api/elearning-modules/:id/duplicate — duplicate a module (template or not) into a target program/session
   app.post("/api/elearning-modules/:id/duplicate", async (req, res) => {
     try {
@@ -4074,7 +4337,6 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
         requireSequential: source.requireSequential ?? true,
         pathType: source.pathType || "combined",
         isTemplate: false,
-        templateSourceId: source.isTemplate ? source.id : (source.templateSourceId || null),
       });
 
       // Duplicate all blocks
@@ -4291,6 +4553,81 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
   app.delete("/api/elearning-blocks/:id", async (req, res) => {
     await storage.deleteElearningBlock(req.params.id);
     res.status(204).send();
+  });
+
+  // ============================================================
+  // TEMPLATE BLOCKS (Blocs-types réutilisables)
+  // ============================================================
+
+  // GET all template blocks
+  app.get("/api/elearning-blocks/templates", async (_req, res) => {
+    try {
+      const allBlocks = await storage.getAllElearningBlocks?.()
+        || (await (async () => {
+          // Fallback: query directly
+          const { db } = await import("./db");
+          const { elearningBlocks } = await import("@shared/schema");
+          const { eq } = await import("drizzle-orm");
+          return db.select().from(elearningBlocks).where(eq(elearningBlocks.isTemplate, true));
+        })());
+      const templates = Array.isArray(allBlocks) ? allBlocks.filter((b: any) => b.isTemplate) : [];
+      res.json(templates);
+    } catch (err) {
+      console.error("Error fetching template blocks:", err);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // POST duplicate a template block into a module
+  app.post("/api/elearning-blocks/:id/duplicate", async (req, res) => {
+    try {
+      const source = await storage.getElearningBlock(req.params.id);
+      if (!source) return res.status(404).json({ message: "Bloc introuvable" });
+
+      const { moduleId } = req.body;
+      if (!moduleId) return res.status(400).json({ message: "moduleId requis" });
+
+      // Get max orderIndex in target module
+      const existingBlocks = await storage.getElearningBlocks(moduleId);
+      const maxOrder = existingBlocks.length > 0
+        ? Math.max(...existingBlocks.map((b: any) => b.orderIndex || 0))
+        : -1;
+
+      const { id, createdAt, moduleId: _srcModuleId, isTemplate, ...blockData } = source as any;
+      const newBlock = await storage.createElearningBlock({
+        ...blockData,
+        moduleId,
+        isTemplate: false,
+        orderIndex: maxOrder + 1,
+      });
+
+      // Duplicate quiz questions if applicable
+      if (["quiz", "video_quiz", "survey"].includes(source.type)) {
+        const questions = await storage.getQuizQuestions(source.id);
+        for (const q of questions) {
+          await storage.createQuizQuestion({
+            blockId: newBlock.id,
+            quizId: null,
+            question: q.question,
+            type: q.type || "qcm",
+            options: q.options as string[],
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            orderIndex: q.orderIndex,
+            order: q.order,
+            timecode: q.timecode,
+            timeLimit: q.timeLimit,
+            points: q.points,
+            imageUrl: q.imageUrl,
+          });
+        }
+      }
+
+      res.status(201).json(newBlock);
+    } catch (err) {
+      console.error("Error duplicating block:", err);
+      res.status(500).json({ message: "Erreur lors de la duplication" });
+    }
   });
 
   // ============================================================

@@ -1637,6 +1637,34 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
     }
   };
 
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+
+  const { data: templateBlocks } = useQuery<ElearningBlock[]>({
+    queryKey: ["/api/elearning-blocks/templates"],
+  });
+
+  const toggleBlockTemplateMutation = useMutation({
+    mutationFn: ({ id, isTemplate }: { id: string; isTemplate: boolean }) =>
+      apiRequest("PATCH", `/api/elearning-blocks/${id}`, { isTemplate }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-blocks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-blocks/templates"] });
+      toast({ title: vars.isTemplate ? "Bloc sauvegardé comme bloc-type" : "Bloc retiré des blocs-types" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  const importBlockMutation = useMutation({
+    mutationFn: (sourceBlockId: string) =>
+      apiRequest("POST", `/api/elearning-blocks/${sourceBlockId}/duplicate`, { moduleId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-blocks"] });
+      setTemplateDialogOpen(false);
+      toast({ title: "Bloc-type importé avec succès" });
+    },
+    onError: () => toast({ title: "Erreur lors de l'import", variant: "destructive" }),
+  });
+
   const createBlockMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => apiRequest("POST", "/api/elearning-blocks", data),
     onSuccess: () => {
@@ -1695,14 +1723,24 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
     <div className="space-y-3 pt-2">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-muted-foreground">Blocs du module</h4>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => { setEditBlock(undefined); setBlockDialogOpen(true); }}
-        >
-          <Plus className="w-3 h-3 mr-1" />
-          Nouveau bloc
-        </Button>
+        <div className="flex gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setTemplateDialogOpen(true)}
+          >
+            <Library className="w-3 h-3 mr-1" />
+            Importer bloc-type
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setEditBlock(undefined); setBlockDialogOpen(true); }}
+          >
+            <Plus className="w-3 h-3 mr-1" />
+            Nouveau bloc
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -1745,6 +1783,11 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
                       <BlockTypeIcon type={block.type} />
                       <span className="text-sm font-medium truncate">{block.title}</span>
                       <BlockTypeLabel type={block.type} />
+                      {(block as any).isTemplate && (
+                        <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 text-[10px] px-1 py-0">
+                          <Library className="w-2.5 h-2.5 mr-0.5" />Type
+                        </Badge>
+                      )}
                     </div>
                     {block.type === "text" && block.content && (
                       <p className="text-xs text-muted-foreground line-clamp-2">{block.content}</p>
@@ -1838,6 +1881,12 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
                           Ajouter des flashcards (IA)
                         </DropdownMenuItem>
                       )}
+                      <DropdownMenuItem
+                        onClick={() => toggleBlockTemplateMutation.mutate({ id: block.id, isTemplate: !(block as any).isTemplate })}
+                      >
+                        <Library className="w-4 h-4 mr-2" />
+                        {(block as any).isTemplate ? "Retirer des blocs-types" : "Sauvegarder comme bloc-type"}
+                      </DropdownMenuItem>
                       <DropdownMenuItem className="text-destructive" onClick={() => deleteBlockMutation.mutate(block.id)}>
                         <Trash2 className="w-4 h-4 mr-2" />
                         Supprimer
@@ -1939,6 +1988,55 @@ function ModuleBlocks({ moduleId }: { moduleId: string }) {
               )}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import bloc-type dialog */}
+      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Library className="w-5 h-5 text-indigo-500" />
+              Importer un bloc-type
+            </DialogTitle>
+          </DialogHeader>
+          {!templateBlocks || templateBlocks.length === 0 ? (
+            <div className="text-center py-6 text-sm text-muted-foreground">
+              <Library className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p>Aucun bloc-type disponible.</p>
+              <p className="text-xs mt-1">Sauvegardez un bloc existant comme bloc-type depuis le menu ⋯</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {templateBlocks.map((tb) => (
+                <Card key={tb.id} className="border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-colors">
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <BlockTypeIcon type={tb.type} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{tb.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <BlockTypeLabel type={tb.type} />
+                        {tb.content && <p className="text-xs text-muted-foreground truncate">{tb.content.slice(0, 60)}...</p>}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      disabled={importBlockMutation.isPending}
+                      onClick={() => importBlockMutation.mutate(tb.id)}
+                    >
+                      {importBlockMutation.isPending ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <><Copy className="w-3.5 h-3.5 mr-1" />Importer</>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -3216,9 +3314,6 @@ export default function Elearning() {
   const [aiDurationMinutes, setAiDurationMinutes] = useState<number | "">("");
   const [aiBlockTypes, setAiBlockTypes] = useState<string[]>(["text", "quiz", "flashcard"]);
   const aiFileRef = useRef<HTMLInputElement>(null);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [importTargetProgramId, setImportTargetProgramId] = useState("");
-  const [importTargetSessionId, setImportTargetSessionId] = useState("");
   const { toast } = useToast();
 
   const { data: modules, isLoading } = useQuery<ElearningModule[]>({
@@ -3275,14 +3370,25 @@ export default function Elearning() {
     onError: () => toast({ title: "Erreur lors du changement de statut", variant: "destructive" }),
   });
 
-  const toggleTemplateMutation = useMutation({
-    mutationFn: ({ id, isTemplate }: { id: string; isTemplate: boolean }) =>
-      apiRequest("PATCH", `/api/elearning-modules/${id}`, { isTemplate }),
-    onSuccess: (_, vars) => {
+  const { data: globalTemplateBlocks } = useQuery<ElearningBlock[]>({
+    queryKey: ["/api/elearning-blocks/templates"],
+  });
+
+  // Module templates state
+  const [importModuleDialogOpen, setImportModuleDialogOpen] = useState(false);
+  const [importModuleTarget, setImportModuleTarget] = useState<ElearningModule | undefined>();
+  const [importModuleProgramId, setImportModuleProgramId] = useState("");
+  const [importModuleSessionId, setImportModuleSessionId] = useState("");
+
+  const templateModules = modules?.filter((m: any) => m.isTemplate) || [];
+
+  const seedDefaultTemplatesMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/elearning-modules/seed-defaults", {}),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
-      toast({ title: vars.isTemplate ? "Module sauvegardé comme module-type" : "Module retiré des modules-types" });
+      toast({ title: "Modules-types par défaut créés avec succès" });
     },
-    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+    onError: () => toast({ title: "Erreur lors de la création des modèles", variant: "destructive" }),
   });
 
   const duplicateModuleMutation = useMutation({
@@ -3290,15 +3396,23 @@ export default function Elearning() {
       apiRequest("POST", `/api/elearning-modules/${id}/duplicate`, { programId, sessionId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
-      setImportDialogOpen(false);
-      setImportTargetProgramId("");
-      setImportTargetSessionId("");
-      toast({ title: "Module-type importé avec succès" });
+      setImportModuleDialogOpen(false);
+      setImportModuleTarget(undefined);
+      setImportModuleProgramId("");
+      setImportModuleSessionId("");
+      toast({ title: "Module-type importé dans le parcours" });
     },
     onError: () => toast({ title: "Erreur lors de l'import", variant: "destructive" }),
   });
 
-  const templateModules = modules?.filter((m) => (m as any).isTemplate) || [];
+  const removeTemplateMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("PATCH", `/api/elearning-modules/${id}`, { isTemplate: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/elearning-modules"] });
+      toast({ title: "Module retiré des modules-types" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
 
   const handleAiGenerate = async () => {
     if (!aiFile) return;
@@ -3363,7 +3477,8 @@ export default function Elearning() {
       <Tabs defaultValue="modules" className="space-y-4">
         <TabsList>
           <TabsTrigger value="modules"><BookOpen className="w-4 h-4 mr-2" />Modules</TabsTrigger>
-          <TabsTrigger value="templates"><Library className="w-4 h-4 mr-2" />Modules-types{templateModules.length > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">{templateModules.length}</Badge>}</TabsTrigger>
+          <TabsTrigger value="module-templates"><Layers className="w-4 h-4 mr-2" />Modules-types{templateModules.length > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">{templateModules.length}</Badge>}</TabsTrigger>
+          <TabsTrigger value="templates"><Library className="w-4 h-4 mr-2" />Blocs-types{(globalTemplateBlocks?.length ?? 0) > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">{globalTemplateBlocks?.length}</Badge>}</TabsTrigger>
           <TabsTrigger value="resources"><FileText className="w-4 h-4 mr-2" />Ressources</TabsTrigger>
         </TabsList>
 
@@ -3441,11 +3556,6 @@ export default function Elearning() {
                             {(mod as any).pathType === "assessment" && (
                               <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-900/20 text-[10px] px-1.5 py-0">
                                 <Target className="w-3 h-3 mr-1" />Évaluation
-                              </Badge>
-                            )}
-                            {(mod as any).isTemplate && (
-                              <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-[10px] px-1.5 py-0">
-                                <Library className="w-3 h-3 mr-1" />Module-type
                               </Badge>
                             )}
                           </div>
@@ -3547,12 +3657,6 @@ export default function Elearning() {
                               <DropdownMenuItem onClick={() => { setEditModule(mod); setModuleDialogOpen(true); }}>
                                 <Pencil className="w-4 h-4 mr-2" />
                                 Modifier
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => toggleTemplateMutation.mutate({ id: mod.id, isTemplate: !(mod as any).isTemplate })}
-                              >
-                                <Library className="w-4 h-4 mr-2" />
-                                {(mod as any).isTemplate ? "Retirer des modules-types" : "Sauvegarder comme module-type"}
                               </DropdownMenuItem>
                               {mod.status !== "archived" && (
                                 <DropdownMenuItem
@@ -3846,70 +3950,112 @@ export default function Elearning() {
       </Dialog>
         </TabsContent>
 
-        <TabsContent value="templates" className="space-y-4">
+        <TabsContent value="module-templates" className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              Les modules-types sont des modèles réutilisables que vous pouvez importer dans n'importe quel parcours de formation.
+              Les modules-types sont des modèles complets réutilisables (accueil, évaluation, satisfaction...) que vous pouvez importer dans n'importe quel parcours de formation.
             </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => seedDefaultTemplatesMutation.mutate()}
+              disabled={seedDefaultTemplatesMutation.isPending}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {seedDefaultTemplatesMutation.isPending ? "Chargement..." : "Charger modèles Digiforma"}
+            </Button>
           </div>
           {templateModules.length === 0 ? (
             <EmptyState
-              icon={Library}
+              icon={Layers}
               title="Aucun module-type"
-              description="Sauvegardez un module existant comme module-type depuis l'onglet Modules (menu ⋯ → Sauvegarder comme module-type)"
+              description="Cliquez sur « Charger modèles Digiforma » pour importer les modules-types standards (accueil, évaluations, satisfaction, bilan, règlement)."
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {templateModules.map((mod) => {
-                const program = programs?.find((p) => p.id === mod.programId);
-                return (
-                  <Card key={mod.id} className="relative overflow-hidden border-indigo-200 dark:border-indigo-800">
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold truncate">{mod.title}</h3>
-                          {mod.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{mod.description}</p>
-                          )}
-                        </div>
-                        <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-[10px] px-1.5 py-0 shrink-0">
-                          <Library className="w-3 h-3 mr-1" />Type
+              {templateModules.map((mod: any) => (
+                <Card key={mod.id} className="relative overflow-hidden border-indigo-200 dark:border-indigo-800">
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-sm">{mod.title}</h3>
+                      <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-[10px] px-1.5 py-0 shrink-0">
+                        {mod.pathType === "assessment" ? "Évaluation" : mod.pathType === "learning" ? "Apprentissage" : "Combiné"}
+                      </Badge>
+                    </div>
+                    {mod.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-3">{mod.description}</p>
+                    )}
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="flex-1"
+                        onClick={() => {
+                          setImportModuleTarget(mod);
+                          setImportModuleProgramId("");
+                          setImportModuleSessionId("");
+                          setImportModuleDialogOpen(true);
+                        }}
+                      >
+                        <Copy className="w-3.5 h-3.5 mr-1.5" />
+                        Importer dans un parcours
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => removeTemplateMutation.mutate(mod.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="templates" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Les blocs-types sont des contenus réutilisables (texte, quiz, vidéo, flashcards...) que vous pouvez importer dans n'importe quel module de formation.
+          </p>
+          {!globalTemplateBlocks || globalTemplateBlocks.length === 0 ? (
+            <EmptyState
+              icon={Library}
+              title="Aucun bloc-type"
+              description="Sauvegardez un bloc existant comme bloc-type depuis un module (menu ⋯ → Sauvegarder comme bloc-type)"
+            />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {globalTemplateBlocks.map((tb) => (
+                <Card key={tb.id} className="relative overflow-hidden border-indigo-200 dark:border-indigo-800">
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <BlockTypeIcon type={tb.type} />
+                        <h3 className="font-semibold text-sm truncate">{tb.title}</h3>
+                      </div>
+                      <BlockTypeLabel type={tb.type} />
+                    </div>
+                    {tb.content && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{tb.content}</p>
+                    )}
+                    <div className="flex items-center gap-2 pt-1">
+                      <Badge variant="outline" className="text-indigo-600 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-[10px] px-1.5 py-0">
+                        <Library className="w-3 h-3 mr-1" />Bloc-type
+                      </Badge>
+                      {(tb as any).duration && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          <Clock className="w-3 h-3 mr-1" />{(tb as any).duration} min
                         </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {program && <span>Formation : {program.title}</span>}
-                        {(mod as any).pathType && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                            {(mod as any).pathType === "learning" ? "Apprentissage" : (mod as any).pathType === "assessment" ? "Évaluation" : "Combiné"}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => {
-                            setImportDialogOpen(true);
-                            setEditModule(mod);
-                          }}
-                        >
-                          <Copy className="w-3.5 h-3.5 mr-1.5" />
-                          Importer dans un parcours
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground"
-                          onClick={() => toggleTemplateMutation.mutate({ id: mod.id, isTemplate: false })}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </TabsContent>
@@ -3919,72 +4065,61 @@ export default function Elearning() {
         </TabsContent>
       </Tabs>
 
-      {/* Import template dialog */}
-      <Dialog open={importDialogOpen} onOpenChange={(open) => { setImportDialogOpen(open); if (!open) { setEditModule(undefined); setImportTargetProgramId(""); setImportTargetSessionId(""); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Copy className="w-5 h-5 text-indigo-500" />
-              Importer le module-type
-            </DialogTitle>
-          </DialogHeader>
-          {editModule && (
-            <div className="space-y-4">
-              <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200">
-                <p className="font-medium text-sm">{editModule.title}</p>
-                {editModule.description && <p className="text-xs text-muted-foreground mt-1">{editModule.description}</p>}
-              </div>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Formation cible</Label>
-                  <Select value={importTargetProgramId} onValueChange={setImportTargetProgramId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner une formation" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {programs?.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Session cible (optionnel)</Label>
-                  <Select value={importTargetSessionId} onValueChange={setImportTargetSessionId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Toutes les sessions" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Aucune session spécifique</SelectItem>
-                      {sessions?.filter((s) => !importTargetProgramId || s.programId === importTargetProgramId).map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Button
-                className="w-full"
-                disabled={!importTargetProgramId || duplicateModuleMutation.isPending}
-                onClick={() => {
-                  duplicateModuleMutation.mutate({
-                    id: editModule.id,
-                    programId: importTargetProgramId || undefined,
-                    sessionId: importTargetSessionId && importTargetSessionId !== "none" ? importTargetSessionId : undefined,
-                  });
-                }}
-              >
-                {duplicateModuleMutation.isPending ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Import en cours...</>
-                ) : (
-                  <><Copy className="w-4 h-4 mr-2" />Importer le module</>
-                )}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </PageLayout>
+
+    {/* Import module-type dialog */}
+    <Dialog open={importModuleDialogOpen} onOpenChange={setImportModuleDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Copy className="w-5 h-5 text-indigo-500" />
+            Importer le module-type
+          </DialogTitle>
+        </DialogHeader>
+        {importModuleTarget && (
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200">
+              <p className="font-medium text-sm">{importModuleTarget.title}</p>
+              {importModuleTarget.description && <p className="text-xs text-muted-foreground mt-1">{importModuleTarget.description}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Formation cible *</Label>
+              <Select value={importModuleProgramId} onValueChange={setImportModuleProgramId}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner une formation" /></SelectTrigger>
+                <SelectContent>
+                  {programs?.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Session (optionnel)</Label>
+              <Select value={importModuleSessionId} onValueChange={setImportModuleSessionId}>
+                <SelectTrigger><SelectValue placeholder="Toutes les sessions" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucune session spécifique</SelectItem>
+                  {sessions?.filter((s) => !importModuleProgramId || s.programId === importModuleProgramId).map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              disabled={!importModuleProgramId || duplicateModuleMutation.isPending}
+              onClick={() => duplicateModuleMutation.mutate({
+                id: importModuleTarget.id,
+                programId: importModuleProgramId,
+                sessionId: importModuleSessionId && importModuleSessionId !== "none" ? importModuleSessionId : undefined,
+              })}
+            >
+              {duplicateModuleMutation.isPending ? "Import en cours..." : "Importer le module"}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
 
     {/* Immersive full-screen preview */}
     {immersiveModuleId && (() => {
