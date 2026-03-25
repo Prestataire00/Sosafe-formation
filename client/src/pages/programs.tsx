@@ -146,6 +146,7 @@ function ProgramForm({
   const [modality, setModality] = useState(program?.modality || "presentiel");
   const [status, setStatus] = useState(program?.status || "draft");
   const [certifying, setCertifying] = useState(program?.certifying || false);
+  const [featured, setFeatured] = useState(program?.featured || false);
   const [recyclingMonths, setRecyclingMonths] = useState(program?.recyclingMonths?.toString() || "");
   // Qualiopi fields
   const [programContent, setProgramContent] = useState(program?.programContent || "");
@@ -196,6 +197,7 @@ function ProgramForm({
       modality,
       status,
       certifying,
+      featured,
       recyclingMonths: recyclingMonths ? parseInt(recyclingMonths) : null,
       programContent: programContent || null,
       targetAudience: targetAudience || null,
@@ -353,9 +355,15 @@ function ProgramForm({
               <Input id="price" type="number" value={price} onChange={(e) => setPrice(e.target.value)} min="0" data-testid="input-program-price" />
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
-            <Switch id="certifying" checked={certifying} onCheckedChange={setCertifying} data-testid="switch-program-certifying" />
-            <Label htmlFor="certifying" className="text-sm cursor-pointer">Formation certifiante</Label>
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="flex items-center gap-3 p-3 rounded-md bg-accent/30">
+              <Switch id="certifying" checked={certifying} onCheckedChange={setCertifying} data-testid="switch-program-certifying" />
+              <Label htmlFor="certifying" className="text-sm cursor-pointer">Formation certifiante</Label>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+              <Switch id="featured" checked={featured} onCheckedChange={setFeatured} />
+              <Label htmlFor="featured" className="text-sm cursor-pointer">⭐ Mise en avant (catalogue)</Label>
+            </div>
           </div>
           {certifying && (
             <div className="space-y-2">
@@ -1177,7 +1185,10 @@ export default function Programs() {
                           onClick={() => setViewProgram(program)}
                         >
                           <td className="px-4 py-3">
-                            <span className="font-medium text-sm">{program.title}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{program.title}</span>
+                              {program.featured && <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">⭐ En avant</Badge>}
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-sm text-muted-foreground">{program.categories?.join(", ") || "-"}</span>

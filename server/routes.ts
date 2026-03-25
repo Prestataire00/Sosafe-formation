@@ -10408,7 +10408,15 @@ Le contenu doit être en français, clair et bien structuré.`;
       const sessions = await storage.getSessions();
       const sessionTrainers = await storage.getAllSessionTrainers();
       const trainers = await storage.getTrainers();
-      const activePrograms = programs.filter((p: any) => p.status === "published");
+      const activePrograms = programs
+        .filter((p: any) => p.status === "published")
+        .sort((a: any, b: any) => {
+          // Featured programs first, then by featuredOrder
+          if (a.featured && !b.featured) return -1;
+          if (!a.featured && b.featured) return 1;
+          if (a.featured && b.featured) return (a.featuredOrder || 0) - (b.featuredOrder || 0);
+          return 0;
+        });
       res.json(await Promise.all(activePrograms.map(async (p: any) => {
         const today = new Date().toISOString().split("T")[0];
         const programSessions = sessions
@@ -10440,6 +10448,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           modality: p.modality,
           price: p.price,
           certifying: p.certifying || false,
+          featured: p.featured || false,
           targetAudience: p.targetAudience,
           teachingMethods: p.teachingMethods,
           evaluationMethods: p.evaluationMethods,
@@ -10564,6 +10573,107 @@ Le contenu doit être en français, clair et bien structuré.`;
         maxItems: config.maxItems,
       });
     } catch (error) {
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // ---- Widget Bundle (single endpoint, cached) ----
+
+  let widgetBundleCache: { data: any; timestamp: number } | null = null;
+  const WIDGET_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  app.get("/api/v1/widget/bundle", requireApiKey, async (req: any, res) => {
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=600");
+
+      // Return cache if fresh
+      if (widgetBundleCache && Date.now() - widgetBundleCache.timestamp < WIDGET_CACHE_TTL) {
+        // Merge widget config if requested
+        const widgetId = req.query.widgetId as string;
+        let config = {};
+        if (widgetId) {
+          const wc = await storage.getWidgetConfiguration(widgetId);
+          if (wc && wc.active && wc.apiKeyId === req.apiKey.id) {
+            config = { theme: wc.theme, displayMode: wc.displayMode, showFilters: wc.showFilters, maxItems: wc.maxItems };
+          }
+        }
+        return res.json({ ...widgetBundleCache.data, config });
+      }
+
+      // Build fresh data
+      const today = new Date().toISOString().split("T")[0];
+      const [programs, sessions, sessionTrainers, trainers, enrollments, surveyResponses, allTrainees] = await Promise.all([
+        storage.getPrograms(),
+        storage.getSessions(),
+        storage.getAllSessionTrainers(),
+        storage.getTrainers(),
+        storage.getEnrollments(),
+        storage.getSurveyResponses(),
+        storage.getTrainees(),
+      ]);
+
+      const activePrograms = programs.filter((p: any) => p.status === "published");
+      const catalogPrograms = await Promise.all(activePrograms.map(async (p: any) => {
+        const programSessions = sessions
+          .filter((s: any) => s.programId === p.id && (s.status === "planned" || s.status === "ongoing") && s.endDate >= today)
+          .sort((a: any, b: any) => a.startDate.localeCompare(b.startDate));
+        const upcomingSessions = [];
+        for (const s of programSessions) {
+          const enrollmentCount = await storage.getEnrollmentCount(s.id);
+          upcomingSessions.push({
+            id: s.id, startDate: s.startDate, endDate: s.endDate,
+            location: s.location, locationAddress: s.locationAddress, locationRoom: s.locationRoom,
+            maxParticipants: s.maxParticipants || 12,
+            remainingSpots: (s.maxParticipants || 12) - enrollmentCount,
+            isFull: ((s.maxParticipants || 12) - enrollmentCount) <= 0,
+          });
+        }
+        const sessionIds = programSessions.map((s: any) => s.id);
+        const trainerIds = [...new Set(sessionTrainers.filter((st: any) => sessionIds.includes(st.sessionId)).map((st: any) => st.trainerId))];
+        const uniqueTrainers = trainers.filter((t: any) => trainerIds.includes(t.id));
+        return {
+          id: p.id, title: p.title, description: p.description, categories: p.categories,
+          duration: p.duration, objectives: p.objectives, prerequisites: p.prerequisites,
+          modality: p.modality, price: p.price, certifying: p.certifying || false,
+          targetAudience: p.targetAudience, teachingMethods: p.teachingMethods,
+          evaluationMethods: p.evaluationMethods, technicalMeans: p.technicalMeans,
+          accessibilityInfo: p.accessibilityInfo, accessDelay: p.accessDelay,
+          referentContact: p.referentContact, referentHandicap: p.referentHandicap,
+          resultIndicators: p.resultIndicators, programContent: p.programContent,
+          level: p.level, recyclingMonths: p.recyclingMonths, fundingTypes: p.fundingTypes,
+          imageUrl: p.imageUrl || null, subtitle: (p as any).subtitle || null,
+          sessions: upcomingSessions,
+          trainers: uniqueTrainers.map((t: any) => ({ firstName: t.firstName, lastName: t.lastName, specialty: t.specialty, avatarUrl: t.avatarUrl || null })),
+        };
+      }));
+
+      // Stats
+      const completedEnrollments = enrollments.filter((e: any) => e.status === "completed");
+      const totalTrainees = allTrainees.length;
+      const satisfactionScores = surveyResponses.filter((r: any) => r.satisfactionScore != null).map((r: any) => r.satisfactionScore);
+      const satisfactionRate = satisfactionScores.length > 0 ? Math.round(satisfactionScores.reduce((a: number, b: number) => a + b, 0) / satisfactionScores.length) : 99;
+      const recommendScores = surveyResponses.filter((r: any) => r.recommendScore != null).map((r: any) => r.recommendScore);
+      const recommendationRate = recommendScores.length > 0 ? Math.round((recommendScores.filter((s: number) => s >= 4).length / recommendScores.length) * 100) : 99;
+      const successCount = completedEnrollments.filter((e: any) => e.result === "success" || e.result === "validated").length;
+      const successRate = completedEnrollments.length > 0 ? Math.round((successCount / completedEnrollments.length) * 100) : 100;
+
+      const stats = { totalTrainees, totalPrograms: catalogPrograms.length, successRate, satisfactionRate, recommendationRate };
+
+      widgetBundleCache = { data: { programs: catalogPrograms, stats }, timestamp: Date.now() };
+
+      // Widget config
+      const widgetId = req.query.widgetId as string;
+      let config = {};
+      if (widgetId) {
+        const wc = await storage.getWidgetConfiguration(widgetId);
+        if (wc && wc.active && wc.apiKeyId === req.apiKey.id) {
+          config = { theme: wc.theme, displayMode: wc.displayMode, showFilters: wc.showFilters, maxItems: wc.maxItems };
+        }
+      }
+
+      res.json({ programs: catalogPrograms, stats, config });
+    } catch (error) {
+      console.error("Widget bundle error:", error);
       res.status(500).json({ message: "Erreur serveur" });
     }
   });

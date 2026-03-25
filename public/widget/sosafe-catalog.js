@@ -20,6 +20,14 @@
 
   var shadow = container.attachShadow({ mode: "open" });
 
+  // Preload Google Font non-blocking (outside shadow DOM)
+  if (!document.querySelector('link[href*="Poppins"]')) {
+    var fontLink = document.createElement("link");
+    fontLink.rel = "stylesheet";
+    fontLink.href = "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap";
+    document.head.appendChild(fontLink);
+  }
+
   var defaultTheme = {
     primaryColor: "#fec700",
     accentColor: "#00509f",
@@ -36,7 +44,7 @@
   function buildStyles(theme) {
     var t = Object.assign({}, defaultTheme, theme || {});
     return (
-      "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap&text=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789%C3%A0%C3%A9%C3%A8%C3%AA%C3%AE%C3%B4%C3%BB%C3%BC%C3%A7');" +
+      "" +
       "*{box-sizing:border-box;margin:0;padding:0}" +
       ":host{display:block}" +
       ".sosafe-widget{font-family:" + t.fontFamily + ";color:#000;margin:0;padding:0}" +
@@ -91,6 +99,7 @@
       ".sosafe-card-img-wrap{position:relative;overflow:hidden}" +
       ".sosafe-card-img{width:100%;height:220px;object-fit:cover;display:block}" +
       ".sosafe-card-modality{position:absolute;top:10px;left:10px;background:#32373c;color:#fff;font-size:.7rem;font-weight:600;padding:.25rem .7rem;border-radius:9999px}" +
+      ".sosafe-card-featured{position:absolute;top:10px;right:10px;background:linear-gradient(-45deg,#F6DE14,#F7B136);color:#32373c;font-size:.7rem;font-weight:700;padding:.25rem .7rem;border-radius:9999px}" +
       ".sosafe-card-body{padding:1rem}" +
       ".sosafe-card-title{font-size:.95rem;font-weight:700;margin-bottom:.4rem;line-height:1.3}" +
       ".sosafe-card-title-link{color:#000;text-decoration:none;cursor:pointer;transition:color .2s}" +
@@ -320,6 +329,9 @@
       if (p.modality) {
         html += '<div class="sosafe-card-modality">' + modalityLabel(p.modality) + '</div>';
       }
+      if (p.featured) {
+        html += '<div class="sosafe-card-featured">\u2B50 En vedette</div>';
+      }
       html += '</div>';
 
       // Body: title + duration + next date + button
@@ -436,9 +448,17 @@
     }
 
     // Accessibilit\u00E9
-    if (p.accessibilityInfo) {
-      html += '<div class="sosafe-modal-section"><h3>Accessibilit\u00E9</h3><p>' + p.accessibilityInfo + '</p></div>';
+    html += '<div class="sosafe-modal-section">';
+    html += '<h3 class="sosafe-accessibility-header"><img class="sosafe-accessibility-icon" src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Ccircle cx=%2712%27 cy=%274%27 r=%272%27 fill=%27%230369a1%27/%3E%3Cpath d=%27M19 13v-2c-1.54.02-3.09-.75-4.07-1.83l-1.29-1.43C13.17 7.23 12.37 7 11.7 7c-.35 0-.71.07-1.03.22L6 9.7V14h2v-3.4l2.07-1.04L8.5 15.6 4 20l1.45 1.45L9.5 17 13 13.5V20h2v-8.45l-1.87-3.18C14.3 13.14 16.51 14 19 13z%27 fill=%27%230369a1%27/%3E%3C/svg%3E" alt="Accessibilit\u00E9"/>Accessibilit\u00E9</h3>';
+    html += '<div class="sosafe-accessibility-box">';
+    html += '<p>' + (p.accessibilityInfo || 'Nos formations sont accessibles aux personnes en situation de handicap. N\'h\u00E9sitez pas \u00E0 nous contacter pour \u00E9tudier ensemble les modalit\u00E9s d\'adaptation.') + '</p>';
+    if (p.referentHandicap) {
+      html += '<p><strong>R\u00E9f\u00E9rent handicap :</strong> ' + p.referentHandicap + '</p>';
     }
+    if (p.referentContact) {
+      html += '<p><strong>Contact :</strong> ' + p.referentContact + '</p>';
+    }
+    html += '</div></div>';
 
     // D\u00E9lais et modalit\u00E9s d'acc\u00E8s
     html += '<div class="sosafe-modal-section"><h3>D\u00E9lais et modalit\u00E9s d\'acc\u00E8s</h3><p>' + (p.accessDelay || 'A r\u00E9ception de la demande, r\u00E9ponse sous 48H. Apr\u00E8s la signature du devis, la date de formation sera d\u00E9termin\u00E9e d\'un commun accord avec les b\u00E9n\u00E9ficiaires, en g\u00E9n\u00E9ral 1 mois apr\u00E8s maximum. Inscription apr\u00E8s signature du devis et de la convention selon les informations transmises par le commanditaire.') + '</p></div>';
@@ -648,26 +668,18 @@
 
   function fetchData() {
     var headers = { "X-API-Key": apiKey };
-    var configPromise = widgetId
-      ? fetch(baseUrl + "/api/v1/widget/config?widgetId=" + widgetId, { headers: headers }).then(function (r) {
-          return r.ok ? r.json() : {};
-        })
-      : Promise.resolve({});
+    var bundleUrl = baseUrl + "/api/v1/widget/bundle";
+    if (widgetId) bundleUrl += "?widgetId=" + widgetId;
 
-    var programsPromise = fetch(baseUrl + "/api/v1/catalog/programs", { headers: headers }).then(function (r) {
-      if (!r.ok) throw new Error("Erreur " + r.status);
-      return r.json();
-    });
-
-    var statsPromise = fetch(baseUrl + "/api/public/widget-stats").then(function (r) {
-      return r.ok ? r.json() : null;
-    }).catch(function () { return null; });
-
-    Promise.all([configPromise, programsPromise, statsPromise])
-      .then(function (results) {
-        var config = results[0];
-        var programs = results[1];
-        widgetStats = results[2];
+    fetch(bundleUrl, { headers: headers })
+      .then(function (r) {
+        if (!r.ok) throw new Error("Erreur " + r.status);
+        return r.json();
+      })
+      .then(function (bundle) {
+        var config = bundle.config || {};
+        var programs = bundle.programs || [];
+        widgetStats = bundle.stats || null;
         if (widgetStats) {
           widgetStats.totalPrograms = programs.length;
         }
