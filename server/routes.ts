@@ -4562,16 +4562,16 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
   // GET all template blocks
   app.get("/api/elearning-blocks/templates", async (_req, res) => {
     try {
-      const allBlocks = await storage.getAllElearningBlocks?.()
-        || (await (async () => {
-          // Fallback: query directly
-          const { db } = await import("./db");
-          const { elearningBlocks } = await import("@shared/schema");
-          const { eq } = await import("drizzle-orm");
-          return db.select().from(elearningBlocks).where(eq(elearningBlocks.isTemplate, true));
-        })());
-      const templates = Array.isArray(allBlocks) ? allBlocks.filter((b: any) => b.isTemplate) : [];
-      res.json(templates);
+      // Get all modules, then fetch blocks from those that have template blocks
+      const allModules = await storage.getElearningModules();
+      const templateBlocks: any[] = [];
+      for (const mod of allModules) {
+        const blocks = await storage.getElearningBlocks(mod.id);
+        for (const b of blocks) {
+          if ((b as any).isTemplate) templateBlocks.push(b);
+        }
+      }
+      res.json(templateBlocks);
     } catch (err) {
       console.error("Error fetching template blocks:", err);
       res.status(500).json({ message: "Erreur serveur" });
