@@ -5,7 +5,7 @@
   var apiKey = script.getAttribute("data-api-key");
   var widgetId = script.getAttribute("data-widget-id");
   var baseUrl = script.src.replace(/\/widget\/sosafe-catalog\.js.*$/, "");
-  var formationsPageUrl = script.getAttribute("data-formations-url") || "https://www.so-safe.fr/nos-formations/";
+  var formationsPageUrl = script.getAttribute("data-formations-url") || "https://www.so-safe.fr/formations/";
 
   if (!apiKey) {
     console.error("[SO'SAFE Widget] data-api-key est requis");
@@ -72,7 +72,7 @@
     );
   }
 
-  function renderPage(programCount) {
+  function renderPage() {
     var html = '<div class="sosafe-widget">';
 
     // Page header: banner + overlay + stats
@@ -81,12 +81,6 @@
     html += '<div class="sosafe-header-overlay">';
     html += '<nav class="sosafe-breadcrumb"><a href="https://www.so-safe.fr/" target="_top">Accueil</a><span class="sosafe-breadcrumb-sep">\u203A</span> Nos Formations</nav>';
     html += '<h1 class="sosafe-page-title">Nos Formations</h1>';
-    html += '</div>';
-    html += '<div class="sosafe-stats-bar">';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">668</div><div class="sosafe-stat-label">Stagiaires form\u00E9s</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">' + programCount + '</div><div class="sosafe-stat-label">Programmes de formation</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">100%</div><div class="sosafe-stat-label">de taux de r\u00E9ussite</div></div>';
-    html += '<div class="sosafe-stat"><div class="sosafe-stat-value">99%</div><div class="sosafe-stat-label">de taux de satisfaction</div></div>';
     html += '</div>';
     html += '</header>';
 
@@ -142,7 +136,7 @@
         shadow.innerHTML = "";
         shadow.appendChild(style);
         var wrapper = document.createElement("div");
-        wrapper.innerHTML = renderPage(programs.length);
+        wrapper.innerHTML = renderPage();
         shadow.appendChild(wrapper);
       })
       .catch(function (err) {
@@ -151,7 +145,7 @@
         style.textContent = buildStyles(null);
         shadow.appendChild(style);
         var div = document.createElement("div");
-        div.innerHTML = renderPage(0);
+        div.innerHTML = renderPage();
         shadow.appendChild(div);
         console.error("[SO'SAFE Widget]", err);
       });
