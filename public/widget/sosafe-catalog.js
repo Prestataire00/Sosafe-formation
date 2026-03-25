@@ -159,6 +159,12 @@
       ".sosafe-modal-cta:hover{background:#23272b}" +
       ".sosafe-modal-cta-outline{background:transparent;color:#32373c;border:2px solid #32373c}" +
       ".sosafe-modal-cta-outline:hover{background:#32373c;color:#fff}" +
+      ".sosafe-trainers{display:flex;flex-wrap:wrap;gap:1.5rem;margin-bottom:1.5rem}" +
+      ".sosafe-trainer{text-align:center;min-width:100px}" +
+      ".sosafe-trainer-avatar{width:70px;height:70px;border-radius:50%;object-fit:cover;margin:0 auto .5rem;display:block}" +
+      ".sosafe-trainer-initials{background:linear-gradient(-45deg,#F6DE14,#F7B136);color:#000;font-size:1.2rem;font-weight:700;display:flex;align-items:center;justify-content:center}" +
+      ".sosafe-trainer-name{font-size:.85rem;font-weight:600;color:#000}" +
+      ".sosafe-trainer-specialty{font-size:.75rem;color:#6b7280}" +
       ".sosafe-no-session-modal{font-size:.9rem;color:#9ca3af;font-style:italic;padding:.8rem;background:#f9fafb;border-radius:4px;text-align:center}" +
       ".sosafe-back-link{display:inline-flex;align-items:center;gap:.4rem;color:#32373c;text-decoration:none;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:1.5rem;transition:color .2s}" +
       ".sosafe-back-link:hover{color:#fec700}" +
@@ -432,6 +438,26 @@
     // D\u00E9lais d'acc\u00E8s
     if (p.accessDelay) {
       html += '<div class="sosafe-modal-section"><h3>D\u00E9lais d\'acc\u00E8s</h3><p>' + p.accessDelay + '</p></div>';
+    }
+
+    // Formateurs
+    if (p.trainers && p.trainers.length > 0) {
+      html += '<div class="sosafe-modal-section"><h3>Votre \u00E9quipe p\u00E9dagogique</h3></div>';
+      html += '<div class="sosafe-trainers">';
+      p.trainers.forEach(function (tr) {
+        html += '<div class="sosafe-trainer">';
+        if (tr.avatarUrl) {
+          html += '<img class="sosafe-trainer-avatar" src="' + tr.avatarUrl + '" alt="' + tr.firstName + ' ' + tr.lastName + '">';
+        } else {
+          html += '<div class="sosafe-trainer-avatar sosafe-trainer-initials">' + (tr.firstName || '')[0] + (tr.lastName || '')[0] + '</div>';
+        }
+        html += '<div class="sosafe-trainer-name">' + tr.firstName + ' ' + tr.lastName + '</div>';
+        if (tr.specialty) {
+          html += '<div class="sosafe-trainer-specialty">' + tr.specialty + '</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
     }
 
     // Sessions \u00E0 venir

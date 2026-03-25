@@ -3473,6 +3473,127 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
     }
   });
 
+  // ============================================================
+  // FIFPL ATTESTATION — Send by email to trainee
+  // POST /api/enrollments/:id/fifpl-attestation/send
+  // ============================================================
+  app.post("/api/enrollments/:id/fifpl-attestation/send", async (req, res) => {
+    try {
+      const enrollment = await storage.getEnrollment(req.params.id);
+      if (!enrollment) return res.status(404).json({ message: "Inscription non trouvée" });
+
+      const trainee = enrollment.traineeId ? await storage.getTrainee(enrollment.traineeId) : null;
+      if (!trainee || !trainee.email) {
+        return res.status(400).json({ message: "Aucune adresse email trouvée pour ce stagiaire" });
+      }
+
+      const session = enrollment.sessionId ? await storage.getSession(enrollment.sessionId) : null;
+      let program: any = null;
+      if (session) program = await storage.getProgram(session.programId);
+
+      const formatDateFR = (d: string | Date | null) => {
+        if (!d) return "";
+        const date = new Date(d);
+        return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      };
+
+      const duration = program?.duration || 0;
+      const nbJours = duration >= 7 ? Math.round(duration / 7) : 0;
+      const nbDemiJournees = duration >= 3 && duration < 7 ? 1 : 0;
+
+      const pdfBytes = await generateFIFPLAttestation({
+        traineeFirstName: trainee?.firstName || "",
+        traineeLastName: trainee?.lastName || "",
+        formationTitle: program?.title || session?.title || "",
+        startDate: session?.startDate ? formatDateFR(session.startDate) : "",
+        endDate: session?.endDate ? formatDateFR(session.endDate) : "",
+        nbJoursEntiers: nbJours,
+        nbDemiJournees: nbDemiJournees,
+        nbHeuresTotal: duration,
+        montantHT: program?.price || undefined,
+        montantTTC: program?.price || undefined,
+        faitA: session?.location || "Puget-Ville",
+        dateFait: formatDateFR(new Date()),
+      });
+
+      const safeName = `Attestation_FIFPL_${trainee.lastName}_${trainee.firstName}`;
+      const traineeName = `${trainee.firstName} ${trainee.lastName}`;
+      const formationTitle = program?.title || session?.title || "Formation";
+
+      // Build email body
+      const { wrapEmailHtml, sendEmailNow } = await import("./email-service");
+      const emailBody = await wrapEmailHtml({
+        title: "Votre attestation FIFPL",
+        preheader: `Attestation FIFPL — ${formationTitle}`,
+        body: `
+          <p>Bonjour <strong>${traineeName}</strong>,</p>
+          <p>Veuillez trouver ci-joint votre attestation FIFPL pour la formation <strong>${formationTitle}</strong>.</p>
+          <p>Ce document est à transmettre au FIFPL pour votre demande de prise en charge.</p>
+          <p>Cordialement,<br/>L'équipe SO'SAFE Formation</p>
+        `,
+        footerText: "Cet email a été envoyé automatiquement par SO'SAFE Formation.",
+      });
+
+      // Create email log for tracking
+      const emailLog = await storage.createEmailLog({
+        recipient: trainee.email,
+        subject: `Attestation FIFPL — ${formationTitle}`,
+        body: emailBody,
+        status: "pending",
+      });
+
+      // Send email with attachment directly via nodemailer
+      const nodemailer = await import("nodemailer");
+      const settings = await storage.getOrganizationSettings();
+      const settingsMap = Object.fromEntries(settings.map((s) => [s.key, s.value]));
+
+      const smtpHost = process.env.SMTP_HOST || settingsMap.smtp_host;
+      const smtpUser = process.env.SMTP_USER || settingsMap.smtp_user;
+      const smtpPass = process.env.SMTP_PASS || settingsMap.smtp_pass;
+
+      if (!smtpHost || !smtpUser || !smtpPass) {
+        await storage.updateEmailLog(emailLog.id, { status: "failed", error: "SMTP non configuré" } as any);
+        return res.status(500).json({ message: "SMTP non configuré" });
+      }
+
+      const transport = nodemailer.default.createTransport({
+        host: smtpHost,
+        port: parseInt(process.env.SMTP_PORT || settingsMap.smtp_port || "587", 10),
+        secure: (process.env.SMTP_SECURE || settingsMap.smtp_secure) === "true",
+        auth: { user: smtpUser, pass: smtpPass },
+      });
+
+      const fromName = process.env.SMTP_FROM_NAME || settingsMap.smtp_from_name || "SO'SAFE Formation";
+      const fromEmail = process.env.SMTP_FROM_EMAIL || settingsMap.smtp_from_email || smtpUser;
+
+      await transport.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: trainee.email,
+        subject: `Attestation FIFPL — ${formationTitle}`,
+        html: emailBody,
+        attachments: [
+          {
+            filename: `${safeName}.pdf`,
+            content: Buffer.from(pdfBytes),
+            contentType: "application/pdf",
+          },
+        ],
+      });
+
+      await storage.updateEmailLog(emailLog.id, {
+        status: "sent",
+        sentAt: new Date(),
+        error: null,
+      } as any);
+
+      console.log(`[FIFPL Attestation] Email envoyé à ${trainee.email} (enrollment ${req.params.id})`);
+      res.json({ success: true, message: `Attestation FIFPL envoyée à ${trainee.email}`, emailLogId: emailLog.id });
+    } catch (err: any) {
+      console.error("[FIFPL Attestation Send]", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // (blank FIFPL route is registered before auth middleware above)
 
   // ============================================================
@@ -10161,6 +10282,8 @@ Le contenu doit être en français, clair et bien structuré.`;
     try {
       const programs = await storage.getPrograms();
       const sessions = await storage.getSessions();
+      const sessionTrainers = await storage.getAllSessionTrainers();
+      const trainers = await storage.getTrainers();
       const activePrograms = programs.filter((p: any) => p.status === "published");
       res.json(await Promise.all(activePrograms.map(async (p: any) => {
         const programSessions = sessions.filter((s: any) => s.programId === p.id && (s.status === "planned" || s.status === "ongoing"));
@@ -10203,6 +10326,20 @@ Le contenu doit être en français, clair et bien structuré.`;
           fundingTypes: p.fundingTypes,
           imageUrl: p.imageUrl || null,
           sessions: upcomingSessions,
+          trainers: (() => {
+            const sessionIds = programSessions.map((s: any) => s.id);
+            const trainerIds = sessionTrainers
+              .filter((st: any) => sessionIds.includes(st.sessionId))
+              .map((st: any) => st.trainerId);
+            const uniqueTrainerIds = [...new Set(trainerIds)];
+            const uniqueTrainers = trainers.filter((t: any) => uniqueTrainerIds.includes(t.id));
+            return uniqueTrainers.map((trainer: any) => ({
+              firstName: trainer.firstName,
+              lastName: trainer.lastName,
+              specialty: trainer.specialty,
+              avatarUrl: trainer.avatarUrl || null,
+            }));
+          })(),
         };
       })));
     } catch (error) {

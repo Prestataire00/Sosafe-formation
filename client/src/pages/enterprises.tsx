@@ -55,6 +55,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
+import { ExportButton } from "@/components/shared/ExportButton";
 import { PageLayout } from "@/components/shared/PageLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
@@ -736,6 +737,20 @@ export default function Enterprises() {
     return <EnterpriseDetail enterprise={viewEnterprise} onBack={() => setViewEnterprise(undefined)} />;
   }
 
+  const exportColumns = [
+    { key: "name", label: "Nom" },
+    { key: "siret", label: "SIRET" },
+    { key: "address", label: "Adresse" },
+    { key: "city", label: "Ville" },
+    { key: "postalCode", label: "Code postal" },
+    { key: "contactName", label: "Contact" },
+    { key: "contactEmail", label: "Email contact" },
+    { key: "contactPhone", label: "Téléphone contact" },
+    { key: "sector", label: "Secteur" },
+    { key: "formatJuridique", label: "Forme juridique" },
+    { key: "status", label: "Statut" },
+  ];
+
   const filtered = enterprises?.filter(
     (e) =>
       e.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -750,6 +765,11 @@ export default function Enterprises() {
         subtitle="Gérez vos entreprises clientes"
         actions={
           <div className="flex gap-2">
+            <ExportButton
+              data={filtered || []}
+              columns={exportColumns}
+              filename="entreprises"
+            />
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-2" />
               Importer CSV
