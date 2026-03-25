@@ -4055,6 +4055,72 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
     }
   });
 
+  // POST /api/elearning-modules/:id/duplicate — duplicate a module (template or not) into a target program/session
+  app.post("/api/elearning-modules/:id/duplicate", async (req, res) => {
+    try {
+      const source = await storage.getElearningModule(req.params.id);
+      if (!source) return res.status(404).json({ message: "Module introuvable" });
+
+      const { programId, sessionId, title } = req.body;
+
+      // Create duplicate module
+      const newModule = await storage.createElearningModule({
+        programId: programId || source.programId,
+        sessionId: sessionId || source.sessionId,
+        title: title || `${source.title} (copie)`,
+        description: source.description,
+        orderIndex: source.orderIndex,
+        status: "draft",
+        requireSequential: source.requireSequential ?? true,
+        pathType: source.pathType || "combined",
+        isTemplate: false,
+        templateSourceId: source.isTemplate ? source.id : (source.templateSourceId || null),
+      });
+
+      // Duplicate all blocks
+      const blocks = await storage.getElearningBlocks(source.id);
+      for (const block of blocks) {
+        const { id, createdAt, moduleId, ...blockData } = block as any;
+        await storage.createElearningBlock({
+          ...blockData,
+          moduleId: newModule.id,
+        });
+      }
+
+      // Duplicate quiz questions for quiz/video_quiz blocks
+      const newBlocks = await storage.getElearningBlocks(newModule.id);
+      for (let i = 0; i < blocks.length; i++) {
+        const oldBlock = blocks[i] as any;
+        const newBlock = newBlocks[i] as any;
+        if (["quiz", "video_quiz", "survey"].includes(oldBlock.type)) {
+          const questions = await storage.getQuizQuestions(oldBlock.id);
+          for (const q of questions) {
+            await storage.createQuizQuestion({
+              blockId: newBlock.id,
+              quizId: null,
+              question: q.question,
+              type: q.type || "qcm",
+              options: q.options as string[],
+              correctAnswer: q.correctAnswer,
+              explanation: q.explanation,
+              orderIndex: q.orderIndex,
+              order: q.order,
+              timecode: q.timecode,
+              timeLimit: q.timeLimit,
+              points: q.points,
+              imageUrl: q.imageUrl,
+            });
+          }
+        }
+      }
+
+      res.status(201).json(newModule);
+    } catch (err: any) {
+      console.error("Error duplicating module:", err);
+      res.status(500).json({ message: err?.message || "Erreur lors de la duplication" });
+    }
+  });
+
   // POST /api/elearning-modules/generate-from-document — AI course generation
   app.post("/api/elearning-modules/generate-from-document", (req, res) => {
     const contentType = req.headers["content-type"] || "";
@@ -7033,6 +7099,55 @@ Le contenu doit être en français, clair et bien structuré.`;
     const { testSmtpConnection } = await import("./email-service");
     const result = await testSmtpConnection();
     res.json(result);
+  });
+
+  // Send test newsletter email (Le Point article)
+  app.post("/api/settings/send-test-email", async (req, res) => {
+    try {
+      const { wrapEmailHtml } = await import("./email-service");
+      const { sendEmailNow } = await import("./email-service");
+      const recipient = req.body.recipient || "anissa@sosafe.fr";
+      const appUrl = process.env.APP_URL || "https://sosafe-formation.onrender.com";
+      const articleUrl = "https://www.lepoint.fr/services/so-safe-centre-de-formations-en-sante-afgsu-1-et-2-recyclage-developpement-des-competences-l-urgence-d-apprendre-10-09-2025-2598289_4345.php#11";
+
+      const emailBody = await wrapEmailHtml({
+        title: "📢 SO'Safe à l'honneur dans Le Point !",
+        preheader: "Découvrez l'article consacré à SO'Safe Formation dans Le Point",
+        body: `
+          <p style="font-size:16px;color:#1a2b49;">Bonjour,</p>
+          <p style="font-size:15px;line-height:1.8;color:#51545e;">
+            Nous sommes fiers de vous annoncer que <strong>SO'Safe Formation</strong> a été mise à l'honneur
+            dans le magazine <strong>Le Point</strong> !
+          </p>
+          <p style="font-size:15px;line-height:1.8;color:#51545e;">
+            Cet article met en lumière notre engagement pour la formation en santé :
+            <strong>AFGSU 1 &amp; 2</strong>, recyclage, développement des compétences…
+            Parce que l'urgence, c'est d'apprendre.
+          </p>
+          <div style="background:#f8fafc;border-left:4px solid #3869d4;padding:16px 20px;margin:24px 0;border-radius:4px;">
+            <p style="margin:0;font-size:14px;color:#6b7280;">
+              🏥 Centre de formations en santé — AFGSU 1 et 2, recyclage, développement des compétences : l'urgence d'apprendre
+            </p>
+          </div>
+        `,
+        ctaLabel: "👉 Lire l'article",
+        ctaUrl: articleUrl,
+        footerText: "Cet email vous a été envoyé par SO'Safe Formation.",
+      });
+
+      const emailLog = await storage.createEmailLog({
+        recipient,
+        subject: "📢 SO'Safe à l'honneur dans Le Point !",
+        body: emailBody,
+        status: "pending",
+      });
+
+      await sendEmailNow(emailLog.id);
+      const updated = await storage.getEmailLog(emailLog.id);
+      res.json({ success: true, emailLog: updated });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // Email log detail
