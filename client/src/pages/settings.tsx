@@ -65,6 +65,8 @@ import {
   ClipboardList,
   Eye,
   Upload,
+  Calculator,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type {
@@ -1786,6 +1788,13 @@ function IntegrationsTab() {
   const [visioProvider, setVisioProvider] = useState("none");
   const [visioApiKey, setVisioApiKey] = useState("");
   const [visioDefaultUrl, setVisioDefaultUrl] = useState("");
+  const [tiimeClientId, setTiimeClientId] = useState("");
+  const [tiimeClientSecret, setTiimeClientSecret] = useState("");
+  const [tiimeCompanyId, setTiimeCompanyId] = useState("");
+  const [tiimeBaseUrl, setTiimeBaseUrl] = useState("");
+  const [tiimeTesting, setTiimeTesting] = useState(false);
+  const [tiimeTestResult, setTiimeTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [tiimeSyncing, setTiimeSyncing] = useState("");
 
   useEffect(() => {
     if (settings) {
@@ -1796,6 +1805,10 @@ function IntegrationsTab() {
       setVisioProvider(getValue("visio_provider") || "none");
       setVisioApiKey(getValue("visio_api_key"));
       setVisioDefaultUrl(getValue("visio_default_url"));
+      setTiimeClientId(getValue("tiime_client_id"));
+      setTiimeClientSecret(getValue("tiime_client_secret"));
+      setTiimeCompanyId(getValue("tiime_company_id"));
+      setTiimeBaseUrl(getValue("tiime_base_url"));
     }
   }, [settings]);
 
@@ -1808,6 +1821,10 @@ function IntegrationsTab() {
       { key: "visio_provider", value: visioProvider },
       { key: "visio_api_key", value: visioApiKey },
       { key: "visio_default_url", value: visioDefaultUrl },
+      { key: "tiime_client_id", value: tiimeClientId },
+      { key: "tiime_client_secret", value: tiimeClientSecret },
+      { key: "tiime_company_id", value: tiimeCompanyId },
+      { key: "tiime_base_url", value: tiimeBaseUrl },
     ];
     pairs.forEach((p) => {
       if (p.value) saveMutation.mutate(p);
@@ -1942,6 +1959,131 @@ function IntegrationsTab() {
           <Badge variant={visioProvider !== "none" || visioDefaultUrl ? "default" : "secondary"}>
             {visioProvider !== "none" || visioDefaultUrl ? "Configuré" : "Non configuré"}
           </Badge>
+        </CardContent>
+      </Card>
+
+      {/* TIIME Comptabilité */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Calculator className="w-5 h-5" />
+            TIIME (Comptabilité)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Synchronisation avec TIIME pour la gestion comptable : clients, factures et devis.
+            L'accès API nécessite un partenariat avec TIIME (partnership@tiime.fr).
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Client ID</Label>
+              <Input
+                type="password"
+                placeholder="Votre Client ID TIIME"
+                value={tiimeClientId}
+                onChange={(e) => setTiimeClientId(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Client Secret</Label>
+              <Input
+                type="password"
+                placeholder="Votre Client Secret TIIME"
+                value={tiimeClientSecret}
+                onChange={(e) => setTiimeClientSecret(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Company ID (optionnel)</Label>
+              <Input
+                placeholder="ID de l'entreprise dans TIIME"
+                value={tiimeCompanyId}
+                onChange={(e) => setTiimeCompanyId(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>URL API (optionnel)</Label>
+              <Input
+                placeholder="https://api.tiime.fr"
+                value={tiimeBaseUrl}
+                onChange={(e) => setTiimeBaseUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Laissez vide pour utiliser l'URL par défaut.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Badge variant={tiimeClientId ? "default" : "secondary"}>
+              {tiimeClientId ? "Configuré" : "Non configuré"}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!tiimeClientId || tiimeTesting}
+              onClick={async () => {
+                setTiimeTesting(true);
+                setTiimeTestResult(null);
+                try {
+                  const res = await apiRequest("POST", "/api/settings/tiime-test");
+                  const data = await res.json();
+                  setTiimeTestResult(data);
+                } catch (err: any) {
+                  setTiimeTestResult({ success: false, message: err.message });
+                } finally {
+                  setTiimeTesting(false);
+                }
+              }}
+            >
+              {tiimeTesting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Zap className="w-4 h-4 mr-1" />}
+              Tester la connexion
+            </Button>
+            {tiimeTestResult && (
+              <span className={`text-sm flex items-center gap-1 ${tiimeTestResult.success ? "text-green-600" : "text-red-600"}`}>
+                {tiimeTestResult.success ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                {tiimeTestResult.message}
+              </span>
+            )}
+          </div>
+          {tiimeClientId && (
+            <div className="border-t pt-4 space-y-2">
+              <p className="text-sm font-medium">Synchronisation</p>
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { label: "Sync Clients", endpoint: "/api/integrations/tiime/sync-clients", key: "clients" },
+                  { label: "Sync Factures", endpoint: "/api/integrations/tiime/sync-invoices", key: "invoices" },
+                  { label: "Sync Devis", endpoint: "/api/integrations/tiime/sync-quotes", key: "quotes" },
+                ].map((action) => (
+                  <Button
+                    key={action.key}
+                    variant="outline"
+                    size="sm"
+                    disabled={tiimeSyncing === action.key}
+                    onClick={async () => {
+                      setTiimeSyncing(action.key);
+                      try {
+                        const res = await apiRequest("POST", action.endpoint);
+                        const data = await res.json();
+                        toast({
+                          title: data.success ? "Synchronisation réussie" : "Erreur",
+                          description: data.message || `${data.synced || 0} éléments synchronisés`,
+                          variant: data.success ? "default" : "destructive",
+                        });
+                      } catch (err: any) {
+                        toast({ title: "Erreur de synchronisation", description: err.message, variant: "destructive" });
+                      } finally {
+                        setTiimeSyncing("");
+                      }
+                    }}
+                  >
+                    {tiimeSyncing === action.key ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                    {action.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
