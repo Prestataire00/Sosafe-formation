@@ -2071,6 +2071,7 @@ export const DOCUMENT_TYPES = [
   { value: "autre", label: "Autre" },
   { value: "fiche_fipl", label: "Fiche FIPL" },
   { value: "rapport_emargement", label: "Rapport d'émargement" },
+  { value: "livret_accueil", label: "Livret d'accueil" },
 ] as const;
 
 export const PROSPECT_STATUSES = [

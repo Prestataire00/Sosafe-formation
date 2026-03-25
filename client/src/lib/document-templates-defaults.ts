@@ -1208,6 +1208,154 @@ Document généré le {date_document} — {nom_organisme}
 </p>
 `,
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // LIVRET D'ACCUEIL
+  // ─────────────────────────────────────────────────────────────────────────
+  livret_accueil: `
+<div style="font-family:Arial,sans-serif; max-width:800px; margin:0 auto; color:#333;">
+
+<!-- Page de couverture -->
+<div style="text-align:center; padding:60px 40px; border-bottom:3px solid #1a2b49;">
+  <h1 style="font-size:28pt; color:#1a2b49; margin-bottom:10px;">LIVRET D'ACCUEIL</h1>
+  <h2 style="font-size:16pt; color:#3869d4; margin-bottom:30px;">{nom_organisme}</h2>
+  <p style="font-size:14pt; color:#555;">Formation : <strong>{nom_formation}</strong></p>
+  <p style="font-size:11pt; color:#777; margin-top:20px;">Document remis au stagiaire avant le début de la formation</p>
+</div>
+
+<!-- Mot de bienvenue -->
+<div style="padding:30px 0; border-bottom:1px solid #e5e7eb;">
+  <h2 style="color:#1a2b49; font-size:14pt; border-left:4px solid #3869d4; padding-left:12px;">Bienvenue</h2>
+  <p style="line-height:1.8; font-size:10pt;">
+    Nous avons le plaisir de vous accueillir au sein de <strong>{nom_organisme}</strong> pour votre formation
+    <strong>« {nom_formation} »</strong>. Ce livret d'accueil a pour objectif de vous fournir toutes les informations
+    pratiques nécessaires au bon déroulement de votre parcours de formation.
+  </p>
+</div>
+
+<!-- Présentation de l'organisme -->
+<div style="padding:30px 0; border-bottom:1px solid #e5e7eb;">
+  <h2 style="color:#1a2b49; font-size:14pt; border-left:4px solid #3869d4; padding-left:12px;">Présentation de l'organisme</h2>
+  <table style="width:100%; font-size:10pt; line-height:1.8;">
+    <tr><td style="width:200px; color:#666; padding:4px 0;">Raison sociale</td><td><strong>{nom_organisme}</strong></td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Adresse</td><td>{adresse_organisme}</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Téléphone</td><td>{telephone_organisme}</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Email</td><td>{email_organisme}</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">N° SIRET</td><td>{siret_organisme}</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">N° de déclaration d'activité</td><td>{nda_organisme}</td></tr>
+  </table>
+</div>
+
+<!-- Informations sur la formation -->
+<div style="padding:30px 0; border-bottom:1px solid #e5e7eb;">
+  <h2 style="color:#1a2b49; font-size:14pt; border-left:4px solid #3869d4; padding-left:12px;">Votre formation</h2>
+  <table style="width:100%; font-size:10pt; line-height:1.8;">
+    <tr><td style="width:200px; color:#666; padding:4px 0;">Intitulé</td><td><strong>{nom_formation}</strong></td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Dates</td><td>{dates}</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Durée</td><td>{duree_formation} heures</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Lieu</td><td>{lieu}</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Modalité</td><td>{modalite}</td></tr>
+    <tr><td style="color:#666; padding:4px 0;">Formateur(s)</td><td>{nom_formateur}</td></tr>
+  </table>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:20px;">Objectifs pédagogiques</h3>
+  <p style="font-size:10pt; line-height:1.8;">{objectifs_formation}</p>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Méthodes pédagogiques</h3>
+  <p style="font-size:10pt; line-height:1.8;">{methodes_pedagogiques}</p>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Modalités d'évaluation</h3>
+  <p style="font-size:10pt; line-height:1.8;">{type_evaluation}</p>
+</div>
+
+<!-- Informations pratiques -->
+<div style="padding:30px 0; border-bottom:1px solid #e5e7eb;">
+  <h2 style="color:#1a2b49; font-size:14pt; border-left:4px solid #3869d4; padding-left:12px;">Informations pratiques</h2>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Horaires</h3>
+  <p style="font-size:10pt; line-height:1.8;">
+    Les horaires de formation sont généralement de <strong>9h00 à 12h30</strong> et de <strong>13h30 à 17h00</strong>.
+    Les horaires précis vous seront communiqués dans votre convocation.
+  </p>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Accès et transports</h3>
+  <p style="font-size:10pt; line-height:1.8;">
+    Lieu de formation : <strong>{lieu}</strong><br/>
+    {{#if adresse_lieu}}{adresse_lieu}{{/if}}
+  </p>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Restauration</h3>
+  <p style="font-size:10pt; line-height:1.8;">
+    La pause déjeuner est libre. Des solutions de restauration sont disponibles à proximité du lieu de formation.
+  </p>
+</div>
+
+<!-- Droits et obligations -->
+<div style="padding:30px 0; border-bottom:1px solid #e5e7eb;">
+  <h2 style="color:#1a2b49; font-size:14pt; border-left:4px solid #3869d4; padding-left:12px;">Droits et obligations du stagiaire</h2>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Assiduité</h3>
+  <p style="font-size:10pt; line-height:1.8;">
+    La présence à l'ensemble des séquences de formation est obligatoire. Toute absence doit être signalée et justifiée.
+    Une feuille d'émargement est signée par demi-journée.
+  </p>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Règlement intérieur</h3>
+  <p style="font-size:10pt; line-height:1.8;">
+    Le règlement intérieur de l'organisme de formation est applicable à tous les stagiaires.
+    Il est consultable sur demande et affiché dans les locaux de formation.
+    Les stagiaires s'engagent à le respecter pendant toute la durée de la formation.
+  </p>
+
+  <h3 style="color:#1a2b49; font-size:11pt; margin-top:15px;">Confidentialité et propriété intellectuelle</h3>
+  <p style="font-size:10pt; line-height:1.8;">
+    Les supports pédagogiques remis durant la formation sont la propriété intellectuelle de l'organisme.
+    Toute reproduction ou diffusion sans autorisation est interdite.
+  </p>
+</div>
+
+<!-- Accessibilité et handicap -->
+<div style="padding:30px 0; border-bottom:1px solid #e5e7eb;">
+  <h2 style="color:#1a2b49; font-size:14pt; border-left:4px solid #3869d4; padding-left:12px;">Accessibilité et situation de handicap</h2>
+  <p style="font-size:10pt; line-height:1.8;">
+    <strong>{nom_organisme}</strong> s'engage à rendre ses formations accessibles aux personnes en situation de handicap.
+    Si vous êtes concerné(e), nous vous invitons à nous contacter en amont afin d'adapter les conditions d'accueil,
+    les moyens pédagogiques et les modalités d'évaluation.
+  </p>
+  <p style="font-size:10pt; line-height:1.8;">
+    <strong>Référent handicap :</strong> {email_organisme} — {telephone_organisme}
+  </p>
+</div>
+
+<!-- Réclamations et médiation -->
+<div style="padding:30px 0; border-bottom:1px solid #e5e7eb;">
+  <h2 style="color:#1a2b49; font-size:14pt; border-left:4px solid #3869d4; padding-left:12px;">Réclamations et médiation</h2>
+  <p style="font-size:10pt; line-height:1.8;">
+    Toute réclamation peut être adressée par email à <strong>{email_organisme}</strong> ou par courrier à l'adresse de l'organisme.
+    Nous nous engageons à accuser réception sous 48 heures et à apporter une réponse sous 15 jours ouvrés.
+  </p>
+  <p style="font-size:10pt; line-height:1.8;">
+    En cas de litige non résolu, vous pouvez faire appel au médiateur de la consommation compétent.
+  </p>
+</div>
+
+<!-- Contact -->
+<div style="padding:30px 0; text-align:center; background:#f8fafc; border-radius:8px; margin-top:20px;">
+  <h2 style="color:#1a2b49; font-size:14pt; margin-bottom:15px;">Vos contacts</h2>
+  <p style="font-size:10pt; line-height:1.8; margin:0;">
+    <strong>{nom_organisme}</strong><br/>
+    {adresse_organisme}<br/>
+    Tél. : {telephone_organisme}<br/>
+    Email : {email_organisme}
+  </p>
+</div>
+
+<p style="font-size:8pt; color:#999; text-align:center; margin-top:30px;">
+  Document généré le {date_document} — {nom_organisme} — N° de déclaration d'activité : {nda_organisme}
+</p>
+
+</div>
+`,
+
 };
 
 /**
