@@ -683,13 +683,24 @@ export default function PublicEnrollment() {
             return steps.map((s, i) => (
               <div key={s.key} className="flex items-center gap-2">
                 {i > 0 && <div className="w-8 h-px bg-border" />}
-                <div
-                  className={`flex items-center gap-2 text-sm ${
+                <button
+                  type="button"
+                  disabled={i >= currentIndex}
+                  onClick={() => {
+                    if (i < currentIndex) {
+                      if (s.key === "sessions") {
+                        handleBackToSessions();
+                      } else {
+                        setStep(s.key as Step);
+                      }
+                    }
+                  }}
+                  className={`flex items-center gap-2 text-sm transition-colors ${
                     step === s.key
                       ? "text-primary font-semibold"
                       : i < currentIndex
-                      ? "text-green-600"
-                      : "text-muted-foreground"
+                      ? "text-green-600 hover:text-green-800 cursor-pointer"
+                      : "text-muted-foreground cursor-default"
                   }`}
                 >
                   <span
@@ -704,7 +715,7 @@ export default function PublicEnrollment() {
                     {i < currentIndex ? "✓" : s.num}
                   </span>
                   <span className="hidden sm:inline">{s.label}</span>
-                </div>
+                </button>
               </div>
             ));
           })()}
@@ -1089,7 +1100,14 @@ export default function PublicEnrollment() {
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" onClick={handleBackToSessions}>
+                  <Button variant="ghost" size="icon" onClick={() => {
+                    if (isAfgsuSession(selectedSession)) {
+                      setStep("afgsu_check");
+                    } else {
+                      setStep("sessions");
+                      setSelectedSession(null);
+                    }
+                  }}>
                     <ArrowLeft className="w-4 h-4" />
                   </Button>
                   <CardTitle className="flex items-center gap-2">
