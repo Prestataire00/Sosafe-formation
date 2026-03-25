@@ -1356,6 +1356,361 @@ Document généré le {date_document} — {nom_organisme}
 </div>
 `,
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // BILAN PÉDAGOGIQUE ET FINANCIER (BPF)
+  // ─────────────────────────────────────────────────────────────────────────
+  bpf: `
+<h1 style="text-align:center">BILAN PÉDAGOGIQUE ET FINANCIER</h1>
+<p style="text-align:center"><em>Article L.6352-11 du Code du travail</em></p>
+<br/>
+
+<h2>Identification de l'organisme</h2>
+<table>
+  <tr><th>Raison sociale</th><td>SO'SAFE</td></tr>
+  <tr><th>SIRET</th><td>{siret_organisme}</td></tr>
+  <tr><th>N° de déclaration d'activité</th><td>{nda_organisme}</td></tr>
+  <tr><th>Adresse</th><td>{adresse_organisme}</td></tr>
+  <tr><th>Responsable</th><td>{representant_legal}</td></tr>
+</table>
+
+<h2>A — Bilan financier</h2>
+<table>
+  <tr><th>Produit des prestations de formation</th><td>__________ €</td></tr>
+  <tr><th>Dont entreprises</th><td>__________ €</td></tr>
+  <tr><th>Dont particuliers</th><td>__________ €</td></tr>
+  <tr><th>Dont OPCO / financeurs publics</th><td>__________ €</td></tr>
+  <tr><th>Charges de fonctionnement</th><td>__________ €</td></tr>
+  <tr><th>Charges de personnel</th><td>__________ €</td></tr>
+  <tr><th>Sous-traitance</th><td>__________ €</td></tr>
+</table>
+
+<h2>B — Bilan pédagogique</h2>
+<table>
+  <tr><th>Nombre total de stagiaires formés</th><td>__________</td></tr>
+  <tr><th>Nombre d'heures de formation dispensées</th><td>__________ h</td></tr>
+  <tr><th>Nombre de sessions réalisées</th><td>__________</td></tr>
+  <tr><th>Nombre de formateurs mobilisés</th><td>__________</td></tr>
+</table>
+
+<h2>C — Répartition par type de formation</h2>
+<table>
+  <tr><th>Type</th><th>Nb sessions</th><th>Nb stagiaires</th><th>Nb heures</th></tr>
+  <tr><td>Formations santé / sécurité</td><td></td><td></td><td></td></tr>
+  <tr><td>Formations réglementaires</td><td></td><td></td><td></td></tr>
+  <tr><td>Formations continues</td><td></td><td></td><td></td></tr>
+  <tr><td>DPC</td><td></td><td></td><td></td></tr>
+</table>
+
+<h2>D — Indicateurs qualité</h2>
+<table>
+  <tr><th>Taux de satisfaction global</th><td>__________ %</td></tr>
+  <tr><th>Taux de réussite</th><td>__________ %</td></tr>
+  <tr><th>Taux de recommandation</th><td>__________ %</td></tr>
+  <tr><th>Taux d'abandon</th><td>__________ %</td></tr>
+</table>
+
+<br/>
+<p>Le présent bilan est établi conformément à l'article L.6352-11 du Code du travail.</p>
+<p>Fait le {date_document}</p>
+<br/>
+<p><strong>SO'SAFE</strong> — Signature du responsable :</p>
+<div style="height:60px; border:1px dashed #ccc; width:200px; margin-top:8px"></div>
+`,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BADGE DE RÉUSSITE
+  // ─────────────────────────────────────────────────────────────────────────
+  badge: `
+<div style="font-family:Arial,sans-serif; max-width:400px; margin:0 auto; text-align:center; border:3px solid #1a2b49; border-radius:20px; padding:40px 30px; background:linear-gradient(135deg, #f8fafc 0%, #e8f0fe 100%);">
+
+  <div style="width:80px; height:80px; margin:0 auto 15px; border-radius:50%; background:#1a2b49; display:flex; align-items:center; justify-content:center;">
+    <span style="font-size:36px; color:white;">✓</span>
+  </div>
+
+  <h1 style="font-size:14pt; color:#1a2b49; margin:0 0 5px; text-transform:uppercase; letter-spacing:2px;">Badge de réussite</h1>
+
+  <div style="width:60px; height:2px; background:#3869d4; margin:10px auto 20px;"></div>
+
+  <p style="font-size:12pt; color:#555; margin:0 0 5px;">Décerné à</p>
+  <p style="font-size:16pt; color:#1a2b49; font-weight:bold; margin:0 0 20px;">{nom_apprenant} {prenom_apprenant}</p>
+
+  <p style="font-size:10pt; color:#555; margin:0 0 5px;">Pour avoir réussi la formation</p>
+  <p style="font-size:13pt; color:#3869d4; font-weight:bold; margin:0 0 20px;">« {nom_formation} »</p>
+
+  <table style="width:100%; font-size:9pt; color:#666; margin:15px 0;">
+    <tr><td>Durée : {duree_formation}</td><td>Du {date_debut_session} au {date_fin_session}</td></tr>
+    <tr><td>Formateur : {nom_formateur}</td><td>Lieu : {lieu_session}</td></tr>
+  </table>
+
+  <div style="margin-top:20px; padding-top:15px; border-top:1px solid #d1d5db;">
+    <p style="font-size:9pt; color:#999; margin:0;">Délivré le {date_delivrance}</p>
+    <p style="font-size:10pt; color:#1a2b49; font-weight:bold; margin:5px 0 0;">SO'SAFE</p>
+    <p style="font-size:8pt; color:#999; margin:0;">Organisme de formation — N° DA : {nda_organisme}</p>
+  </div>
+
+</div>
+`,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // QUESTIONNAIRE DE SATISFACTION (à chaud)
+  // ─────────────────────────────────────────────────────────────────────────
+  questionnaire_satisfaction: `
+<h1 style="text-align:center">QUESTIONNAIRE DE SATISFACTION</h1>
+<p style="text-align:center"><em>Évaluation à chaud — À compléter en fin de formation</em></p>
+<br/>
+
+<table>
+  <tr><th>Formation</th><td><strong>{nom_formation}</strong></td></tr>
+  <tr><th>Dates</th><td>Du {date_debut_session} au {date_fin_session}</td></tr>
+  <tr><th>Formateur</th><td>{nom_formateur}</td></tr>
+  <tr><th>Lieu</th><td>{lieu_session}</td></tr>
+  <tr><th>Stagiaire</th><td>{nom_apprenant} {prenom_apprenant}</td></tr>
+</table>
+
+<br/>
+<p><em>Merci d'évaluer chaque critère sur une échelle de 1 (pas du tout satisfait) à 5 (très satisfait).</em></p>
+
+<h2>1. Organisation générale</h2>
+<table>
+  <tr><th style="width:60%">Critère</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+  <tr><td>Accueil et informations préalables</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Respect du programme annoncé</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Qualité des locaux / conditions matérielles</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Rythme et durée de la formation</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+</table>
+
+<h2>2. Contenu pédagogique</h2>
+<table>
+  <tr><th style="width:60%">Critère</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+  <tr><td>Clarté des objectifs pédagogiques</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Qualité des supports pédagogiques</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Équilibre entre théorie et pratique</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Pertinence des exercices / mises en situation</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Applicabilité dans votre pratique professionnelle</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+</table>
+
+<h2>3. Le formateur</h2>
+<table>
+  <tr><th style="width:60%">Critère</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+  <tr><td>Maîtrise du sujet</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Qualité d'animation et pédagogie</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Disponibilité et écoute</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Capacité à répondre aux questions</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+</table>
+
+<h2>4. Satisfaction globale</h2>
+<table>
+  <tr><th style="width:60%">Critère</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+  <tr><td>Satisfaction globale sur cette formation</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>Recommanderiez-vous cette formation ?</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+</table>
+
+<h2>5. Commentaires libres</h2>
+<p><strong>Ce que vous avez le plus apprécié :</strong></p>
+<div style="border:1px solid #ccc; min-height:60px; padding:8px; margin-bottom:15px;"></div>
+
+<p><strong>Ce qui pourrait être amélioré :</strong></p>
+<div style="border:1px solid #ccc; min-height:60px; padding:8px; margin-bottom:15px;"></div>
+
+<p><strong>Autres remarques :</strong></p>
+<div style="border:1px solid #ccc; min-height:60px; padding:8px;"></div>
+
+<br/>
+<p>Date : {date_document} — Signature (optionnelle) :</p>
+`,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ÉVALUATION PRÉ-FORMATION (positionnement)
+  // ─────────────────────────────────────────────────────────────────────────
+  evaluation_pre_formation: `
+<h1 style="text-align:center">ÉVALUATION DE POSITIONNEMENT — PRÉ-FORMATION</h1>
+<br/>
+
+<table>
+  <tr><th>Formation</th><td><strong>{nom_formation}</strong></td></tr>
+  <tr><th>Dates prévues</th><td>Du {date_debut_session} au {date_fin_session}</td></tr>
+  <tr><th>Stagiaire</th><td>{nom_apprenant} {prenom_apprenant}</td></tr>
+  <tr><th>Entreprise</th><td>{entreprise_apprenant}</td></tr>
+</table>
+
+<br/>
+<p><em>Ce questionnaire permet d'évaluer votre niveau initial et d'adapter le contenu de la formation à vos besoins. Merci de répondre sincèrement.</em></p>
+
+<h2>1. Votre profil</h2>
+<p><strong>Quelle est votre fonction actuelle ?</strong></p>
+<div style="border:1px solid #ccc; min-height:30px; padding:8px; margin-bottom:10px;"></div>
+
+<p><strong>Depuis combien de temps exercez-vous cette fonction ?</strong></p>
+<p>☐ Moins d'un an &nbsp; ☐ 1 à 3 ans &nbsp; ☐ 3 à 5 ans &nbsp; ☐ Plus de 5 ans</p>
+
+<p><strong>Avez-vous déjà suivi une formation sur ce sujet ?</strong></p>
+<p>☐ Oui &nbsp; ☐ Non</p>
+<p>Si oui, laquelle et quand ?</p>
+<div style="border:1px solid #ccc; min-height:30px; padding:8px; margin-bottom:10px;"></div>
+
+<h2>2. Vos connaissances actuelles</h2>
+<p><em>Évaluez votre niveau sur chaque thème : 1 = Novice, 2 = Notions de base, 3 = Intermédiaire, 4 = Avancé</em></p>
+<table>
+  <tr><th style="width:60%">Thème</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+  <tr><td>[Thème 1 de la formation]</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>[Thème 2 de la formation]</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>[Thème 3 de la formation]</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+  <tr><td>[Thème 4 de la formation]</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>
+</table>
+
+<h2>3. Vos attentes</h2>
+<p><strong>Quels sont vos principaux objectifs pour cette formation ?</strong></p>
+<div style="border:1px solid #ccc; min-height:60px; padding:8px; margin-bottom:10px;"></div>
+
+<p><strong>Y a-t-il des points spécifiques que vous souhaitez aborder ?</strong></p>
+<div style="border:1px solid #ccc; min-height:60px; padding:8px;"></div>
+
+<br/>
+<p>Date : {date_document}</p>
+<p>Signature : ________________________</p>
+`,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ÉVALUATION DES ACQUIS (post-formation)
+  // ─────────────────────────────────────────────────────────────────────────
+  evaluation_acquis: `
+<h1 style="text-align:center">ÉVALUATION DES ACQUIS — POST-FORMATION</h1>
+<br/>
+
+<table>
+  <tr><th>Formation</th><td><strong>{nom_formation}</strong></td></tr>
+  <tr><th>Dates</th><td>Du {date_debut_session} au {date_fin_session}</td></tr>
+  <tr><th>Formateur</th><td>{nom_formateur}</td></tr>
+  <tr><th>Stagiaire</th><td>{nom_apprenant} {prenom_apprenant}</td></tr>
+</table>
+
+<br/>
+<p><em>Cette évaluation permet de mesurer les connaissances et compétences acquises à l'issue de la formation.</em></p>
+
+<h2>Partie 1 — QCM (cochez la ou les bonnes réponses)</h2>
+
+<p><strong>Question 1 :</strong> [Intitulé de la question]</p>
+<p>☐ Réponse A &nbsp; ☐ Réponse B &nbsp; ☐ Réponse C &nbsp; ☐ Réponse D</p>
+
+<p><strong>Question 2 :</strong> [Intitulé de la question]</p>
+<p>☐ Réponse A &nbsp; ☐ Réponse B &nbsp; ☐ Réponse C &nbsp; ☐ Réponse D</p>
+
+<p><strong>Question 3 :</strong> [Intitulé de la question]</p>
+<p>☐ Réponse A &nbsp; ☐ Réponse B &nbsp; ☐ Réponse C &nbsp; ☐ Réponse D</p>
+
+<p><strong>Question 4 :</strong> [Intitulé de la question]</p>
+<p>☐ Réponse A &nbsp; ☐ Réponse B &nbsp; ☐ Réponse C &nbsp; ☐ Réponse D</p>
+
+<p><strong>Question 5 :</strong> [Intitulé de la question]</p>
+<p>☐ Réponse A &nbsp; ☐ Réponse B &nbsp; ☐ Réponse C &nbsp; ☐ Réponse D</p>
+
+<h2>Partie 2 — Questions ouvertes</h2>
+
+<p><strong>Question 6 :</strong> [Question ouverte]</p>
+<div style="border:1px solid #ccc; min-height:60px; padding:8px; margin-bottom:15px;"></div>
+
+<p><strong>Question 7 :</strong> [Question ouverte]</p>
+<div style="border:1px solid #ccc; min-height:60px; padding:8px; margin-bottom:15px;"></div>
+
+<h2>Partie 3 — Mise en situation</h2>
+
+<p><strong>Décrivez comment vous appliqueriez les connaissances acquises dans votre contexte professionnel :</strong></p>
+<div style="border:1px solid #ccc; min-height:80px; padding:8px; margin-bottom:15px;"></div>
+
+<br/>
+<h2>Résultat</h2>
+<table>
+  <tr><th>Score QCM</th><td>_____ / 5</td></tr>
+  <tr><th>Appréciation globale</th><td>☐ Acquis &nbsp; ☐ En cours d'acquisition &nbsp; ☐ Non acquis</td></tr>
+</table>
+
+<br/>
+<table>
+  <tr>
+    <th>Le formateur</th>
+    <th>Le stagiaire</th>
+  </tr>
+  <tr>
+    <td style="height:60px">{nom_formateur}<br/>Signature :</td>
+    <td style="height:60px">{nom_apprenant} {prenom_apprenant}<br/>Signature :</td>
+  </tr>
+</table>
+<p style="text-align:right; font-size:9pt; color:#999;">Date : {date_document}</p>
+`,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PROTOCOLE INDIVIDUEL DE FORMATION (PIF)
+  // ─────────────────────────────────────────────────────────────────────────
+  protocole_individuel: `
+<h1 style="text-align:center">PROTOCOLE INDIVIDUEL DE FORMATION</h1>
+<p style="text-align:center"><em>Document Qualiopi — Indicateur 8</em></p>
+<br/>
+
+<h2>Organisme de formation</h2>
+<p><strong>SO'SAFE</strong><br/>
+{adresse_organisme}<br/>
+SIRET : {siret_organisme} — N° DA : {nda_organisme}</p>
+
+<h2>Bénéficiaire</h2>
+<table>
+  <tr><th>Nom et prénom</th><td>{nom_apprenant} {prenom_apprenant}</td></tr>
+  <tr><th>Entreprise</th><td>{entreprise_apprenant}</td></tr>
+  <tr><th>Fonction</th><td>[Fonction du stagiaire]</td></tr>
+</table>
+
+<h2>Formation concernée</h2>
+<table>
+  <tr><th>Intitulé</th><td><strong>{nom_formation}</strong></td></tr>
+  <tr><th>Objectifs</th><td>{objectifs_formation}</td></tr>
+  <tr><th>Prérequis</th><td>{prerequis_formation}</td></tr>
+  <tr><th>Durée totale</th><td>{duree_formation}</td></tr>
+  <tr><th>Dates</th><td>Du {date_debut_session} au {date_fin_session}</td></tr>
+  <tr><th>Lieu</th><td>{lieu_session}</td></tr>
+  <tr><th>Modalité</th><td>{modalite_formation}</td></tr>
+  <tr><th>Formateur référent</th><td>{nom_formateur}</td></tr>
+</table>
+
+<h2>Parcours individualisé</h2>
+<p><strong>Résultat du positionnement initial :</strong></p>
+<div style="border:1px solid #ccc; min-height:40px; padding:8px; margin-bottom:10px;"></div>
+
+<p><strong>Objectifs personnalisés :</strong></p>
+<div style="border:1px solid #ccc; min-height:40px; padding:8px; margin-bottom:10px;"></div>
+
+<p><strong>Adaptations prévues :</strong></p>
+<ul>
+  <li>☐ Adaptation du rythme</li>
+  <li>☐ Contenus complémentaires</li>
+  <li>☐ Accompagnement renforcé</li>
+  <li>☐ Accessibilité handicap : _______________</li>
+  <li>☐ Autre : _______________</li>
+</ul>
+
+<h2>Modalités d'évaluation</h2>
+<p>☐ Évaluation pré-formation (positionnement)<br/>
+☐ Évaluation continue (exercices pratiques)<br/>
+☐ Évaluation post-formation (QCM / mise en situation)<br/>
+☐ Évaluation de satisfaction</p>
+
+<h2>Engagement réciproque</h2>
+<p>Le bénéficiaire s'engage à participer activement à l'ensemble des séquences de formation et à réaliser les travaux demandés.</p>
+<p>SO'SAFE s'engage à mettre en œuvre les moyens pédagogiques et techniques nécessaires à la bonne réalisation de la formation, et à adapter le parcours si nécessaire.</p>
+
+<br/>
+<p>Fait en deux exemplaires, le {date_document}</p>
+<br/>
+<table>
+  <tr>
+    <th>Le responsable — SO'SAFE</th>
+    <th>Le bénéficiaire</th>
+  </tr>
+  <tr>
+    <td style="height:60px">Signature :</td>
+    <td style="height:60px">Signature :<br/><em>(Lu et approuvé)</em></td>
+  </tr>
+</table>
+`,
+
 };
 
 /**

@@ -225,19 +225,42 @@ export type InsertSessionTrainer = typeof sessionTrainers.$inferInsert;
 export const trainingLocations = pgTable("training_locations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  address: text("address"),
-  city: text("city"),
+  description: text("description"),
+  // Address — Digiforma-style granular fields
+  roadNumber: text("road_number"),
+  roadRepetition: text("road_repetition"),
+  roadType: text("road_type"),
+  roadLabel: text("road_label"),
+  address: text("address"), // legacy / full address fallback
+  addressExtra: text("address_extra"), // lieu-dit, BP, etc.
   postalCode: text("postal_code"),
+  city: text("city"),
+  cityCode: text("city_code"),
   country: text("country").default("France"),
+  countryCode: text("country_code").default("FR"),
+  // Facilities
   rooms: jsonb("rooms").$type<string[]>().default([]),
   capacity: integer("capacity"),
+  equipment: text("equipment"),
+  pricePerDay: real("price_per_day"),
+  pricePerHalfDay: real("price_per_half_day"),
+  // Contact
   contactName: text("contact_name"),
   contactPhone: text("contact_phone"),
   contactEmail: text("contact_email"),
-  notes: text("notes"),
+  // Accessibility & practical info
   accessibilityInfo: text("accessibility_info"),
+  accessibilityCompliant: boolean("accessibility_compliant").default(false),
+  accessInstructions: text("access_instructions"),
   parkingInfo: text("parking_info"),
   transportInfo: text("transport_info"),
+  // Custom fields (Digiforma-style: wifi, projector, etc.)
+  customFields: jsonb("custom_fields").$type<Record<string, string | boolean>>().default({}),
+  // Documents
+  documents: jsonb("documents").$type<Array<{ title: string; fileUrl: string; fileName: string; fileSize?: number }>>().default([]),
+  // Admin
+  siret: text("siret"),
+  notes: text("notes"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -2072,6 +2095,11 @@ export const DOCUMENT_TYPES = [
   { value: "fiche_fipl", label: "Fiche FIPL" },
   { value: "rapport_emargement", label: "Rapport d'émargement" },
   { value: "livret_accueil", label: "Livret d'accueil" },
+  { value: "badge", label: "Badge de réussite" },
+  { value: "questionnaire_satisfaction", label: "Questionnaire de satisfaction" },
+  { value: "evaluation_pre_formation", label: "Évaluation pré-formation" },
+  { value: "evaluation_acquis", label: "Évaluation des acquis" },
+  { value: "protocole_individuel", label: "Protocole individuel de formation" },
 ] as const;
 
 export const PROSPECT_STATUSES = [

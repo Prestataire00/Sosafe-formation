@@ -452,6 +452,12 @@ export async function seedAllTemplates(documentDefaults?: Record<string, string>
     fiche_fipl: "Fiche FIFPL",
     rapport_emargement: "Rapport d'émargement",
     livret_accueil: "Livret d'accueil",
+    bpf: "Bilan Pédagogique et Financier",
+    badge: "Badge de réussite",
+    questionnaire_satisfaction: "Questionnaire de satisfaction",
+    evaluation_pre_formation: "Évaluation pré-formation",
+    evaluation_acquis: "Évaluation des acquis",
+    protocole_individuel: "Protocole individuel de formation",
   };
 
   const docDefaults = documentDefaults || {};
