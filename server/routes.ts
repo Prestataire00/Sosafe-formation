@@ -2925,7 +2925,7 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
       orgSiret: settingsMap["org_siret"] || "",
     });
 
-    const effectiveVisibility = visibility || "admin_only";
+    const effectiveVisibility = visibility || "all";
     const doc = await storage.createGeneratedDocument({
       templateId,
       sessionId: sessionId || null,
@@ -2937,7 +2937,7 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
       content,
       status: "generated",
       visibility: effectiveVisibility,
-      sharedAt: effectiveVisibility !== "admin_only" ? new Date() : null,
+      sharedAt: new Date(),
     });
     generatedDocs.push(doc);
     } // end for loop
@@ -6765,8 +6765,8 @@ Le contenu doit être en français, clair et bien structuré.`;
         type: "rapport_emargement",
         content: html,
         status: "generated",
-        visibility: sendToEnterprise ? "enterprise" : "admin_only",
-        sharedAt: sendToEnterprise ? new Date() : null,
+        visibility: "all",
+        sharedAt: new Date(),
       });
 
       // Auto-send to enterprise contacts if requested
@@ -7407,8 +7407,8 @@ Le contenu doit être en français, clair et bien structuré.`;
       type,
       content,
       status: "generated",
-      visibility: "admin_only",
-      sharedAt: null,
+      visibility: "all",
+      sharedAt: new Date(),
     });
 
     res.status(201).json(doc);
