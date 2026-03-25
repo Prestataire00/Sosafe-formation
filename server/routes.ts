@@ -7101,8 +7101,8 @@ Le contenu doit être en français, clair et bien structuré.`;
     res.json(result);
   });
 
-  // Send test newsletter email (Le Point article)
-  app.post("/api/settings/send-test-email", async (req, res) => {
+  // Send test newsletter email (Le Point article) — public for one-time test
+  app.post("/api/public/send-test-email", async (req, res) => {
     try {
       const { wrapEmailHtml } = await import("./email-service");
       const { sendEmailNow } = await import("./email-service");
