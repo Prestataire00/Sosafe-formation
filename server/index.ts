@@ -10,6 +10,20 @@ import { seedDatabase, seedAutomationDefaults, seedOrganizationDefaults } from "
 import { startEmailWorker } from "./email-service";
 import { startSmsWorker } from "./sms-service";
 import { startScheduledTasks } from "./scheduled-tasks";
+import pg from "pg";
+
+async function runMigrations() {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`ALTER TABLE programs ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE programs ADD COLUMN IF NOT EXISTS featured_order INTEGER DEFAULT 0`);
+    console.log("Migrations: featured columns ensured");
+  } catch (err) {
+    console.error("Migration error:", err);
+  } finally {
+    await pool.end();
+  }
+}
 
 // Kill any existing process on the target port before starting
 function freePort(port: number) {
@@ -115,6 +129,7 @@ app.use((req, res, next) => {
   await registerRoutes(httpServer, app);
 
   try {
+    await runMigrations();
     await seedDatabase();
     await seedAutomationDefaults();
     await seedOrganizationDefaults();

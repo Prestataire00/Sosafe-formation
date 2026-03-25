@@ -165,6 +165,8 @@ export const programs = pgTable("programs", {
   fundingTypes: jsonb("funding_types").$type<string[]>().default([]),
   imageUrl: text("image_url"),
   customFields: jsonb("custom_fields").$type<ProgramCustomField[]>().default([]),
+  featured: boolean("featured").default(false),
+  featuredOrder: integer("featured_order").default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

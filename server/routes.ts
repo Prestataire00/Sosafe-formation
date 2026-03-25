@@ -10474,6 +10474,7 @@ Le contenu doit être en français, clair et bien structuré.`;
           level: p.level,
           recyclingMonths: p.recyclingMonths,
           fundingTypes: p.fundingTypes,
+          featured: p.featured || false,
           imageUrl: p.imageUrl || null,
           sessions: upcomingSessions,
           trainers: (() => {

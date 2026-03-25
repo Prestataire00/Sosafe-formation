@@ -62,6 +62,7 @@ import {
   Upload,
   LayoutGrid,
   List,
+  Star,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -998,6 +999,16 @@ export default function Programs() {
     onError: () => toast({ title: "Erreur lors du changement de statut", variant: "destructive" }),
   });
 
+  const toggleFeaturedMutation = useMutation({
+    mutationFn: ({ id, currentFeatured }: { id: string; currentFeatured: boolean }) =>
+      apiRequest("PATCH", `/api/programs/${id}`, { featured: !currentFeatured }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/programs"] });
+      toast({ title: "Mise en avant mise à jour" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
   // Published programs count for catalog preview
   const publishedPrograms = programs?.filter((p) => p.status === "published") || [];
   const catalogFilteredCount = catalogCategories.length === 0
@@ -1177,7 +1188,10 @@ export default function Programs() {
                           onClick={() => setViewProgram(program)}
                         >
                           <td className="px-4 py-3">
-                            <span className="font-medium text-sm">{program.title}</span>
+                            <span className="font-medium text-sm">
+                              {(program as any).featured && <Star className="w-4 h-4 inline mr-1 text-yellow-500 fill-yellow-500" />}
+                              {program.title}
+                            </span>
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-sm text-muted-foreground">{program.categories?.join(", ") || "-"}</span>
@@ -1223,6 +1237,13 @@ export default function Programs() {
                                     <><EyeOff className="w-4 h-4 mr-2" /> Masquer du site</>
                                   ) : (
                                     <><Eye className="w-4 h-4 mr-2" /> Publier sur le site</>
+                                  )}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => toggleFeaturedMutation.mutate({ id: program.id, currentFeatured: !!(program as any).featured })}>
+                                  {(program as any).featured ? (
+                                    <><Star className="w-4 h-4 mr-2" /> Retirer de la mise en avant</>
+                                  ) : (
+                                    <><Star className="w-4 h-4 mr-2" /> Mettre en avant</>
                                   )}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive" onClick={() => deleteMutation.mutate(program.id)}>
