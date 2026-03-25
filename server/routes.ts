@@ -198,6 +198,7 @@ export async function registerRoutes(
   // GET /api/public/widget-stats — public stats for widget display
   app.get("/api/public/widget-stats", async (_req, res) => {
     try {
+      res.set("Cache-Control", "public, max-age=600, s-maxage=1200");
       const [enrollments, surveyResponses, programs, trainees] = await Promise.all([
         storage.getEnrollments(),
         storage.getSurveyResponses(),
@@ -10465,6 +10466,7 @@ Le contenu doit être en français, clair et bien structuré.`;
               firstName: trainer.firstName,
               lastName: trainer.lastName,
               specialty: trainer.specialty,
+              bio: trainer.bio || null,
               avatarUrl: trainer.avatarUrl || null,
             }));
           })(),

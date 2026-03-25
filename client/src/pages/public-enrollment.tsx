@@ -11,8 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, uploadFile } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PageLayout } from "@/components/shared/PageLayout";
-import { PageHeader } from "@/components/shared/PageHeader";
 import {
   Select,
   SelectContent,
@@ -663,9 +661,30 @@ export default function PublicEnrollment() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950">
-      <PageLayout className="max-w-6xl">
-        <PageHeader title="Inscription en ligne" subtitle="Inscrivez-vous à nos formations" />
+    <div className="min-h-screen bg-[#f8f9fa]" style={{ fontFamily: "Poppins, sans-serif" }}>
+      {/* So'Safe branded header */}
+      <div className="w-full bg-[#32373c] text-white">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <a href="https://www.so-safe.fr/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3">
+            <img src="/logo-sosafe-white.png" alt="SO'SAFE" className="h-8" />
+          </a>
+          <nav className="text-sm text-gray-300">
+            <a href="https://www.so-safe.fr/" target="_blank" rel="noopener noreferrer" className="hover:text-white">Accueil</a>
+            <span className="mx-2">›</span>
+            <a href="https://www.so-safe.fr/formations/" target="_blank" rel="noopener noreferrer" className="hover:text-white">Formations</a>
+            <span className="mx-2">›</span>
+            <span className="text-[#fec700]">Inscription</span>
+          </nav>
+        </div>
+      </div>
+      {/* Yellow accent bar */}
+      <div className="w-full h-1" style={{ background: "linear-gradient(-45deg, #F6DE14, #F7B136)" }} />
+
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-[#32373c]">Inscription en ligne</h1>
+          <p className="text-sm text-gray-500 mt-1">Inscrivez-vous à nos formations</p>
+        </div>
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-8">
           {(() => {
@@ -682,7 +701,7 @@ export default function PublicEnrollment() {
             const currentIndex = steps.findIndex((s) => s.key === step);
             return steps.map((s, i) => (
               <div key={s.key} className="flex items-center gap-2">
-                {i > 0 && <div className="w-8 h-px bg-border" />}
+                {i > 0 && <div className="w-8 h-px bg-gray-300" />}
                 <button
                   type="button"
                   disabled={i >= currentIndex}
@@ -697,19 +716,19 @@ export default function PublicEnrollment() {
                   }}
                   className={`flex items-center gap-2 text-sm transition-colors ${
                     step === s.key
-                      ? "text-primary font-semibold"
+                      ? "text-[#32373c] font-semibold"
                       : i < currentIndex
                       ? "text-green-600 hover:text-green-800 cursor-pointer"
-                      : "text-muted-foreground cursor-default"
+                      : "text-gray-400 cursor-default"
                   }`}
                 >
                   <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                       step === s.key
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-[#fec700] text-[#32373c]"
                         : i < currentIndex
-                        ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                        : "bg-muted text-muted-foreground"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-200 text-gray-400"
                     }`}
                   >
                     {i < currentIndex ? "✓" : s.num}
@@ -2063,7 +2082,13 @@ export default function PublicEnrollment() {
             </CardContent>
           </Card>
         )}
-      </PageLayout>
+      {/* Footer */}
+      <div className="mt-12 pt-6 pb-8 border-t border-gray-200 text-center text-xs text-gray-400">
+        <a href="https://www.so-safe.fr/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">
+          © {new Date().getFullYear()} SO'SAFE Formation — Tous droits réservés
+        </a>
+      </div>
+      </div>
     </div>
   );
 }

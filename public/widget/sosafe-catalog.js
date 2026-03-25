@@ -163,6 +163,7 @@
       ".sosafe-trainer-initials{background:linear-gradient(-45deg,#F6DE14,#F7B136);color:#000;font-size:1.2rem;font-weight:700;display:flex;align-items:center;justify-content:center}" +
       ".sosafe-trainer-name{font-size:.85rem;font-weight:600;color:#000}" +
       ".sosafe-trainer-specialty{font-size:.75rem;color:#6b7280}" +
+      ".sosafe-trainer-bio{font-size:.75rem;color:#4b5563;margin-top:.3rem;line-height:1.4;text-align:left;max-width:280px}" +
       ".sosafe-no-session-modal{font-size:.9rem;color:#9ca3af;font-style:italic;padding:.8rem;background:#f9fafb;border-radius:4px;text-align:center}" +
       ".sosafe-back-link{display:inline-flex;align-items:center;gap:.4rem;color:#32373c;text-decoration:none;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:1.5rem;transition:color .2s}" +
       ".sosafe-back-link:hover{color:#fec700}" +
@@ -181,7 +182,7 @@
 
       // Responsive
       "@media(max-width:900px){.sosafe-grid{grid-template-columns:repeat(2,1fr)}}" +
-      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner-img{height:250px}.sosafe-header-overlay{padding:1rem}.sosafe-page-title{font-size:1.4rem}.sosafe-stats-bar{gap:1.5rem;padding:1.5rem 1rem}.sosafe-stat-circle{width:70px;height:70px}.sosafe-stat-circle svg{width:70px;height:70px}.sosafe-stat-circle-value{font-size:.9rem}.sosafe-stat{min-width:100px}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-detail-banner{height:200px}.sosafe-detail-title{font-size:1.4rem}.sosafe-detail-content{padding:1.2rem}.sosafe-detail-meta{flex-direction:column;gap:.5rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
+      "@media(max-width:600px){.sosafe-grid{grid-template-columns:1fr}.sosafe-banner-img{height:250px}.sosafe-header-overlay{padding:1rem}.sosafe-page-title{font-size:1.4rem}.sosafe-stats-bar{gap:1.5rem;padding:1.5rem 1rem}.sosafe-stat{min-width:100px}.sosafe-stat-value{font-size:2rem}.sosafe-search-bar{flex-direction:column}.list-view .sosafe-card{flex-direction:column}.list-view .sosafe-card-img-wrap{width:100%}.list-view .sosafe-card-img{height:200px}.sosafe-detail-banner{height:200px}.sosafe-detail-title{font-size:1.4rem}.sosafe-detail-content{padding:1.2rem}.sosafe-detail-meta{flex-direction:column;gap:.5rem}.sosafe-modal-footer{flex-direction:column;gap:1rem;text-align:center}}"
     );
   }
 
@@ -249,6 +250,14 @@
     html += statHtml(stats.satisfactionRate, 'Taux de satisfaction', true);
     html += '</div>';
     html += '</header>';
+
+    // Under construction banner
+    html += '<div class="sosafe-wip-banner">';
+    html += '<div class="sosafe-wip-icon">\u26A0\uFE0F</div>';
+    html += '<div class="sosafe-wip-title">Page en cours de construction \u2014 <a href="https://www.so-safe.fr/formations/" target="_top" style="color:#b45309;text-decoration:underline">Consultez nos formations ici</a></div>';
+    html += '<div class="sosafe-wip-text">Les informations affich\u00E9es sur cette page ne sont pas \u00E0 jour. Merci de vous r\u00E9f\u00E9rer \u00E0 <a href="https://www.so-safe.fr/formations/" target="_top" style="color:#b45309;font-weight:600;text-decoration:underline">notre page formations</a> pour des informations actualis\u00E9es.</div>';
+    html += '<a class="sosafe-wip-btn" href="https://www.so-safe.fr/formations/" target="_top">Voir nos formations \u00E0 jour</a>';
+    html += '</div>';
 
     // Content wrapper
     html += '<div class="sosafe-content">';
@@ -369,7 +378,7 @@
     if (p.sessions && p.sessions.length > 0 && p.sessions[0].maxParticipants) {
       html += '<span>' + p.sessions[0].maxParticipants + ' participants max</span>';
     }
-    if (p.price) html += '<span>\u00C0 partir de ' + formatPrice(p.price) + ' HT/apprenant</span>';
+    if (p.price) html += '<span>' + formatPrice(p.price) + ' HT/pers (exon\u00E9ration de TVA art 261 du CGI)</span>';
     html += '</div>';
 
     // Badges
@@ -381,7 +390,7 @@
       html += '<span class="sosafe-modal-badge sosafe-modal-badge-cat">' + c + '</span>';
     });
     if (p.certifying) {
-      html += '<span class="sosafe-modal-badge sosafe-modal-badge-cert">Certifiante</span>';
+      html += '<span class="sosafe-modal-badge sosafe-modal-badge-cert">Qualifiante</span>';
     }
     html += '</div>';
 
@@ -425,10 +434,8 @@
       html += '<div class="sosafe-modal-section"><h3>Accessibilit\u00E9</h3><p>' + p.accessibilityInfo + '</p></div>';
     }
 
-    // D\u00E9lais d'acc\u00E8s
-    if (p.accessDelay) {
-      html += '<div class="sosafe-modal-section"><h3>D\u00E9lais d\'acc\u00E8s</h3><p>' + p.accessDelay + '</p></div>';
-    }
+    // D\u00E9lais et modalit\u00E9s d'acc\u00E8s
+    html += '<div class="sosafe-modal-section"><h3>D\u00E9lais et modalit\u00E9s d\'acc\u00E8s</h3><p>' + (p.accessDelay || 'A r\u00E9ception de la demande, r\u00E9ponse sous 48H. Apr\u00E8s la signature du devis, la date de formation sera d\u00E9termin\u00E9e d\'un commun accord avec les b\u00E9n\u00E9ficiaires, en g\u00E9n\u00E9ral 1 mois apr\u00E8s maximum. Inscription apr\u00E8s signature du devis et de la convention selon les informations transmises par le commanditaire.') + '</p></div>';
 
     // Formateurs
     if (p.trainers && p.trainers.length > 0) {
@@ -444,6 +451,9 @@
         html += '<div class="sosafe-trainer-name">' + tr.firstName + ' ' + tr.lastName + '</div>';
         if (tr.specialty) {
           html += '<div class="sosafe-trainer-specialty">' + tr.specialty + '</div>';
+        }
+        if (tr.bio) {
+          html += '<div class="sosafe-trainer-bio">' + tr.bio + '</div>';
         }
         html += '</div>';
       });
@@ -485,7 +495,7 @@
     // Footer: price + CTA
     html += '<div class="sosafe-modal-footer">';
     if (p.price) {
-      html += '<div class="sosafe-modal-price">' + formatPrice(p.price) + ' <small>HT/apprenant</small></div>';
+      html += '<div class="sosafe-modal-price">' + formatPrice(p.price) + ' <small>HT/pers (exon\u00E9ration de TVA art 261 du CGI)</small></div>';
     } else {
       html += '<div class="sosafe-modal-price"><small>Prix sur demande</small></div>';
     }
