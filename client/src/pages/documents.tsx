@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1511,118 +1512,84 @@ export default function Documents() {
               ) : undefined}
             />
           ) : (
-            <div className="space-y-6">
-              {(() => {
-                const TEMPLATE_CATEGORIES: Record<string, { label: string; types: string[] }> = {
-                  micro_certifications: { label: "Micro-certifications", types: ["certificat", "certificat_realisation"] },
-                  reglement_cgv: { label: "Règlement intérieur et CGV", types: ["reglement", "cgv", "politique_confidentialite"] },
-                  programmes: { label: "Programmes", types: ["programme", "protocole_individuel"] },
-                  clients: { label: "Documents pour les clients", types: ["convention", "contrat_particulier", "contrat_vae", "contrat_cadre", "attestation", "attestation_assiduite", "attestation_dpc", "attestation_fifpl", "admissibilite_vae", "bpf", "etiquette_envoi", "autorisation_image"] },
-                  factures_devis: { label: "Factures et devis", types: ["devis", "devis_sous_traitance", "facture", "facture_blended", "facture_specifique"] },
-                  intervenant: { label: "Documents pour l'intervenant", types: ["convention_intervention", "convocation"] },
-                  apprenants: { label: "Documents pour les apprenants", types: ["livret_accueil", "fiche_fipl", "attestation"] },
-                  emargement: { label: "Feuilles d'émargement", types: ["rapport_emargement"] },
-                  evaluations: { label: "Évaluations", types: ["questionnaire_satisfaction", "evaluation_pre_formation", "evaluation_acquis"] },
-                  badges: { label: "Badges", types: ["badge"] },
-                };
-                const categorizedTypes = new Set(Object.values(TEMPLATE_CATEGORIES).flatMap(c => c.types));
-                const groups: { key: string; label: string; items: typeof filteredTemplates }[] = [];
-                for (const [key, cat] of Object.entries(TEMPLATE_CATEGORIES)) {
-                  const items = filteredTemplates.filter(t => cat.types.includes(t.type));
-                  if (items.length > 0) groups.push({ key, label: cat.label, items });
-                }
-                const uncategorized = filteredTemplates.filter(t => !categorizedTypes.has(t.type));
-                if (uncategorized.length > 0) groups.push({ key: "uncategorized", label: "Autres", items: uncategorized });
-                return groups.map(group => (
-                  <div key={group.key}>
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                      {group.label}
-                      <Badge variant="secondary" className="text-[10px]">{group.items.length}</Badge>
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {group.items.map((template) => (
-                        <Card
-                          key={template.id}
-                          className="hover-elevate"
-                          data-testid={`card-template-${template.id}`}
-                        >
-                          <CardContent className="p-5">
-                            <div className="flex items-start justify-between gap-2 mb-3">
-                              <div className="min-w-0 flex-1">
-                                <h3 className="font-semibold truncate">{template.name}</h3>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {template.createdAt
-                                    ? new Date(template.createdAt).toLocaleDateString("fr-FR")
-                                    : ""}
-                                </p>
-                              </div>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    data-testid={`button-template-menu-${template.id}`}
-                                  >
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setEditTemplate(template);
-                                      setTemplateDialogOpen(true);
-                                    }}
-                                    data-testid={`button-edit-template-${template.id}`}
-                                  >
-                                    <Pencil className="w-4 h-4 mr-2" />
-                                    Modifier
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => duplicateTemplateMutation.mutate(template.id)}
-                                  >
-                                    <Copy className="w-4 h-4 mr-2" />
-                                    Dupliquer
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={() => deleteTemplateMutation.mutate(template.id)}
-                                    data-testid={`button-delete-template-${template.id}`}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Supprimer
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 mb-3">
-                              <DocTypeBadge type={template.type} />
-                            </div>
-                            <p className="text-xs text-muted-foreground line-clamp-3 font-mono">
-                              {template.content.substring(0, 120)}
-                              {template.content.length > 120 ? "..." : ""}
-                            </p>
-                            {template.variables && (template.variables as string[]).length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {(template.variables as string[]).slice(0, 3).map((v) => (
-                                  <Badge key={v} variant="secondary" className="text-[10px]">
-                                    {v}
-                                  </Badge>
-                                ))}
-                                {(template.variables as string[]).length > 3 && (
-                                  <Badge variant="secondary" className="text-[10px]">
-                                    +{(template.variables as string[]).length - 3}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
+            (() => {
+              const TEMPLATE_CATEGORIES: { key: string; label: string; types: string[] }[] = [
+                { key: "micro_certifications", label: "Micro-certifications", types: ["certificat", "certificat_realisation"] },
+                { key: "reglement_cgv", label: "Règlement intérieur et CGV", types: ["reglement", "cgv", "politique_confidentialite"] },
+                { key: "programmes", label: "Programmes", types: ["programme", "protocole_individuel"] },
+                { key: "clients", label: "Documents pour les clients", types: ["convention", "contrat_particulier", "contrat_vae", "contrat_cadre", "attestation", "attestation_assiduite", "attestation_dpc", "attestation_fifpl", "admissibilite_vae", "bpf", "etiquette_envoi", "autorisation_image"] },
+                { key: "factures_devis", label: "Factures et devis", types: ["devis", "devis_sous_traitance", "facture", "facture_blended", "facture_specifique"] },
+                { key: "intervenant", label: "Documents pour l'intervenant", types: ["convention_intervention", "convocation"] },
+                { key: "apprenants", label: "Documents pour les apprenants", types: ["livret_accueil", "fiche_fipl"] },
+                { key: "emargement", label: "Feuilles d'émargement", types: ["rapport_emargement"] },
+                { key: "evaluations", label: "Évaluations", types: ["questionnaire_satisfaction", "evaluation_pre_formation", "evaluation_acquis"] },
+                { key: "badges", label: "Badges", types: ["badge"] },
+              ];
+              const categorizedTypes = new Set(TEMPLATE_CATEGORIES.flatMap(c => c.types));
+              const groups = TEMPLATE_CATEGORIES
+                .map(cat => ({ ...cat, items: filteredTemplates.filter(t => cat.types.includes(t.type)) }))
+                .filter(g => g.items.length > 0);
+              const uncategorized = filteredTemplates.filter(t => !categorizedTypes.has(t.type));
+              if (uncategorized.length > 0) groups.push({ key: "autres", label: "Autres", types: [], items: uncategorized });
+
+              return (
+                <Accordion type="multiple" className="space-y-2">
+                  {groups.map(group => (
+                    <AccordionItem key={group.key} value={group.key} className="border rounded-lg px-4">
+                      <AccordionTrigger className="hover:no-underline py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold text-base">{group.label}</span>
+                          <Badge variant="secondary" className="text-xs">{group.items.length}</Badge>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-4">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Nom</TableHead>
+                              <TableHead className="w-[180px]">Type</TableHead>
+                              <TableHead className="w-[120px]">Date</TableHead>
+                              <TableHead className="w-[80px]" />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.items.map((template) => (
+                              <TableRow key={template.id} data-testid={`row-template-${template.id}`}>
+                                <TableCell className="font-medium">{template.name}</TableCell>
+                                <TableCell><DocTypeBadge type={template.type} /></TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {template.createdAt ? new Date(template.createdAt).toLocaleDateString("fr-FR") : ""}
+                                </TableCell>
+                                <TableCell>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" data-testid={`button-template-menu-${template.id}`}>
+                                        <MoreHorizontal className="w-4 h-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => { setEditTemplate(template); setTemplateDialogOpen(true); }}>
+                                        <Pencil className="w-4 h-4 mr-2" /> Modifier
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => duplicateTemplateMutation.mutate(template.id)}>
+                                        <Copy className="w-4 h-4 mr-2" /> Dupliquer
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="text-destructive" onClick={() => deleteTemplateMutation.mutate(template.id)}>
+                                        <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              );
+            })()
           )}
         </TabsContent>
 
