@@ -385,6 +385,47 @@ async function syncSessions(client: pg.PoolClient) {
 }
 
 // ============================================================
+// 6b. ENROLLMENTS (inscriptions stagiaires aux sessions)
+// ============================================================
+async function syncEnrollments(client: pg.PoolClient) {
+  let enrollData: any;
+  try {
+    enrollData = loadJson("enrollments.json");
+  } catch {
+    console.log("\n=== Inscriptions: fichier enrollments.json absent, ignoré ===");
+    return;
+  }
+  const sessions = enrollData.data?.trainingSessions || [];
+  console.log(`\n=== Inscriptions ===`);
+
+  let synced = 0;
+  let skipped = 0;
+  for (const s of sessions) {
+    const sessionId = idMaps.sessions.get(s.id);
+    if (!sessionId) continue;
+
+    const trainees = s.trainees || [];
+    for (const t of trainees) {
+      const traineeId = idMaps.trainees.get(t.id);
+      if (!traineeId) { skipped++; continue; }
+
+      try {
+        await client.query(
+          `INSERT INTO enrollments (session_id, trainee_id, status)
+           VALUES ($1, $2, 'registered')
+           ON CONFLICT DO NOTHING`,
+          [sessionId, traineeId]
+        );
+        synced++;
+      } catch {
+        skipped++;
+      }
+    }
+  }
+  console.log(`  ✓ ${synced} inscriptions créées, ${skipped} ignorées`);
+}
+
+// ============================================================
 // 7. INVOICES
 // ============================================================
 async function syncInvoices(client: pg.PoolClient) {
@@ -540,6 +581,7 @@ async function main() {
     await syncTrainees(client);
     await syncPrograms(client);
     await syncSessions(client);
+    await syncEnrollments(client);
     await syncInvoices(client);
     await syncQuotations(client);
 
