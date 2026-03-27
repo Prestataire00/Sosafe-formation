@@ -505,14 +505,30 @@ async function syncInvoices(client: pg.PoolClient) {
         number,
         title: inv.freeText && inv.freeText.startsWith("Avoir") ? `Avoir ${number}` : `Facture ${number}`,
         invoice_type: inv.freeText && inv.freeText.startsWith("Avoir") ? "credit_note" : "standard",
-        status: inv.status === "paid" ? "paid" : inv.status === "partially_paid" ? "partially_paid" : inv.locked ? "sent" : "draft",
+        status: inv.locked ? "sent" : "draft",
         due_date: inv.date || null,
         notes: [inv.reference, inv.freeText].filter(Boolean).join("\n") || null,
-        subtotal: parseFloat(inv.totalHT) || 0,
-        tax_rate: inv.totalHT > 0 ? Math.round((parseFloat(inv.totalVAT) / parseFloat(inv.totalHT)) * 10000) / 100 : 0,
-        tax_amount: parseFloat(inv.totalVAT) || 0,
-        total: parseFloat(inv.totalTTC) || 0,
-        paid_amount: parseFloat(inv.paidAmount) || 0,
+        // Compute totals from items (quantity * program price) — Digiforma API doesn't expose amounts
+        subtotal: (() => {
+          const sessionName = inv.trainingSession?.name || "";
+          const price = lookupPrice(sessionName);
+          const totalQty = (inv.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+          return price * totalQty;
+        })(),
+        tax_rate: 0,
+        tax_amount: 0,
+        total: (() => {
+          const sessionName = inv.trainingSession?.name || "";
+          const price = lookupPrice(sessionName);
+          const totalQty = (inv.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+          return price * totalQty;
+        })(),
+        paid_amount: inv.locked ? (() => {
+          const sessionName = inv.trainingSession?.name || "";
+          const price = lookupPrice(sessionName);
+          const totalQty = (inv.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+          return price * totalQty;
+        })() : 0,
         enterprise_id: inv.customer?.id ? idMaps.enterprises.get(inv.customer.id) || null : null,
         client_address: inv.roadAddress || null,
         client_city: inv.city || null,
@@ -560,10 +576,20 @@ async function syncQuotations(client: pg.PoolClient) {
         number,
         title: `Devis ${number}`,
         status,
-        subtotal: parseFloat(q.totalHT) || 0,
-        tax_rate: q.totalHT > 0 ? Math.round((parseFloat(q.totalVAT) / parseFloat(q.totalHT)) * 10000) / 100 : 0,
-        tax_amount: parseFloat(q.totalVAT) || 0,
-        total: parseFloat(q.totalTTC) || 0,
+        subtotal: (() => {
+          const sessionName = q.trainingSession?.name || "";
+          const price = lookupPrice(sessionName);
+          const totalQty = (q.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+          return price * totalQty;
+        })(),
+        tax_rate: 0,
+        tax_amount: 0,
+        total: (() => {
+          const sessionName = q.trainingSession?.name || "";
+          const price = lookupPrice(sessionName);
+          const totalQty = (q.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+          return price * totalQty;
+        })(),
         notes: null,
       });
       synced++;
