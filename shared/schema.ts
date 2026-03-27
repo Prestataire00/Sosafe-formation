@@ -37,6 +37,7 @@ export const users = pgTable("users", {
 
 export const enterprises = pgTable("enterprises", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digiformaId: text("digiforma_id"),
   name: text("name").notNull(),
   siret: text("siret"),
   address: text("address"),
@@ -72,6 +73,7 @@ export const enterpriseContacts = pgTable("enterprise_contacts", {
 
 export const trainers = pgTable("trainers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digiformaId: text("digiforma_id"),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").unique(),
@@ -86,6 +88,7 @@ export const trainers = pgTable("trainers", {
 
 export const trainees = pgTable("trainees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digiformaId: text("digiforma_id"),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").unique(),
@@ -140,6 +143,7 @@ export const PROFILE_TYPES = [
 
 export const programs = pgTable("programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digiformaId: text("digiforma_id"),
   title: text("title").notNull(),
   description: text("description"),
   categories: jsonb("categories").$type<string[]>().default([]),
@@ -172,6 +176,7 @@ export const programs = pgTable("programs", {
 
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digiformaId: text("digiforma_id"),
   programId: varchar("program_id").notNull(),
   trainerId: varchar("trainer_id"),
   title: text("title").notNull(),
@@ -226,6 +231,7 @@ export type InsertSessionTrainer = typeof sessionTrainers.$inferInsert;
 
 export const trainingLocations = pgTable("training_locations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digiformaId: text("digiforma_id"),
   name: text("name").notNull(),
   description: text("description"),
   // Address — Digiforma-style granular fields
@@ -445,6 +451,7 @@ export const prospects = pgTable("prospects", {
 // ============================================================
 
 export const quotes = pgTable("quotes", {
+  digiformaId: text("digiforma_id"),
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   number: text("number").notNull().unique(),
   title: text("title").notNull(),
@@ -466,6 +473,7 @@ export const quotes = pgTable("quotes", {
 
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digiformaId: text("digiforma_id"),
   number: text("number").notNull().unique(),
   title: text("title").notNull(),
   invoiceType: text("invoice_type").notNull().default("standard"),
