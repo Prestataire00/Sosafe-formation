@@ -303,9 +303,18 @@ function SeedTemplatesCard() {
     try {
       const res = await apiRequest("POST", "/api/settings/seed-all-templates");
       const data = await res.json();
+      const parts = [];
+      if (data.emails) parts.push(`${data.emails} emails créés`);
+      if (data.sms) parts.push(`${data.sms} SMS créés`);
+      if (data.documents) parts.push(`${data.documents} documents créés`);
+      if (data.documentsUpdated) parts.push(`${data.documentsUpdated} documents mis à jour`);
+      if (data.surveys) parts.push(`${data.surveys} évaluations créées`);
+      if (data.automations) parts.push(`${data.automations} automatisations créées`);
+      if (data.programs?.created) parts.push(`${data.programs.created} formations créées`);
+      if (data.programs?.updated) parts.push(`${data.programs.updated} formations mises à jour`);
       toast({
         title: "Modèles chargés avec succès",
-        description: `${data.emails} emails, ${data.sms} SMS, ${data.documents} documents, ${data.surveys} évaluations, ${data.automations} automatisations`,
+        description: parts.length > 0 ? parts.join(", ") : "Tout est déjà à jour, aucun doublon créé.",
       });
     } catch {
       toast({ title: "Erreur lors du chargement", variant: "destructive" });
