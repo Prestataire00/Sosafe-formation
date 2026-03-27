@@ -752,8 +752,8 @@ export default function IntegrationWebsite() {
   return (
     <PageLayout>
       <PageHeader
-        title="Intégration site web"
-        subtitle="Connectez votre site web à la plateforme"
+        title="Ma marque"
+        subtitle="Personnalisez et intégrez votre catalogue sur votre site web"
       />
 
       <div className="grid grid-cols-3 gap-4">

@@ -119,7 +119,8 @@ export const allNav: NavItem[] = [
   { title: "Communications", url: "/email-templates", icon: Mail, roles: ["admin"], permission: "manage_templates", group: "communication" },
   { title: "Documents", url: "/documents", icon: FileText, roles: ["admin"], permission: "manage_documents", group: "communication" },
 
-  { title: "Intégration site web", url: "/integration", icon: Globe, roles: ["admin"], group: "outils" },
+  { title: "Catalogue public", url: "/catalog-config", icon: Globe, roles: ["admin"], group: "formation" },
+  { title: "Ma marque", url: "/integration", icon: Globe, roles: ["admin"], group: "outils" },
   { title: "Migration & Archivage", url: "/data-migration", icon: Database, roles: ["admin"], group: "outils" },
   { title: "Fonctions avancées", url: "/advanced-features", icon: Sparkles, roles: ["admin"], group: "outils" },
 ];
