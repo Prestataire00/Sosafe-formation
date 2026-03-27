@@ -461,9 +461,18 @@ export async function seedAllTemplates(documentDefaults?: Record<string, string>
   };
 
   const docDefaults = documentDefaults || {};
+  let documentsUpdated = 0;
   for (const [type, content] of Object.entries(docDefaults)) {
-    if (existingDocTypes.has(type)) continue;
     if (!content || !content.trim()) continue;
+    if (existingDocTypes.has(type)) {
+      // Update existing template content if it still contains hardcoded "SO'SAFE"
+      const existing = existingDocs.find((d) => d.type === type);
+      if (existing && existing.content.includes("SO'SAFE")) {
+        await storage.updateDocumentTemplate(existing.id, { content } as any);
+        documentsUpdated++;
+      }
+      continue;
+    }
     await storage.createDocumentTemplate({
       name: docTypeLabels[type] || type,
       type,
@@ -471,6 +480,7 @@ export async function seedAllTemplates(documentDefaults?: Record<string, string>
     } as any);
     results.documents++;
   }
+  (results as any).documentsUpdated = documentsUpdated;
 
   // ════════════════════════════════════════════════════════════════
   // 4. SURVEY / EVALUATION TEMPLATES

@@ -31,6 +31,22 @@ async function runMigrations() {
     for (const table of digiformaTables) {
       await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS digiforma_id TEXT`);
     }
+    // Add Digiforma invoice fields
+    const invoiceCols = [
+      "client_address TEXT",
+      "client_city TEXT",
+      "client_postal_code TEXT",
+      "client_country_code TEXT",
+      "file_url TEXT",
+      "order_form TEXT",
+      "payment_limit_days INTEGER",
+      "is_payment_limit_end_month BOOLEAN DEFAULT false",
+      "reference TEXT",
+    ];
+    for (const col of invoiceCols) {
+      const colName = col.split(" ")[0];
+      await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS ${col}`);
+    }
     console.log("Migrations: all columns/tables ensured");
   } catch (err) {
     console.error("Migration error:", err);
