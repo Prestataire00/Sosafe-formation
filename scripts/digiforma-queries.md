@@ -5,320 +5,88 @@ dans `scripts/digiforma-data/` en remplaçant les fichiers existants.
 
 ---
 
-## 1. Programmes avec PRIX (programs-full.json)
+## 1. Programmes (→ programs.json)
 
 ```graphql
-query getPrograms {
-  programs(pagination: {page: 0, size: 200}) {
-    id
-    name
-    subtitle
-    code
-    description
-    trainingType
-    language
-    onSale
-    cpf
-    cpfCode
-    rncpCode
-    durationInHours
-    durationInDays
-    satisfactionRate
-    handicappedAccessibility
-    createdAt
-    updatedAt
-    generatedProgramUrl
-    publicRegistrationUrl
-    image { url }
-    category { id name }
-    tags { id name }
-    capacity { min max }
-    goals
-    prerequisites
-    targets
-    steps { name description position durationInHours }
-    assessments { name description position }
-    pedagogicalResources { name description position }
-    documents { id filename type url }
-    room { id name }
-    costsInter { cost costType label }
-    costsIntra { cost costType label }
-  }
-}
+query { programs(pagination: {page: 0, size: 200}) { id name subtitle code description trainingType language onSale cpf cpfCode rncpCode durationInHours durationInDays satisfactionRate handicappedAccessibility createdAt updatedAt generatedProgramUrl publicRegistrationUrl image { url } category { id name } tags { id name } capacity { min max } goals prerequisites targets steps { name description position durationInHours } assessments { name description position } pedagogicalResources { name description position } documents { id filename type url } room { id name } costsInter { cost costType label } costsIntra { cost costType label } } }
 ```
 
 ---
 
-## 2. Factures avec MONTANTS (invoices-full.json)
+## 2. Factures (→ invoices.json)
 
 ```graphql
-query getInvoices {
-  invoices(pagination: {page: 0, size: 500}) {
-    id
-    number
-    numberStr
-    prefix
-    date
-    reference
-    orderForm
-    freeText
-    locked
-    paymentLimitDays
-    isPaymentLimitEndMonth
-    insertedAt
-    updatedAt
-    fileUrl
-    roadAddress
-    city
-    cityCode
-    countryCode
-    totalHT
-    totalTTC
-    totalVAT
-    status
-    type
-    paidAmount
-    remainingAmount
-    lines {
-      description
-      quantity
-      unitAmount
-      totalAmount
-      vatRate
-    }
-    customer {
-      id
-      name
-      siret
-      roadAddress
-      city
-      cityCode
-      countryCode
-    }
-    trainingSession {
-      id
-      name
-    }
-  }
-}
+query { invoices(pagination: {page: 0, size: 500}) { id number numberStr prefix date reference orderForm freeText locked paymentLimitDays isPaymentLimitEndMonth insertedAt updatedAt fileUrl roadAddress city cityCode countryCode items { description quantity vat vatType } customer { id } trainingSession { id name } } }
 ```
 
 ---
 
-## 3. Devis avec MONTANTS (quotations-full.json)
+## 3. Devis (→ quotations.json)
 
 ```graphql
-query getQuotations {
-  quotations(pagination: {page: 0, size: 500}) {
-    id
-    number
-    numberStr
-    prefix
-    date
-    acceptedAt
-    insertedAt
-    updatedAt
-    totalHT
-    totalTTC
-    totalVAT
-    status
-    fileUrl
-    lines {
-      description
-      quantity
-      unitAmount
-      totalAmount
-      vatRate
-    }
-    customer {
-      id
-      name
-    }
-    trainingSession {
-      id
-      name
-    }
-  }
-}
+query { quotations(pagination: {page: 0, size: 500}) { id items { description quantity } customer { id } trainingSession { id name } } }
+```
+
+Si timeout, paginer par 50 :
+```
+page: 0, size: 50
+page: 1, size: 50
+... jusqu'a page: 9
 ```
 
 ---
 
-## 4. Sessions avec inscriptions complètes (sessions-full.json)
+## 4. Sessions (→ training-sessions.json)
 
 ```graphql
-query getTrainingSessions {
-  trainingSessions(pagination: {page: 0, size: 500}) {
-    id
-    name
-    code
-    startDate
-    endDate
-    inter
-    remote
-    hasELearning
-    pipelineState
-    extranetUrl
-    place
-    placeName
-    program { id name }
-    room { id name city roadAddress capacity }
-    instructors { id firstname lastname email }
-    documents { id filename type url }
-    trainingSessionSlots {
-      date
-      startTime
-      endTime
-      slot
-      bypassConflicts
-      trainingSessionInstructors {
-        instructor { id email firstname lastname }
-      }
-    }
-    trainees {
-      id
-      firstname
-      lastname
-      email
-      status
-      company { id name }
-    }
-    totalHT
-    totalTTC
-  }
-}
+query { trainingSessions(pagination: {page: 0, size: 500}) { id name code startDate endDate inter remote hasELearning pipelineState extranetUrl place placeName program { id name } room { id name city roadAddress capacity } instructors { id firstname lastname email } documents { id filename type url } trainingSessionSlots { date startTime endTime slot bypassConflicts trainingSessionInstructors { instructor { id email firstname lastname } } } trainees { id firstname lastname email status company { id name } } } }
 ```
 
 ---
 
-## 5. Stagiaires complets (trainees-full.json)
+## 5. Stagiaires (→ trainees.json puis trainees-all.json)
 
 ```graphql
-query getTrainees {
-  trainees(pagination: {page: 0, size: 1000}) {
-    id
-    civility
-    firstname
-    lastname
-    email
-    phone
-    position
-    profession
-    status
-    city
-    roadAddress
-    cityCode
-    countryCode
-    company { id name siret }
-    trainingSessions { id name startDate endDate }
-  }
-}
+query { trainees(pagination: {page: 0, size: 1000}) { id civility firstname lastname email phone position profession status city roadAddress cityCode countryCode company { id name siret } trainingSessions { id name startDate endDate } } }
+```
+
+Si > 1000, paginer : page: 1, page: 2, etc. puis fusionner dans trainees-all.json
+
+---
+
+## 6. Entreprises (→ companies.json)
+
+```graphql
+query { companies(pagination: {page: 0, size: 500}) { id name siret email phone roadAddress city cityCode country countryCode vatNumber apeCode legalForm capitalAmount website billingEmail billingRoadAddress billingCity billingCityCode billingCountryCode } }
 ```
 
 ---
 
-## 6. Entreprises complètes (companies-full.json)
+## 7. Formateurs (→ instructors.json)
 
 ```graphql
-query getCompanies {
-  companies(pagination: {page: 0, size: 500}) {
-    id
-    name
-    siret
-    email
-    phone
-    roadAddress
-    city
-    cityCode
-    country
-    countryCode
-    vatNumber
-    apeCode
-    legalForm
-    capitalAmount
-    website
-    billingEmail
-    billingRoadAddress
-    billingCity
-    billingCityCode
-    billingCountryCode
-  }
-}
+query { instructors(pagination: {page: 0, size: 100}) { id firstname lastname email phone city roadAddress cityCode countryCode specialty biography avatarUrl dailyRate hourlyRate } }
 ```
 
 ---
 
-## 7. Formateurs complets (instructors-full.json)
+## 8. Salles / Lieux (→ rooms.json)
+
+Deja complet, pas besoin de re-exporter.
+
+---
+
+## 9. Infos academie (→ misc.json)
 
 ```graphql
-query getInstructors {
-  instructors(pagination: {page: 0, size: 100}) {
-    id
-    firstname
-    lastname
-    email
-    phone
-    city
-    roadAddress
-    cityCode
-    countryCode
-    specialty
-    biography
-    avatarUrl
-    dailyRate
-    hourlyRate
-  }
-}
+query { academy { id contactEmail vatExempted academyExtranetAvatar name address city phone siret website logo { url } } fundingAgencies(pagination: {page: 0, size: 100}) { id name } managers(pagination: {page: 0, size: 50}) { id firstname lastname email } programCategories { id name } }
 ```
 
 ---
 
-## 8. Salles / Lieux (rooms-full.json)
+## Champs NON disponibles dans l'API Digiforma
 
-Déjà assez complet, pas besoin de re-exporter.
-
----
-
-## 9. Infos académie (misc-full.json)
-
-```graphql
-query getMisc {
-  academy {
-    id
-    contactEmail
-    vatExempted
-    academyExtranetAvatar
-    name
-    address
-    city
-    phone
-    siret
-    website
-    logo { url }
-  }
-  fundingAgencies(pagination: {page: 0, size: 100}) {
-    id
-    name
-  }
-  managers(pagination: {page: 0, size: 50}) {
-    id
-    firstname
-    lastname
-    email
-  }
-  programCategories {
-    id
-    name
-  }
-}
-```
-
----
-
-## Notes importantes
-
-- Si une requête renvoie une erreur sur un champ (ex: `costsInter` n'existe pas),
-  retire ce champ et relance. Note les champs qui échouent.
-- Pour les stagiaires, si > 1000, il faudra paginer (page: 1, page: 2, etc.)
-- Sauvegarde chaque résultat dans `scripts/digiforma-data/` avec le suffixe `-full`
-- Une fois tous les fichiers récupérés, on mettra à jour le script de sync
+- Factures : `totalHT`, `totalTTC`, `totalVAT`, `status`, `type`, `paidAmount`, `remainingAmount` → n'existent pas
+- Items facture/devis : `unitAmount`, `totalAmount` → n'existent pas. `vatRate` → utiliser `vat` + `vatType`
+- Customer : `name`, `siret`, `roadAddress`, `city`, `cityCode`, `countryCode` → seul `id` fonctionne
+- Les montants sont calcules dans le script de sync via la table `PROGRAM_PRICES` + nom de session
