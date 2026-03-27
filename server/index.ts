@@ -26,6 +26,11 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`);
+    // Add digiforma_id column to all tables that need it
+    const digiformaTables = ["enterprises", "trainers", "trainees", "programs", "sessions", "training_locations", "quotes", "invoices"];
+    for (const table of digiformaTables) {
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS digiforma_id TEXT`);
+    }
     console.log("Migrations: all columns/tables ensured");
   } catch (err) {
     console.error("Migration error:", err);
