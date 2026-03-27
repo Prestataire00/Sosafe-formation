@@ -487,10 +487,59 @@ async function syncEnrollments(client: pg.PoolClient) {
 // ============================================================
 // 7. INVOICES
 // ============================================================
+
+// Build customer → company mapping from customers.json
+function loadCustomerCompanyMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  try {
+    const { data } = loadJson("customers.json");
+    for (const c of data.customers || []) {
+      // entity is a Company if it has "name" (Trainee has firstname/lastname)
+      if (c.entity?.name && c.entity?.id) {
+        map.set(c.id, c.entity.id);
+      }
+    }
+  } catch { /* customers.json missing */ }
+  return map;
+}
+
+function computeInvoiceAmounts(items: any[], sessionName: string) {
+  const pricePerPerson = lookupPrice(sessionName); // in euros
+  const totalQty = (items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+  const subtotalEur = pricePerPerson * totalQty;
+  const subtotalCents = subtotalEur * 100; // DB stores cents
+
+  // Build line_items for the PDF
+  const lineItems = (items || []).map((it: any) => ({
+    description: it.description || sessionName || "Prestation",
+    quantity: it.quantity || 1,
+    unitPrice: pricePerPerson * 100, // cents
+    total: (it.quantity || 1) * pricePerPerson * 100, // cents
+  }));
+
+  return { subtotalCents, lineItems };
+}
+
+function computeDueDate(invoiceDate: string | null, paymentLimitDays: number | null, isEndMonth: boolean): string | null {
+  if (!invoiceDate) return null;
+  const d = new Date(invoiceDate);
+  if (isNaN(d.getTime())) return null;
+  if (paymentLimitDays) {
+    d.setDate(d.getDate() + paymentLimitDays);
+  }
+  if (isEndMonth) {
+    // Go to last day of that month
+    d.setMonth(d.getMonth() + 1, 0);
+  }
+  return d.toISOString().split("T")[0];
+}
+
 async function syncInvoices(client: pg.PoolClient) {
   const { data } = loadJson("invoices.json");
   const invoices = data.invoices || [];
   console.log(`\n=== Factures: ${invoices.length} ===`);
+
+  const customerCompanyMap = loadCustomerCompanyMap();
 
   let synced = 0;
   let skipped = 0;
@@ -499,6 +548,21 @@ async function syncInvoices(client: pg.PoolClient) {
       ? `${inv.prefix || ""}-${inv.numberStr}`.replace(/^-/, "")
       : `DIG-${inv.id}`;
 
+    const sessionName = inv.trainingSession?.name || "";
+    const { subtotalCents, lineItems } = computeInvoiceAmounts(inv.items, sessionName);
+
+    // Resolve enterprise: customer → company → enterprise
+    let enterpriseId: string | null = null;
+    if (inv.customer?.id) {
+      const companyDigiId = customerCompanyMap.get(inv.customer.id);
+      if (companyDigiId) {
+        enterpriseId = idMaps.enterprises.get(companyDigiId) || null;
+      }
+    }
+
+    // Due date = invoice date + payment limit days (+ end of month)
+    const dueDate = computeDueDate(inv.date, inv.paymentLimitDays, inv.isPaymentLimitEndMonth);
+
     try {
       await upsert(client, "invoices", {
         digiforma_id: inv.id,
@@ -506,30 +570,15 @@ async function syncInvoices(client: pg.PoolClient) {
         title: inv.freeText && inv.freeText.startsWith("Avoir") ? `Avoir ${number}` : `Facture ${number}`,
         invoice_type: inv.freeText && inv.freeText.startsWith("Avoir") ? "credit_note" : "standard",
         status: inv.locked ? "sent" : "draft",
-        due_date: inv.date || null,
+        due_date: dueDate,
         notes: [inv.reference, inv.freeText].filter(Boolean).join("\n") || null,
-        // Compute totals from items (quantity * program price) — Digiforma API doesn't expose amounts
-        subtotal: (() => {
-          const sessionName = inv.trainingSession?.name || "";
-          const price = lookupPrice(sessionName);
-          const totalQty = (inv.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-          return price * totalQty;
-        })(),
+        line_items: JSON.stringify(lineItems),
+        subtotal: subtotalCents,
         tax_rate: 0,
         tax_amount: 0,
-        total: (() => {
-          const sessionName = inv.trainingSession?.name || "";
-          const price = lookupPrice(sessionName);
-          const totalQty = (inv.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-          return price * totalQty;
-        })(),
-        paid_amount: inv.locked ? (() => {
-          const sessionName = inv.trainingSession?.name || "";
-          const price = lookupPrice(sessionName);
-          const totalQty = (inv.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-          return price * totalQty;
-        })() : 0,
-        enterprise_id: inv.customer?.id ? idMaps.enterprises.get(inv.customer.id) || null : null,
+        total: subtotalCents,
+        paid_amount: inv.locked ? subtotalCents : 0,
+        enterprise_id: enterpriseId,
         client_address: inv.roadAddress || null,
         client_city: inv.city || null,
         client_postal_code: inv.cityCode?.trim() || null,
@@ -560,6 +609,8 @@ async function syncQuotations(client: pg.PoolClient) {
   const quotations = data.quotations || [];
   console.log(`\n=== Devis: ${quotations.length} ===`);
 
+  const customerCompanyMap = loadCustomerCompanyMap();
+
   let synced = 0;
   let skipped = 0;
   for (const q of quotations) {
@@ -570,26 +621,30 @@ async function syncQuotations(client: pg.PoolClient) {
     let status = "draft";
     if (q.acceptedAt) status = "accepted";
 
+    const sessionName = q.trainingSession?.name || "";
+    const { subtotalCents, lineItems } = computeInvoiceAmounts(q.items, sessionName);
+
+    // Resolve enterprise via customer → company mapping
+    let enterpriseId: string | null = null;
+    if (q.customer?.id) {
+      const companyDigiId = customerCompanyMap.get(q.customer.id);
+      if (companyDigiId) {
+        enterpriseId = idMaps.enterprises.get(companyDigiId) || null;
+      }
+    }
+
     try {
       await upsert(client, "quotes", {
         digiforma_id: q.id,
         number,
         title: `Devis ${number}`,
         status,
-        subtotal: (() => {
-          const sessionName = q.trainingSession?.name || "";
-          const price = lookupPrice(sessionName);
-          const totalQty = (q.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-          return price * totalQty;
-        })(),
+        line_items: JSON.stringify(lineItems),
+        subtotal: subtotalCents,
         tax_rate: 0,
         tax_amount: 0,
-        total: (() => {
-          const sessionName = q.trainingSession?.name || "";
-          const price = lookupPrice(sessionName);
-          const totalQty = (q.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-          return price * totalQty;
-        })(),
+        total: subtotalCents,
+        enterprise_id: enterpriseId,
         notes: null,
       });
       synced++;
