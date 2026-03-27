@@ -392,6 +392,16 @@ export const documentTemplates = pgTable("document_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const documentHeaderFooters = pgTable("document_header_footers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("header"), // header | footer
+  content: text("content").notNull(),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const generatedDocuments = pgTable("generated_documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   templateId: varchar("template_id").notNull(),
@@ -1398,6 +1408,7 @@ export const insertEmailTrackingEventSchema = createInsertSchema(emailTrackingEv
 export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSmsLogSchema = createInsertSchema(smsLogs).omit({ id: true, createdAt: true });
 export const insertDocumentTemplateSchema = createInsertSchema(documentTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDocumentHeaderFooterSchema = createInsertSchema(documentHeaderFooters).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertGeneratedDocumentSchema = createInsertSchema(generatedDocuments).omit({ id: true, createdAt: true });
 export const insertProspectSchema = createInsertSchema(prospects).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1778,6 +1789,8 @@ export type InsertSmsLog = z.infer<typeof insertSmsLogSchema>;
 export type SmsLog = typeof smsLogs.$inferSelect;
 export type InsertDocumentTemplate = z.infer<typeof insertDocumentTemplateSchema>;
 export type DocumentTemplate = typeof documentTemplates.$inferSelect;
+export type InsertDocumentHeaderFooter = z.infer<typeof insertDocumentHeaderFooterSchema>;
+export type DocumentHeaderFooter = typeof documentHeaderFooters.$inferSelect;
 export type InsertGeneratedDocument = z.infer<typeof insertGeneratedDocumentSchema>;
 export type GeneratedDocument = typeof generatedDocuments.$inferSelect;
 export type InsertProspect = z.infer<typeof insertProspectSchema>;

@@ -17,7 +17,7 @@ export const DOCUMENT_DEFAULTS: Record<string, string> = {
 <p>La présente convention est conclue entre :</p>
 
 <p><strong>L'organisme de formation :</strong><br/>
-SO'SAFE<br/>
+{nom_organisme}<br/>
 N° de déclaration d'activité : {nda_organisme}<br/>
 Représenté par sa direction</p>
 
@@ -29,7 +29,7 @@ Représenté(e) par : {contact_entreprise}</p>
 
 <br/>
 <h2>Article 1 – Objet de la convention</h2>
-<p>La présente convention a pour objet de définir les conditions dans lesquelles SO'SAFE dispensera une action de formation intitulée :</p>
+<p>La présente convention a pour objet de définir les conditions dans lesquelles {nom_organisme} dispensera une action de formation intitulée :</p>
 <p><strong>{nom_formation}</strong></p>
 
 <h2>Article 2 – Caractéristiques de la formation</h2>
@@ -65,7 +65,7 @@ Représenté(e) par : {contact_entreprise}</p>
 <br/>
 <table>
   <tr>
-    <th style="width:50%">Pour l'organisme de formation<br/>SO'SAFE</th>
+    <th style="width:50%">Pour l'organisme de formation<br/>{nom_organisme}</th>
     <th style="width:50%">Pour l'entreprise / le bénéficiaire<br/>{nom_entreprise}</th>
   </tr>
   <tr>
@@ -84,7 +84,7 @@ Représenté(e) par : {contact_entreprise}</p>
 <br/>
 
 <p>Entre :</p>
-<p><strong>SO'SAFE</strong>, organisme de formation, déclaré sous le n° {nda_organisme},<br/>
+<p><strong>{nom_organisme}</strong>, organisme de formation, déclaré sous le n° {nda_organisme},<br/>
 ci-après dénommé « le prestataire »</p>
 
 <p>Et :</p>
@@ -165,7 +165,7 @@ ci-après dénommé « le stagiaire »</p>
 
 <br/>
 <p>Cordialement,</p>
-<p><strong>L'équipe SO'SAFE</strong></p>
+<p><strong>L'équipe {nom_organisme}</strong></p>
 `,
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ ci-après dénommé « le stagiaire »</p>
 <p style="text-align:center"><em>Article L.6353-1 du Code du travail</em></p>
 <br/>
 
-<p>Je soussigné(e), représentant(e) légal(e) de l'organisme de formation <strong>SO'SAFE</strong>, certifie que :</p>
+<p>Je soussigné(e), représentant(e) légal(e) de l'organisme de formation <strong>{nom_organisme}</strong>, certifie que :</p>
 
 <p style="text-align:center; font-size:1.2em">
   <strong>{nom_apprenant} {prenom_apprenant}</strong>
@@ -208,7 +208,7 @@ ci-après dénommé « le stagiaire »</p>
 <table>
   <tr>
     <td style="width:50%">
-      <strong>SO'SAFE</strong><br/>
+      <strong>{nom_organisme}</strong><br/>
       Cachet et signature :
       <div style="height:60px"></div>
     </td>
@@ -229,7 +229,7 @@ ci-après dénommé « le stagiaire »</p>
 <p style="text-align:center"><em>Article L.6353-1 du Code du travail</em></p>
 <br/>
 
-<p>L'organisme de formation <strong>SO'SAFE</strong> (N° DA : {nda_organisme}) certifie avoir dispensé l'action de formation suivante :</p>
+<p>L'organisme de formation <strong>{nom_organisme}</strong> (N° DA : {nda_organisme}) certifie avoir dispensé l'action de formation suivante :</p>
 
 <table>
   <tr><th>Intitulé</th><td><strong>{nom_formation}</strong></td></tr>
@@ -249,7 +249,7 @@ ci-après dénommé « le stagiaire »</p>
 <br/>
 <p>Fait à Paris, le {date_delivrance}</p>
 <br/>
-<p><strong>SO'SAFE</strong> — Cachet et signature</p>
+<p><strong>{nom_organisme}</strong> — Cachet et signature</p>
 <div style="height:60px; border:1px dashed #ccc; width:200px; margin-top:8px"></div>
 `,
 
@@ -260,7 +260,7 @@ ci-après dénommé « le stagiaire »</p>
 <h1 style="text-align:center">ATTESTATION D'ASSIDUITÉ</h1>
 <br/>
 
-<p>Je soussigné(e), responsable de l'organisme de formation <strong>SO'SAFE</strong>, atteste que :</p>
+<p>Je soussigné(e), responsable de l'organisme de formation <strong>{nom_organisme}</strong>, atteste que :</p>
 
 <p style="text-align:center"><strong>{nom_apprenant} {prenom_apprenant}</strong></p>
 
@@ -280,7 +280,7 @@ ci-après dénommé « le stagiaire »</p>
 <br/>
 <p>Fait le {date_delivrance}</p>
 <br/>
-<p><strong>SO'SAFE</strong><br/>Cachet et signature :</p>
+<p><strong>{nom_organisme}</strong><br/>Cachet et signature :</p>
 <div style="height:60px; border:1px dashed #ccc; width:200px; margin-top:8px"></div>
 `,
 
@@ -291,7 +291,7 @@ ci-après dénommé « le stagiaire »</p>
 <h1 style="text-align:center">ATTESTATION DE PARTICIPATION — DÉVELOPPEMENT PROFESSIONNEL CONTINU (DPC)</h1>
 <br/>
 
-<p>L'organisme de développement professionnel continu <strong>SO'SAFE</strong> atteste que :</p>
+<p>L'organisme de développement professionnel continu <strong>{nom_organisme}</strong> atteste que :</p>
 
 <p style="text-align:center"><strong>{nom_apprenant} {prenom_apprenant}</strong></p>
 
@@ -314,7 +314,7 @@ ci-après dénommé « le stagiaire »</p>
 <br/>
 <p>Fait le {date_delivrance}</p>
 <br/>
-<p><strong>SO'SAFE</strong> — Signature :</p>
+<p><strong>{nom_organisme}</strong> — Signature :</p>
 <div style="height:60px; border:1px dashed #ccc; width:200px; margin-top:8px"></div>
 `,
 
@@ -326,7 +326,7 @@ ci-après dénommé « le stagiaire »</p>
 <p style="text-align:right">N° Devis : {numero_devis}<br/>Date : {date_document}</p>
 
 <h2>Émetteur</h2>
-<p><strong>SO'SAFE</strong><br/>
+<p><strong>{nom_organisme}</strong><br/>
 {adresse_organisme}<br/>
 SIRET : {siret_organisme}<br/>
 N° DA : {nda_organisme}</p>
@@ -365,7 +365,7 @@ SIRET : {siret_entreprise}<br/>
 <br/>
 <table>
   <tr>
-    <th>SO'SAFE</th>
+    <th>{nom_organisme}</th>
     <th>{nom_entreprise}</th>
   </tr>
   <tr>
@@ -383,7 +383,7 @@ SIRET : {siret_entreprise}<br/>
 <p style="text-align:right">N° Facture : {numero_facture}<br/>Date : {date_document}</p>
 
 <h2>Émetteur</h2>
-<p><strong>SO'SAFE</strong><br/>
+<p><strong>{nom_organisme}</strong><br/>
 {adresse_organisme}<br/>
 SIRET : {siret_organisme}<br/>
 N° DA : {nda_organisme}</p>
@@ -412,7 +412,7 @@ SIRET : {siret_entreprise}</p>
 </table>
 
 <br/>
-<p><strong>Règlement :</strong> Virement bancaire — IBAN : [IBAN SO'SAFE] — Dans un délai de 30 jours.</p>
+<p><strong>Règlement :</strong> Virement bancaire — IBAN : [IBAN {nom_organisme}] — Dans un délai de 30 jours.</p>
 <p><em>En cas de retard de paiement, des pénalités de 3 fois le taux légal seront appliquées, ainsi qu'une indemnité forfaitaire de recouvrement de 40 €.</em></p>
 `,
 
@@ -468,10 +468,10 @@ SIRET : {siret_entreprise}</p>
   // ─────────────────────────────────────────────────────────────────────────
   reglement: `
 <h1 style="text-align:center">RÈGLEMENT INTÉRIEUR DE LA FORMATION PROFESSIONNELLE</h1>
-<p style="text-align:center"><em>SO'SAFE — Organisme de formation</em></p>
+<p style="text-align:center"><em>{nom_organisme} — Organisme de formation</em></p>
 <br/>
 
-<p>Conformément aux articles L.6352-3 et L.6352-4 du Code du travail, le présent règlement intérieur s'applique à toute personne participant à une action de formation dispensée par SO'SAFE.</p>
+<p>Conformément aux articles L.6352-3 et L.6352-4 du Code du travail, le présent règlement intérieur s'applique à toute personne participant à une action de formation dispensée par {nom_organisme}.</p>
 
 <h2>Article 1 — Objet et champ d'application</h2>
 <p>Le présent règlement intérieur définit les règles d'hygiène, de sécurité et de discipline applicables à tous les stagiaires accueillis au sein de nos sessions de formation.</p>
@@ -480,7 +480,7 @@ SIRET : {siret_entreprise}</p>
 <p>Les stagiaires sont tenus de respecter les horaires de formation indiqués dans leur convocation. Tout retard ou absence doit être signalé à l'organisme de formation dans les meilleurs délais.</p>
 
 <h2>Article 3 — Assiduité</h2>
-<p>La présence à l'intégralité des séances de formation est obligatoire. Les absences sont portées sur la feuille d'émargement. En cas d'absence justifiée (maladie, force majeure), le stagiaire doit en informer SO'SAFE dans les 24h.</p>
+<p>La présence à l'intégralité des séances de formation est obligatoire. Les absences sont portées sur la feuille d'émargement. En cas d'absence justifiée (maladie, force majeure), le stagiaire doit en informer {nom_organisme} dans les 24h.</p>
 
 <h2>Article 4 — Discipline</h2>
 <p>Tout comportement perturbateur, irrespectueux ou contraire à l'ordre public pourra entraîner l'exclusion temporaire ou définitive du stage. Toute fraude ou tentative de fraude lors des évaluations est strictement interdite.</p>
@@ -499,7 +499,7 @@ SIRET : {siret_entreprise}</p>
 
 <br/>
 <p>Le présent règlement intérieur est remis à chaque stagiaire à son entrée en formation.</p>
-<p>En s'inscrivant à une action de formation SO'SAFE, le participant reconnaît en avoir pris connaissance et en accepter les termes.</p>
+<p>En s'inscrivant à une action de formation {nom_organisme}, le participant reconnaît en avoir pris connaissance et en accepter les termes.</p>
 `,
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -507,36 +507,36 @@ SIRET : {siret_entreprise}</p>
   // ─────────────────────────────────────────────────────────────────────────
   cgv: `
 <h1 style="text-align:center">CONDITIONS GÉNÉRALES DE VENTE (CGV)</h1>
-<p style="text-align:center"><em>SO'SAFE — Organisme de formation professionnelle</em></p>
+<p style="text-align:center"><em>{nom_organisme} — Organisme de formation professionnelle</em></p>
 <br/>
 
 <h2>Article 1 — Champ d'application</h2>
-<p>Les présentes CGV s'appliquent à toutes les prestations de formation dispensées par SO'SAFE, à destination de toute personne physique ou morale (ci-après « le Client »).</p>
+<p>Les présentes CGV s'appliquent à toutes les prestations de formation dispensées par {nom_organisme}, à destination de toute personne physique ou morale (ci-après « le Client »).</p>
 
 <h2>Article 2 — Inscription</h2>
 <p>L'inscription à une formation est définitive à réception du devis signé ou de la convention de formation signée. Toute inscription vaut acceptation des présentes CGV.</p>
 
 <h2>Article 3 — Tarifs</h2>
-<p>Les tarifs sont exprimés en euros HT. SO'SAFE bénéficie de l'exonération de TVA conformément à l'article 261-4-4° du CGI. Les prix peuvent être révisés sans préavis.</p>
+<p>Les tarifs sont exprimés en euros HT. {nom_organisme} bénéficie de l'exonération de TVA conformément à l'article 261-4-4° du CGI. Les prix peuvent être révisés sans préavis.</p>
 
 <h2>Article 4 — Modalités de règlement</h2>
 <p>Les factures sont payables à 30 jours date de facture, par virement bancaire. Tout retard de paiement entraîne des pénalités de 3 fois le taux légal, ainsi qu'une indemnité forfaitaire de recouvrement de 40 €.</p>
 
 <h2>Article 5 — Annulation et report</h2>
 <p><strong>Par le Client :</strong> Toute annulation doit être notifiée par écrit. En cas d'annulation moins de 7 jours ouvrés avant le début de la formation, la totalité du prix est due. Au-delà de ce délai, aucune pénalité n'est appliquée.</p>
-<p><strong>Par SO'SAFE :</strong> SO'SAFE se réserve le droit d'annuler ou reporter une session en cas de force majeure ou d'effectif insuffisant. Le Client sera prévenu dans les meilleurs délais et un remboursement intégral sera effectué si aucun report ne convient.</p>
+<p><strong>Par {nom_organisme} :</strong> {nom_organisme} se réserve le droit d'annuler ou reporter une session en cas de force majeure ou d'effectif insuffisant. Le Client sera prévenu dans les meilleurs délais et un remboursement intégral sera effectué si aucun report ne convient.</p>
 
 <h2>Article 6 — Propriété intellectuelle</h2>
-<p>Tous les supports pédagogiques remis lors des formations sont la propriété exclusive de SO'SAFE et ne peuvent être reproduits, diffusés ou exploités sans autorisation écrite préalable.</p>
+<p>Tous les supports pédagogiques remis lors des formations sont la propriété exclusive de {nom_organisme} et ne peuvent être reproduits, diffusés ou exploités sans autorisation écrite préalable.</p>
 
 <h2>Article 7 — Confidentialité et RGPD</h2>
-<p>SO'SAFE s'engage à traiter les données personnelles conformément au Règlement (UE) 2016/679 (RGPD). Les données sont collectées pour la gestion administrative des formations et ne sont pas transmises à des tiers sans consentement.</p>
+<p>{nom_organisme} s'engage à traiter les données personnelles conformément au Règlement (UE) 2016/679 (RGPD). Les données sont collectées pour la gestion administrative des formations et ne sont pas transmises à des tiers sans consentement.</p>
 
 <h2>Article 8 — Responsabilité</h2>
-<p>SO'SAFE ne saurait être tenu responsable des dommages indirects liés à la participation ou non-participation à une formation.</p>
+<p>{nom_organisme} ne saurait être tenu responsable des dommages indirects liés à la participation ou non-participation à une formation.</p>
 
 <h2>Article 9 — Litiges</h2>
-<p>En cas de litige, les parties s'efforceront de trouver une solution amiable. À défaut, le Tribunal compétent sera celui du siège de SO'SAFE.</p>
+<p>En cas de litige, les parties s'efforceront de trouver une solution amiable. À défaut, le Tribunal compétent sera celui du siège de {nom_organisme}.</p>
 `,
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -547,7 +547,7 @@ SIRET : {siret_entreprise}</p>
 <br/>
 
 <p>Entre :</p>
-<p><strong>SO'SAFE</strong>, organisme de formation,<br/>
+<p><strong>{nom_organisme}</strong>, organisme de formation,<br/>
 ci-après dénommé « le Donneur d'ordre »</p>
 
 <p>Et :</p>
@@ -589,14 +589,14 @@ ci-après dénommé « l'Intervenant »</p>
 </ul>
 
 <h2>Article 5 — Indépendance</h2>
-<p>L'Intervenant exerce sa mission en toute indépendance, sans lien de subordination avec SO'SAFE.</p>
+<p>L'Intervenant exerce sa mission en toute indépendance, sans lien de subordination avec {nom_organisme}.</p>
 
 <br/>
 <p>Fait en deux exemplaires, le {date_document}</p>
 <br/>
 <table>
   <tr>
-    <th>Pour SO'SAFE</th>
+    <th>Pour {nom_organisme}</th>
     <th>L'Intervenant</th>
   </tr>
   <tr>
@@ -614,7 +614,7 @@ ci-après dénommé « l'Intervenant »</p>
 <br/>
 
 <p>Entre :</p>
-<p><strong>SO'SAFE</strong>, organisme de formation,<br/>
+<p><strong>{nom_organisme}</strong>, organisme de formation,<br/>
 ci-après dénommé « le Donneur d'ordre »</p>
 
 <p>Et :</p>
@@ -624,7 +624,7 @@ Adresse : {adresse_formateur}<br/>
 ci-après dénommé « le Prestataire »</p>
 
 <h2>Article 1 — Objet</h2>
-<p>Le présent contrat cadre définit les conditions générales dans lesquelles le Prestataire interviendra ponctuellement pour le compte de SO'SAFE sur des actions de formation professionnelle.</p>
+<p>Le présent contrat cadre définit les conditions générales dans lesquelles le Prestataire interviendra ponctuellement pour le compte de {nom_organisme} sur des actions de formation professionnelle.</p>
 
 <h2>Article 2 — Durée</h2>
 <p>Le présent contrat est conclu pour une durée d'un an, renouvelable par tacite reconduction.</p>
@@ -636,10 +636,10 @@ ci-après dénommé « le Prestataire »</p>
 <p>La rémunération est déterminée d'un commun accord pour chaque intervention et précisée dans la convention d'intervention correspondante. Taux journalier de référence : {taux_journalier} € HT.</p>
 
 <h2>Article 5 — Confidentialité</h2>
-<p>Le Prestataire s'engage à ne divulguer aucune information confidentielle relative aux activités, clients, programmes ou méthodes pédagogiques de SO'SAFE.</p>
+<p>Le Prestataire s'engage à ne divulguer aucune information confidentielle relative aux activités, clients, programmes ou méthodes pédagogiques de {nom_organisme}.</p>
 
 <h2>Article 6 — Propriété intellectuelle</h2>
-<p>Les supports pédagogiques créés dans le cadre des missions restent la propriété de SO'SAFE, sauf accord contraire écrit.</p>
+<p>Les supports pédagogiques créés dans le cadre des missions restent la propriété de {nom_organisme}, sauf accord contraire écrit.</p>
 
 <h2>Article 7 — Indépendance</h2>
 <p>Le Prestataire agit en qualité de travailleur indépendant. La présente convention n'emporte aucun lien de subordination.</p>
@@ -649,7 +649,7 @@ ci-après dénommé « le Prestataire »</p>
 <br/>
 <table>
   <tr>
-    <th>Pour SO'SAFE</th>
+    <th>Pour {nom_organisme}</th>
     <th>Le Prestataire</th>
   </tr>
   <tr>
@@ -671,13 +671,13 @@ ci-après dénommé « le Prestataire »</p>
 Né(e) le : {date_naissance_apprenant}<br/>
 Adresse : {adresse_apprenant}</p>
 
-<p>Autorise l'organisme de formation <strong>SO'SAFE</strong> à prendre des photos et/ou vidéos lors de la formation :</p>
+<p>Autorise l'organisme de formation <strong>{nom_organisme}</strong> à prendre des photos et/ou vidéos lors de la formation :</p>
 <p><strong>« {nom_formation} »</strong> — Du {date_debut_session} au {date_fin_session}</p>
 
 <h2>Utilisation autorisée</h2>
-<p>Ces images pourront être utilisées à des fins exclusivement pédagogiques et de communication de SO'SAFE, sur les supports suivants :</p>
+<p>Ces images pourront être utilisées à des fins exclusivement pédagogiques et de communication de {nom_organisme}, sur les supports suivants :</p>
 <ul>
-  <li>Site internet de SO'SAFE</li>
+  <li>Site internet de {nom_organisme}</li>
   <li>Réseaux sociaux professionnels</li>
   <li>Brochures et supports de communication imprimés</li>
   <li>Dossiers de réponse à appels d'offres</li>
@@ -687,7 +687,7 @@ Adresse : {adresse_apprenant}</p>
 <p>La présente autorisation est accordée pour une durée de 5 ans à compter de la signature, pour le monde entier.</p>
 
 <h2>Révocation</h2>
-<p>Cette autorisation peut être révoquée à tout moment par courrier recommandé adressé à SO'SAFE. La révocation ne porte pas sur les publications déjà effectuées.</p>
+<p>Cette autorisation peut être révoquée à tout moment par courrier recommandé adressé à {nom_organisme}. La révocation ne porte pas sur les publications déjà effectuées.</p>
 
 <h2>Contrepartie</h2>
 <p>Cette autorisation est accordée à titre gracieux.</p>
@@ -698,7 +698,7 @@ Adresse : {adresse_apprenant}</p>
 <table>
   <tr>
     <th>L'intéressé(e)</th>
-    <th>SO'SAFE</th>
+    <th>{nom_organisme}</th>
   </tr>
   <tr>
     <td style="height:60px">Signature :<br/><em>(Précédée de la mention « Lu et approuvé »)</em></td>
@@ -741,11 +741,11 @@ Adresse : {adresse_apprenant}</p>
 <p>{nom_formateur}<br/>
 Contact : {email_organisme}</p>
 
-<p>Nous vous remercions de la confiance que vous accordez à SO'SAFE et nous mettons à votre disposition pour vous accompagner tout au long de cette démarche.</p>
+<p>Nous vous remercions de la confiance que vous accordez à {nom_organisme} et nous mettons à votre disposition pour vous accompagner tout au long de cette démarche.</p>
 
 <br/>
 <p>Cordialement,</p>
-<p><strong>SO'SAFE</strong></p>
+<p><strong>{nom_organisme}</strong></p>
 `,
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -755,7 +755,7 @@ Contact : {email_organisme}</p>
 <h1 style="text-align:center">CERTIFICAT</h1>
 <br/>
 
-<p>L'organisme de formation <strong>SO'SAFE</strong> certifie que :</p>
+<p>L'organisme de formation <strong>{nom_organisme}</strong> certifie que :</p>
 
 <p style="text-align:center; font-size:1.2em">
   <strong>{nom_apprenant} {prenom_apprenant}</strong>
@@ -787,7 +787,7 @@ Contact : {email_organisme}</p>
 <table>
   <tr>
     <td style="width:50%">
-      <strong>SO'SAFE</strong><br/>
+      <strong>{nom_organisme}</strong><br/>
       Cachet et signature :
       <div style="height:60px"></div>
     </td>
@@ -809,7 +809,7 @@ Contact : {email_organisme}</p>
 <br/>
 
 <p>Entre :</p>
-<p><strong>SO'SAFE</strong>, organisme de formation,<br/>
+<p><strong>{nom_organisme}</strong>, organisme de formation,<br/>
 N° de déclaration d'activité : {nda_organisme}<br/>
 ci-après dénommé « le prestataire »</p>
 
@@ -855,7 +855,7 @@ ci-après dénommé « le bénéficiaire »</p>
 <br/>
 <table>
   <tr>
-    <th>Le prestataire — SO'SAFE</th>
+    <th>Le prestataire — {nom_organisme}</th>
     <th>Le bénéficiaire</th>
   </tr>
   <tr>
@@ -872,7 +872,7 @@ ci-après dénommé « le bénéficiaire »</p>
 <h1 style="text-align:center">ATTESTATION DE PRÉSENCE — FINANCEMENT FIFPL</h1>
 <br/>
 
-<p>L'organisme de formation <strong>SO'SAFE</strong> (N° DA : {nda_organisme}) atteste que :</p>
+<p>L'organisme de formation <strong>{nom_organisme}</strong> (N° DA : {nda_organisme}) atteste que :</p>
 
 <p style="text-align:center"><strong>{nom_apprenant} {prenom_apprenant}</strong></p>
 
@@ -896,7 +896,7 @@ ci-après dénommé « le bénéficiaire »</p>
 <br/>
 <p>Fait le {date_delivrance}</p>
 <br/>
-<p><strong>SO'SAFE</strong> — Cachet et signature :</p>
+<p><strong>{nom_organisme}</strong> — Cachet et signature :</p>
 <div style="height:60px; border:1px dashed #ccc; width:200px; margin-top:8px"></div>
 `,
 
@@ -905,11 +905,11 @@ ci-après dénommé « le bénéficiaire »</p>
   // ─────────────────────────────────────────────────────────────────────────
   politique_confidentialite: `
 <h1 style="text-align:center">POLITIQUE DE CONFIDENTIALITÉ</h1>
-<p style="text-align:center"><em>SO'SAFE — Organisme de formation</em></p>
+<p style="text-align:center"><em>{nom_organisme} — Organisme de formation</em></p>
 <br/>
 
 <h2>Article 1 — Objet</h2>
-<p>La présente politique de confidentialité décrit la manière dont SO'SAFE collecte, utilise et protège les données personnelles de ses stagiaires, clients et partenaires conformément au Règlement (UE) 2016/679 (RGPD).</p>
+<p>La présente politique de confidentialité décrit la manière dont {nom_organisme} collecte, utilise et protège les données personnelles de ses stagiaires, clients et partenaires conformément au Règlement (UE) 2016/679 (RGPD).</p>
 
 <h2>Article 2 — Données collectées</h2>
 <p>Les données collectées incluent :</p>
@@ -931,10 +931,10 @@ ci-après dénommé « le bénéficiaire »</p>
 <p>Les données sont conservées pendant 10 ans à compter de la fin de la dernière formation, conformément aux obligations réglementaires en matière de formation professionnelle.</p>
 
 <h2>Article 6 — Droits des personnes</h2>
-<p>Conformément au RGPD, toute personne dispose d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition. Ces droits peuvent être exercés par courrier ou email adressé à SO'SAFE.</p>
+<p>Conformément au RGPD, toute personne dispose d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition. Ces droits peuvent être exercés par courrier ou email adressé à {nom_organisme}.</p>
 
 <h2>Article 7 — Sécurité</h2>
-<p>SO'SAFE met en œuvre des mesures techniques et organisationnelles appropriées pour garantir la sécurité et la confidentialité des données personnelles.</p>
+<p>{nom_organisme} met en œuvre des mesures techniques et organisationnelles appropriées pour garantir la sécurité et la confidentialité des données personnelles.</p>
 
 <h2>Article 8 — Transfert de données</h2>
 <p>Les données ne sont pas transférées en dehors de l'Union européenne. Elles ne sont pas communiquées à des tiers sans le consentement des personnes concernées, sauf obligation légale.</p>
@@ -948,7 +948,7 @@ ci-après dénommé « le bénéficiaire »</p>
 <p style="text-align:right">N° Devis : {numero_devis}<br/>Date : {date_document}</p>
 
 <h2>Donneur d'ordre</h2>
-<p><strong>SO'SAFE</strong><br/>
+<p><strong>{nom_organisme}</strong><br/>
 {adresse_organisme}<br/>
 SIRET : {siret_organisme}</p>
 
@@ -983,7 +983,7 @@ Adresse : {adresse_formateur}</p>
 <br/>
 <table>
   <tr>
-    <th>SO'SAFE</th>
+    <th>{nom_organisme}</th>
     <th>Le Prestataire</th>
   </tr>
   <tr>
@@ -1001,7 +1001,7 @@ Adresse : {adresse_formateur}</p>
 <p style="text-align:right">N° Facture : {numero_facture}<br/>Date : {date_document}</p>
 
 <h2>Émetteur</h2>
-<p><strong>SO'SAFE</strong><br/>
+<p><strong>{nom_organisme}</strong><br/>
 {adresse_organisme}<br/>
 SIRET : {siret_organisme}<br/>
 N° DA : {nda_organisme}</p>
@@ -1045,7 +1045,7 @@ SIRET : {siret_entreprise}</p>
 <p style="text-align:right">N° Facture : {numero_facture}<br/>Date : {date_document}</p>
 
 <h2>Émetteur</h2>
-<p><strong>SO'SAFE</strong><br/>
+<p><strong>{nom_organisme}</strong><br/>
 {adresse_organisme}<br/>
 SIRET : {siret_organisme}<br/>
 N° DA : {nda_organisme}</p>
@@ -1091,7 +1091,7 @@ SIRET : {siret_entreprise}</p>
 
 <h2>Organisme de formation</h2>
 <table>
-  <tr><th>Nom</th><td>SO'SAFE</td></tr>
+  <tr><th>Nom</th><td>{nom_organisme}</td></tr>
   <tr><th>N° de déclaration d'activité</th><td>{nda_organisme}</td></tr>
   <tr><th>Adresse</th><td>{adresse_organisme}</td></tr>
   <tr><th>Contact</th><td>{email_organisme} — {telephone_organisme}</td></tr>
@@ -1366,7 +1366,7 @@ Document généré le {date_document} — {nom_organisme}
 
 <h2>Identification de l'organisme</h2>
 <table>
-  <tr><th>Raison sociale</th><td>SO'SAFE</td></tr>
+  <tr><th>Raison sociale</th><td>{nom_organisme}</td></tr>
   <tr><th>SIRET</th><td>{siret_organisme}</td></tr>
   <tr><th>N° de déclaration d'activité</th><td>{nda_organisme}</td></tr>
   <tr><th>Adresse</th><td>{adresse_organisme}</td></tr>
@@ -1413,7 +1413,7 @@ Document généré le {date_document} — {nom_organisme}
 <p>Le présent bilan est établi conformément à l'article L.6352-11 du Code du travail.</p>
 <p>Fait le {date_document}</p>
 <br/>
-<p><strong>SO'SAFE</strong> — Signature du responsable :</p>
+<p><strong>{nom_organisme}</strong> — Signature du responsable :</p>
 <div style="height:60px; border:1px dashed #ccc; width:200px; margin-top:8px"></div>
 `,
 
@@ -1444,7 +1444,7 @@ Document généré le {date_document} — {nom_organisme}
 
   <div style="margin-top:20px; padding-top:15px; border-top:1px solid #d1d5db;">
     <p style="font-size:9pt; color:#999; margin:0;">Délivré le {date_delivrance}</p>
-    <p style="font-size:10pt; color:#1a2b49; font-weight:bold; margin:5px 0 0;">SO'SAFE</p>
+    <p style="font-size:10pt; color:#1a2b49; font-weight:bold; margin:5px 0 0;">{nom_organisme}</p>
     <p style="font-size:8pt; color:#999; margin:0;">Organisme de formation — N° DA : {nda_organisme}</p>
   </div>
 
@@ -1647,7 +1647,7 @@ Document généré le {date_document} — {nom_organisme}
 <br/>
 
 <h2>Organisme de formation</h2>
-<p><strong>SO'SAFE</strong><br/>
+<p><strong>{nom_organisme}</strong><br/>
 {adresse_organisme}<br/>
 SIRET : {siret_organisme} — N° DA : {nda_organisme}</p>
 
@@ -1694,14 +1694,14 @@ SIRET : {siret_organisme} — N° DA : {nda_organisme}</p>
 
 <h2>Engagement réciproque</h2>
 <p>Le bénéficiaire s'engage à participer activement à l'ensemble des séquences de formation et à réaliser les travaux demandés.</p>
-<p>SO'SAFE s'engage à mettre en œuvre les moyens pédagogiques et techniques nécessaires à la bonne réalisation de la formation, et à adapter le parcours si nécessaire.</p>
+<p>{nom_organisme} s'engage à mettre en œuvre les moyens pédagogiques et techniques nécessaires à la bonne réalisation de la formation, et à adapter le parcours si nécessaire.</p>
 
 <br/>
 <p>Fait en deux exemplaires, le {date_document}</p>
 <br/>
 <table>
   <tr>
-    <th>Le responsable — SO'SAFE</th>
+    <th>Le responsable — {nom_organisme}</th>
     <th>Le bénéficiaire</th>
   </tr>
   <tr>

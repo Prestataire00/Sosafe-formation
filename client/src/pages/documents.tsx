@@ -127,6 +127,24 @@ async function downloadPdfFromHtml(content: string, title: string) {
   window.document.body.removeChild(container);
 }
 
+/** Assemble header + content + footer for a template preview */
+function buildTemplatePreviewHtml(t: DocumentTemplate): string {
+  const color = t.brandColor || "#1a56db";
+  const font = t.fontFamily || "Arial";
+  const defaultHeader = `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:3px solid ${color};margin-bottom:32px;">
+    <div>${t.logoUrl ? `<img src="${t.logoUrl}" alt="Logo" style="max-height:70px;max-width:200px;object-fit:contain;" />` : `<span style="font-size:22px;font-weight:700;color:${color};">SO'SAFE</span>`}</div>
+    <div style="text-align:right;font-size:11px;color:#555;line-height:1.6;">Organisme de formation</div>
+  </div>`;
+  const defaultFooter = `<div style="margin-top:48px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#888;text-align:center;line-height:1.8;">
+    SO'SAFE — Organisme de formation professionnelle continue
+  </div>`;
+  return `<div style="font-family:${font},sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#1a1a1a;font-size:13px;line-height:1.7;">
+    ${t.headerHtml || defaultHeader}
+    <div style="min-height:400px;">${t.content}</div>
+    ${t.footerHtml || defaultFooter}
+  </div>`;
+}
+
 /** Shared print helper — opens a print-ready window */
 function printDocumentHtml(content: string, title: string) {
   const printStyles = `
@@ -692,10 +710,30 @@ function TemplateForm({
   const [headerHtml, setHeaderHtml] = useState(template?.headerHtml || "");
   const [footerHtml, setFooterHtml] = useState(template?.footerHtml || "");
   const [showBranding, setShowBranding] = useState(false);
+  const [activeSection, setActiveSection] = useState<"header" | "content" | "footer">("content");
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Fetch shared header/footer blocks
+  const { data: headerFooterBlocks } = useQuery<any[]>({
+    queryKey: ["/api/document-header-footers"],
+  });
+  const sharedHeaders = headerFooterBlocks?.filter((b: any) => b.type === "header") || [];
+  const sharedFooters = headerFooterBlocks?.filter((b: any) => b.type === "footer") || [];
+
+  // Save as shared block mutations
+  const saveBlockMutation = useMutation({
+    mutationFn: (data: { name: string; type: string; content: string }) =>
+      apiRequest("POST", "/api/document-header-footers", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/document-header-footers"] });
+      toast({ title: "Bloc sauvegardé" });
+    },
+  });
+
+  const { toast } = useToast();
 
   const handleTypeChange = (newType: string) => {
     setType(newType);
-    // Pour un nouveau modèle, on propose le contenu type ; pour l'édition on garde le contenu existant
     if (isNew) {
       const defaultContent = getDefaultTemplate(newType);
       if (defaultContent) {
@@ -723,33 +761,64 @@ function TemplateForm({
     });
   };
 
+  const buildPreviewHtml = () => {
+    const color = brandColor || "#1a56db";
+    const font = fontFamily || "Arial";
+    const defaultHeader = `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:3px solid ${color};margin-bottom:32px;">
+      <div>${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="max-height:70px;max-width:200px;object-fit:contain;" />` : `<span style="font-size:22px;font-weight:700;color:${color};">SO'SAFE</span>`}</div>
+      <div style="text-align:right;font-size:11px;color:#555;line-height:1.6;">Organisme de formation</div>
+    </div>`;
+    const defaultFooter = `<div style="margin-top:48px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#888;text-align:center;line-height:1.8;">
+      SO'SAFE — Organisme de formation professionnelle continue
+    </div>`;
+    return `<div style="font-family:${font},sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#1a1a1a;font-size:13px;line-height:1.7;">
+      ${headerHtml || defaultHeader}
+      <div style="min-height:400px;">${content}</div>
+      ${footerHtml || defaultFooter}
+    </div>`;
+  };
+
+  const handleSaveAsBlock = (blockType: "header" | "footer") => {
+    const blockContent = blockType === "header" ? headerHtml : footerHtml;
+    if (!blockContent) {
+      toast({ title: "Le contenu est vide", variant: "destructive" });
+      return;
+    }
+    const blockName = prompt(`Nom du bloc ${blockType === "header" ? "en-tête" : "pied de page"} :`, `${name || "Mon modèle"} — ${blockType === "header" ? "En-tête" : "Pied de page"}`);
+    if (blockName) {
+      saveBlockMutation.mutate({ name: blockName, type: blockType, content: blockContent });
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="template-name">Nom du modele</Label>
-        <Input
-          id="template-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Ex: Convention standard"
-          required
-          data-testid="input-template-name"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Type de document</Label>
-        <Select value={type} onValueChange={handleTypeChange}>
-          <SelectTrigger data-testid="select-template-type">
-            <SelectValue placeholder="Selectionner un type" />
-          </SelectTrigger>
-          <SelectContent>
-            {DOCUMENT_TYPES.map((d) => (
-              <SelectItem key={d.value} value={d.value}>
-                {d.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="template-name">Nom du modele</Label>
+          <Input
+            id="template-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Convention standard"
+            required
+            data-testid="input-template-name"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Type de document</Label>
+          <Select value={type} onValueChange={handleTypeChange}>
+            <SelectTrigger data-testid="select-template-type">
+              <SelectValue placeholder="Selectionner un type" />
+            </SelectTrigger>
+            <SelectContent>
+              {DOCUMENT_TYPES.map((d) => (
+                <SelectItem key={d.value} value={d.value}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Branding panel */}
@@ -821,48 +890,150 @@ function TemplateForm({
                 />
               )}
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">En-tête personnalisé (HTML)</Label>
-              <Input
-                value={headerHtml}
-                onChange={(e) => setHeaderHtml(e.target.value)}
-                placeholder="<p>Votre en-tête ici...</p>"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Pied de page personnalisé (HTML)</Label>
-              <Input
-                value={footerHtml}
-                onChange={(e) => setFooterHtml(e.target.value)}
-                placeholder="<p>Votre pied de page ici...</p>"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
           </div>
         )}
       </div>
 
-      {/* Rich text editor */}
-      <div className="space-y-2">
-        <Label htmlFor="template-content">Contenu du modele</Label>
-        <RichTextEditor
-          value={content}
-          onChange={setContent}
-          placeholder="Rédigez votre modèle de document ici... Utilisez le bouton Variable pour insérer des balises dynamiques."
-          brandColor={brandColor}
-          fontFamily={fontFamily}
-        />
-        <p className="text-xs text-muted-foreground">
-          Utilisez le bouton <strong>Variable</strong> dans la barre d'outils pour insérer des balises dynamiques comme <code className="text-primary">{"{nom_apprenant}"}</code>.
-        </p>
+      {/* === 3 SECTIONS : En-tête / Contenu / Pied de page === */}
+      <div className="border rounded-lg overflow-hidden">
+        {/* Section tabs */}
+        <div className="flex border-b bg-muted/30">
+          {([
+            { key: "header" as const, label: "En-tête", icon: "▲" },
+            { key: "content" as const, label: "Contenu du document", icon: "■" },
+            { key: "footer" as const, label: "Pied de page", icon: "▼" },
+          ]).map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setActiveSection(s.key)}
+              className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
+                activeSection === s.key
+                  ? "border-primary text-primary bg-background"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              }`}
+            >
+              <span className="mr-1.5 text-xs">{s.icon}</span>
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-4">
+          {/* HEADER section */}
+          {activeSection === "header" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  L'en-tête apparait en haut de chaque page. Vous pouvez le reutiliser sur d'autres modeles.
+                </p>
+                <div className="flex gap-1.5">
+                  {sharedHeaders.length > 0 && (
+                    <Select onValueChange={(id) => {
+                      const block = sharedHeaders.find((b: any) => b.id === id);
+                      if (block) setHeaderHtml(block.content);
+                    }}>
+                      <SelectTrigger className="h-7 text-xs w-[180px]">
+                        <SelectValue placeholder="Charger un en-tête..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sharedHeaders.map((b: any) => (
+                          <SelectItem key={b.id} value={b.id} className="text-xs">{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => handleSaveAsBlock("header")}>
+                    <Copy className="w-3 h-3" /> Sauvegarder
+                  </Button>
+                </div>
+              </div>
+              <RichTextEditor
+                value={headerHtml}
+                onChange={setHeaderHtml}
+                placeholder="En-tête du document (logo, nom de l'organisme, coordonnées...)"
+                brandColor={brandColor}
+                fontFamily={fontFamily}
+              />
+            </div>
+          )}
+
+          {/* CONTENT section */}
+          {activeSection === "content" && (
+            <div className="space-y-2">
+              <RichTextEditor
+                value={content}
+                onChange={setContent}
+                placeholder="Rédigez votre modèle de document ici... Utilisez le bouton Variable pour insérer des balises dynamiques."
+                brandColor={brandColor}
+                fontFamily={fontFamily}
+              />
+              <p className="text-xs text-muted-foreground">
+                Utilisez le bouton <strong>Variable</strong> dans la barre d'outils pour insérer des balises dynamiques comme <code className="text-primary">{"{nom_apprenant}"}</code>.
+              </p>
+            </div>
+          )}
+
+          {/* FOOTER section */}
+          {activeSection === "footer" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Le pied de page apparait en bas de chaque page. Vous pouvez le reutiliser sur d'autres modeles.
+                </p>
+                <div className="flex gap-1.5">
+                  {sharedFooters.length > 0 && (
+                    <Select onValueChange={(id) => {
+                      const block = sharedFooters.find((b: any) => b.id === id);
+                      if (block) setFooterHtml(block.content);
+                    }}>
+                      <SelectTrigger className="h-7 text-xs w-[180px]">
+                        <SelectValue placeholder="Charger un pied de page..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sharedFooters.map((b: any) => (
+                          <SelectItem key={b.id} value={b.id} className="text-xs">{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => handleSaveAsBlock("footer")}>
+                    <Copy className="w-3 h-3" /> Sauvegarder
+                  </Button>
+                </div>
+              </div>
+              <RichTextEditor
+                value={footerHtml}
+                onChange={setFooterHtml}
+                placeholder="Pied de page (mentions légales, SIRET, coordonnées...)"
+                brandColor={brandColor}
+                fontFamily={fontFamily}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-2">
+      {/* Preview + Submit */}
+      <div className="flex justify-between items-center pt-2">
+        <Button type="button" variant="outline" onClick={() => setShowPreview(!showPreview)} className="gap-1.5">
+          <Eye className="w-4 h-4" />
+          {showPreview ? "Masquer l'aperçu" : "Aperçu du document"}
+        </Button>
         <Button type="submit" disabled={isPending || !content} data-testid="button-template-submit">
           {isPending ? "Enregistrement..." : template ? "Modifier" : "Creer"}
         </Button>
       </div>
+
+      {/* Live preview */}
+      {showPreview && (
+        <div className="border rounded-lg bg-neutral-100 p-4">
+          <p className="text-xs text-muted-foreground mb-3 text-center">Aperçu — En-tête + Contenu + Pied de page</p>
+          <div className="shadow-md bg-white rounded mx-auto" style={{ maxWidth: 800, minHeight: 600 }}>
+            <div dangerouslySetInnerHTML={{ __html: buildPreviewHtml() }} />
+          </div>
+        </div>
+      )}
     </form>
   );
 }
@@ -2129,18 +2300,60 @@ export default function Documents() {
                   <Button variant="outline" size="sm" onClick={() => { setEditTemplate(previewTemplate); setTemplateDialogOpen(true); setPreviewTemplateOpen(false); }} className="gap-1.5">
                     <Pencil className="w-4 h-4" /> Modifier
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => printDocumentHtml(previewTemplate.content, previewTemplate.name)} className="gap-1.5">
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const assembled = buildTemplatePreviewHtml(previewTemplate);
+                    printDocumentHtml(assembled, previewTemplate.name);
+                  }} className="gap-1.5">
                     <Printer className="w-4 h-4" /> Imprimer
                   </Button>
-                  <Button variant="outline" size="sm" onClick={async () => { await downloadPdfFromHtml(previewTemplate.content, previewTemplate.name); }} className="gap-1.5">
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    const assembled = buildTemplatePreviewHtml(previewTemplate);
+                    await downloadPdfFromHtml(assembled, previewTemplate.name);
+                  }} className="gap-1.5">
                     <Download className="w-4 h-4" /> PDF
                   </Button>
                 </div>
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto bg-neutral-100 p-6">
-              <div className="shadow-md bg-white rounded min-h-[1000px] p-8" style={{ fontFamily: "Arial, sans-serif", fontSize: "13px", lineHeight: "1.7", color: "#1a1a1a" }}>
-                <div dangerouslySetInnerHTML={{ __html: previewTemplate.content }} />
+              {/* Section labels */}
+              <div className="shadow-md bg-white rounded min-h-[1000px] overflow-hidden">
+                <div style={{ fontFamily: (previewTemplate.fontFamily || "Arial") + ", sans-serif", maxWidth: 800, margin: "0 auto", padding: 40, color: "#1a1a1a", fontSize: 13, lineHeight: 1.7 }}>
+                  {/* En-tête */}
+                  <div className="relative group">
+                    <div className="absolute -left-3 top-0 bottom-0 w-1 rounded bg-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="text-[10px] text-blue-500 font-medium mb-1 opacity-0 group-hover:opacity-100 transition-opacity">EN-TETE</div>
+                    {previewTemplate.headerHtml ? (
+                      <div dangerouslySetInnerHTML={{ __html: previewTemplate.headerHtml }} />
+                    ) : (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 18, borderBottom: `3px solid ${previewTemplate.brandColor || "#1a56db"}`, marginBottom: 32 }}>
+                        <div>{previewTemplate.logoUrl
+                          ? <img src={previewTemplate.logoUrl} alt="Logo" style={{ maxHeight: 70, maxWidth: 200, objectFit: "contain" }} />
+                          : <span style={{ fontSize: 22, fontWeight: 700, color: previewTemplate.brandColor || "#1a56db" }}>SO'SAFE</span>
+                        }</div>
+                        <div style={{ textAlign: "right", fontSize: 11, color: "#555", lineHeight: 1.6 }}>Organisme de formation</div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Contenu */}
+                  <div className="relative group" style={{ minHeight: 400 }}>
+                    <div className="absolute -left-3 top-0 bottom-0 w-1 rounded bg-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="text-[10px] text-green-600 font-medium mb-1 opacity-0 group-hover:opacity-100 transition-opacity">CONTENU</div>
+                    <div dangerouslySetInnerHTML={{ __html: previewTemplate.content }} />
+                  </div>
+                  {/* Pied de page */}
+                  <div className="relative group">
+                    <div className="absolute -left-3 top-0 bottom-0 w-1 rounded bg-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="text-[10px] text-orange-500 font-medium mb-1 opacity-0 group-hover:opacity-100 transition-opacity">PIED DE PAGE</div>
+                    {previewTemplate.footerHtml ? (
+                      <div dangerouslySetInnerHTML={{ __html: previewTemplate.footerHtml }} />
+                    ) : (
+                      <div style={{ marginTop: 48, paddingTop: 12, borderTop: "1px solid #ddd", fontSize: 10, color: "#888", textAlign: "center", lineHeight: 1.8 }}>
+                        SO'SAFE — Organisme de formation professionnelle continue
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </DialogContent>

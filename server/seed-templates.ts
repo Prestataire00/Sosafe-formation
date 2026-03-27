@@ -714,6 +714,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 14,
       price: 350,
       level: "beginner",
+      imageUrl: "https://cdn.filestackcontent.com/nUtcDBeiQMKl0KR2Hbou",
       objectives: "Identifier une urgence à caractère médical et sa prise en charge. Participer à la réponse à une urgence collective ou une situation sanitaire exceptionnelle. Acquérir les gestes d'urgence vitale et potentielle.",
       prerequisites: "Aucun prérequis. Personnel non professionnel de santé exerçant en établissement de santé, structure médico-sociale, cabinet libéral, maison de santé, centre de santé.",
       modality: "presentiel",
@@ -733,6 +734,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 21,
       price: 750,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/FuUHoBK6RtuNW9xuQxcR",
       objectives: "Acquérir les connaissances théoriques et pratiques nécessaires à l'identification d'une urgence médicale et à sa prise en charge en équipe, en utilisant des techniques non invasives en attendant l'arrivée de l'équipe médicale.",
       prerequisites: "Aucun prérequis. Réservé aux professionnels de santé inscrits dans la 4ème partie du Code de la Santé Publique.",
       modality: "presentiel",
@@ -752,6 +754,7 @@ export async function seedDigiformaPrograms(reset = false) {
       categories: ["AFGSU", "Urgences", "Dentaire"],
       duration: 21,
       price: 900,
+      imageUrl: "https://cdn.filestackcontent.com/OagqkrQMyWwr4Fiio0LA",
       level: "intermediate",
       objectives: "Identifier et prendre en charge les urgences médicales au cabinet dentaire. Maîtriser les gestes d'urgence adaptés à l'environnement dentaire. Gérer une situation de crise en cabinet.",
       prerequisites: "Aucun prérequis.",
@@ -772,6 +775,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 7,
       price: 250,
       level: "beginner",
+      imageUrl: "https://cdn.filestackcontent.com/2ekv6bNdSUiXDvYGngq4",
       objectives: "Réactualiser les connaissances et les gestes techniques relatifs aux urgences vitales et potentielles. Maintenir la validité de l'attestation AFGSU 1.",
       prerequisites: "Titulaire d'une attestation AFGSU 1 de moins de 4 ans.",
       modality: "presentiel",
@@ -791,6 +795,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 7,
       price: 250,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/rYQ5qUqRSKaXO5rtW8ce",
       objectives: "Réactualiser les connaissances relatives aux urgences vitales et potentielles. Intégrer les dernières recommandations de prise en charge.",
       prerequisites: "Titulaire de l'AFGSU 2 ou d'une actualisation de moins de 4 ans.",
       modality: "presentiel",
@@ -812,6 +817,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 21,
       price: 1500,
       level: "advanced",
+      imageUrl: "https://cdn.filestackcontent.com/UijhGYwTai5oiHXGDcFw",
       objectives: "Concevoir un scénario de simulation. Animer une séance de simulation en santé. Conduire un débriefing structuré. Intégrer la simulation dans un programme de formation.",
       prerequisites: "Professionnel de santé ou formateur avec expérience clinique.",
       modality: "presentiel",
@@ -830,6 +836,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 21,
       price: 1500,
       level: "advanced",
+      imageUrl: "https://cdn.filestackcontent.com/ntVS1KFTlC7X1cV1Ogrn",
       objectives: "Perfectionner les techniques de débriefing. Gérer les situations de débriefing difficiles. Évaluer les compétences par la simulation. Initier une démarche de recherche en simulation.",
       prerequisites: "Avoir suivi EUSIM 1 ou équivalent. Expérience en animation de simulation.",
       modality: "presentiel",
@@ -849,6 +856,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 7,
       price: 350,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/hZSWG4SvSBq5Ct9O6Xpy",
       objectives: "Comprendre le vécu des personnes vivant avec une démence. Adapter sa posture professionnelle. Utiliser les outils du Demenz-Balance-Modell® au quotidien.",
       prerequisites: "Professionnel exerçant auprès de personnes âgées.",
       modality: "presentiel",
@@ -868,6 +876,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 28,
       price: 1200,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/D7Iiq1dcQF6vu1sX3kfQ",
       objectives: "Maîtriser les techniques d'hypnose conversationnelle en situation d'urgence. Gérer la douleur et l'anxiété par l'hypnose. Intégrer l'hypnose dans sa pratique soignante quotidienne.",
       prerequisites: "Professionnel de santé en exercice.",
       modality: "presentiel",
@@ -886,6 +895,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 42,
       price: 1800,
       level: "advanced",
+      imageUrl: "https://cdn.filestackcontent.com/koKzT2cUTMymefwlKAjE",
       objectives: "Accompagner la grossesse, l'accouchement et le post-partum par l'hypnose. Maîtriser les techniques spécifiques à la périnatalité. Gérer la douleur obstétricale par l'hypnose.",
       prerequisites: "Professionnel de santé en périnatalité (sage-femme, obstétricien, anesthésiste).",
       modality: "presentiel",
@@ -905,6 +915,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 12,
       price: 400,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/GQH86HDVQQyfuCHIObj2",
       objectives: "Maîtriser les aspects réglementaires de la certification des décès. Rédiger correctement un certificat de décès. Identifier les situations médico-légales nécessitant un signalement.",
       prerequisites: "Médecin ou IPA en exercice.",
       modality: "presentiel",
@@ -924,6 +935,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 16,
       price: 600,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/y4e6xdfeSjq2XsKeeMkJ",
       objectives: "Réaliser un bilan complet des cervicalgies. Maîtriser les techniques de traitement manuel et actif. Construire un programme de rééducation personnalisé.",
       prerequisites: "Diplôme de masseur-kinésithérapeute.",
       modality: "presentiel",
@@ -943,6 +955,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 3.5,
       price: 80,
       level: "beginner",
+      imageUrl: "https://cdn.filestackcontent.com/cPkcnk1SIKXI4H5ZfcuU",
       objectives: "Connaître les gestes de premiers secours adaptés à l'enfant et au nourrisson. Réagir face à une urgence pédiatrique. Alerter les secours de manière efficace.",
       prerequisites: "Aucun prérequis.",
       modality: "presentiel",
@@ -961,6 +974,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 14,
       price: 600,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/ptKdF0wSTyWe2Y07xz3H",
       objectives: "Identifier et prendre en charge les urgences pédiatriques. Maîtriser les gestes d'urgence adaptés à l'enfant. Connaître les spécificités pharmacologiques et physiologiques pédiatriques.",
       prerequisites: "Professionnel de santé.",
       modality: "presentiel",
@@ -980,6 +994,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 14,
       price: 500,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/t1zfKnHR92Mh7FvvgKVA",
       objectives: "Identifier les signes précurseurs de violence. Maîtriser les techniques de désamorçage verbal. Connaître les techniques de protection et d'intervention. Gérer le post-incident.",
       prerequisites: "Professionnel exerçant en milieu de soins.",
       modality: "presentiel",
@@ -998,6 +1013,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 14,
       price: 250,
       level: "beginner",
+      imageUrl: "https://cdn.filestackcontent.com/gXzhEOimSHgSNwliwI",
       objectives: "Repérer les troubles de santé mentale. Adopter un comportement adapté face à une personne en souffrance psychique. Informer et orienter vers les professionnels compétents.",
       prerequisites: "Aucun prérequis.",
       modality: "presentiel",
@@ -1017,6 +1033,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 7,
       price: 500,
       level: "advanced",
+      imageUrl: "https://cdn.filestackcontent.com/Q0Cz8iQgQWOhP3SGtseZ",
       objectives: "Identifier les situations de débriefing difficile. Maîtriser les techniques de gestion des émotions et des conflits. Adapter son débriefing aux situations complexes.",
       prerequisites: "Expérience en animation de simulation (EUSIM 1 ou équivalent recommandé).",
       modality: "presentiel",
@@ -1035,6 +1052,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 13,
       price: 700,
       level: "advanced",
+      imageUrl: "https://cdn.filestackcontent.com/8IHlIctKRZqCFWJ56qqQ",
       objectives: "Mettre en place un dispositif de peer-coaching. Observer et analyser les pratiques de débriefing. Donner et recevoir un feedback constructif.",
       prerequisites: "Expérience en animation de simulation.",
       modality: "presentiel",
@@ -1053,6 +1071,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 14,
       price: 800,
       level: "advanced",
+      imageUrl: "https://cdn.filestackcontent.com/B8LiksPgTmKp6UajHV7P",
       objectives: "Accompagner individuellement les formateurs en simulation. Évaluer et améliorer les pratiques de simulation. Développer une posture de coach en simulation.",
       prerequisites: "Formateur en simulation avec expérience.",
       modality: "presentiel",
@@ -1072,6 +1091,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 3.5,
       price: 0,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/bgS0FIqSXmO85IoOTxqW",
       objectives: "Renforcer le travail d'équipe en situation de crise. Développer la prise de décision sous pression. Appliquer les principes du damage control de manière ludique.",
       prerequisites: "Professionnel de santé.",
       modality: "presentiel",
@@ -1090,6 +1110,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 7,
       price: 400,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/mvd6T2rISSORxf1HkmMZ",
       objectives: "Prendre en charge une noyade. Gérer une hypothermie. Réaliser les gestes d'urgence en milieu nautique. Organiser les secours en milieu aquatique.",
       prerequisites: "Savoir nager. Professionnel exerçant en milieu nautique ou aquatique.",
       modality: "presentiel",
@@ -1108,6 +1129,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 14,
       price: 600,
       level: "intermediate",
+      imageUrl: "https://cdn.filestackcontent.com/Jnp6BM0RCiOeaWVE4Cl0",
       objectives: "Connaître les plans de secours (Plan Blanc, ORSEC). Organiser la prise en charge de nombreuses victimes. Participer à la cellule de crise. Trier et catégoriser les victimes.",
       prerequisites: "Professionnel de santé.",
       modality: "presentiel",
@@ -1126,6 +1148,7 @@ export async function seedDigiformaPrograms(reset = false) {
       duration: 7,
       price: 200,
       level: "beginner",
+      imageUrl: "https://cdn.filestackcontent.com/O6IGusHaR7mttFMyWuSW",
       objectives: "Reconnaître un arrêt cardiaque. Réaliser une RCP de qualité. Utiliser un DAE. Alerter les secours efficacement.",
       prerequisites: "Aucun prérequis.",
       modality: "presentiel",
@@ -1139,8 +1162,17 @@ export async function seedDigiformaPrograms(reset = false) {
     },
   ];
 
+  let updated = 0;
   for (const prog of programs) {
     if (existingTitles.has(prog.title.toLowerCase())) {
+      // Update imageUrl if the existing program doesn't have one
+      if (prog.imageUrl) {
+        const match = existing.find((p: any) => p.title.toLowerCase() === prog.title.toLowerCase());
+        if (match && !match.imageUrl) {
+          await storage.updateProgram(match.id, { imageUrl: prog.imageUrl } as any);
+          updated++;
+        }
+      }
       skipped++;
       continue;
     }
@@ -1148,5 +1180,5 @@ export async function seedDigiformaPrograms(reset = false) {
     created++;
   }
 
-  return { created, skipped, deleted, total: programs.length };
+  return { created, skipped, updated, deleted, total: programs.length };
 }

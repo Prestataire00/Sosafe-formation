@@ -10,6 +10,7 @@ import {
   type EmailLog, type InsertEmailLog,
   type EmailTrackingEvent, type InsertEmailTrackingEvent,
   type DocumentTemplate, type InsertDocumentTemplate,
+  type DocumentHeaderFooter, type InsertDocumentHeaderFooter,
   type GeneratedDocument, type InsertGeneratedDocument,
   type Prospect, type InsertProspect,
   type Quote, type InsertQuote,
@@ -81,7 +82,7 @@ import {
   type SessionTrainer, type InsertSessionTrainer,
   type TrainingLocation, type InsertTrainingLocation,
   users, enterprises, trainers, trainees, programs, sessions, enrollments,
-  emailTemplates, emailLogs, emailTrackingEvents, documentTemplates, generatedDocuments,
+  emailTemplates, emailLogs, emailTrackingEvents, documentTemplates, documentHeaderFooters, generatedDocuments,
   prospects, quotes, invoices, payments, paymentSchedules, bankTransactions, connectionLogs,
   elearningModules, elearningBlocks, quizQuestions, learnerProgress,
   sessionResources, scormPackages, formativeSubmissions,
@@ -212,6 +213,13 @@ export interface IStorage {
   createDocumentTemplate(template: InsertDocumentTemplate): Promise<DocumentTemplate>;
   updateDocumentTemplate(id: string, template: Partial<InsertDocumentTemplate>): Promise<DocumentTemplate | undefined>;
   deleteDocumentTemplate(id: string): Promise<void>;
+
+  // Document Header/Footer blocks
+  getDocumentHeaderFooters(): Promise<DocumentHeaderFooter[]>;
+  getDocumentHeaderFooter(id: string): Promise<DocumentHeaderFooter | undefined>;
+  createDocumentHeaderFooter(data: InsertDocumentHeaderFooter): Promise<DocumentHeaderFooter>;
+  updateDocumentHeaderFooter(id: string, data: Partial<InsertDocumentHeaderFooter>): Promise<DocumentHeaderFooter | undefined>;
+  deleteDocumentHeaderFooter(id: string): Promise<void>;
 
   // Generated Documents
   getGeneratedDocuments(): Promise<GeneratedDocument[]>;
@@ -1138,6 +1146,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDocumentTemplate(id: string): Promise<void> {
     await db.delete(documentTemplates).where(eq(documentTemplates.id, id));
+  }
+
+  // ---- Document Header/Footer blocks ----
+  async getDocumentHeaderFooters(): Promise<DocumentHeaderFooter[]> {
+    return db.select().from(documentHeaderFooters).orderBy(desc(documentHeaderFooters.createdAt));
+  }
+
+  async getDocumentHeaderFooter(id: string): Promise<DocumentHeaderFooter | undefined> {
+    const [result] = await db.select().from(documentHeaderFooters).where(eq(documentHeaderFooters.id, id));
+    return result;
+  }
+
+  async createDocumentHeaderFooter(data: InsertDocumentHeaderFooter): Promise<DocumentHeaderFooter> {
+    const [result] = await db.insert(documentHeaderFooters).values(data as any).returning();
+    return result;
+  }
+
+  async updateDocumentHeaderFooter(id: string, data: Partial<InsertDocumentHeaderFooter>): Promise<DocumentHeaderFooter | undefined> {
+    const [result] = await db.update(documentHeaderFooters).set({ ...data, updatedAt: new Date() } as any).where(eq(documentHeaderFooters.id, id)).returning();
+    return result;
+  }
+
+  async deleteDocumentHeaderFooter(id: string): Promise<void> {
+    await db.delete(documentHeaderFooters).where(eq(documentHeaderFooters.id, id));
   }
 
   // ---- Generated Documents ----

@@ -1,0 +1,128 @@
+{
+    "data": {
+        "academy": {
+            "academyExtranetAvatar": null,
+            "contactEmail": "contact@so-safe.fr",
+            "id": "58960",
+            "vatExempted": true
+        },
+        "fundingAgencies": [
+            {
+                "id": "120914",
+                "name": "Caisse des D\u00e9p\u00f4ts et des Consignations"
+            },
+            {
+                "id": "140395",
+                "name": "DAPSA-PFAFS"
+            },
+            {
+                "id": "122757",
+                "name": "OPCO Mobilit\u00e9s"
+            },
+            {
+                "id": "132259",
+                "name": "POLE EMPLOI DR PACA "
+            }
+        ],
+        "managers": [
+            {
+                "email": "fouad.marhar@gmail.com",
+                "firstname": "Fouad",
+                "id": "180871",
+                "lastname": "MARHAR"
+            },
+            {
+                "email": "isma.lepennec@gmail.com",
+                "firstname": "ismael",
+                "id": "192037",
+                "lastname": "le pennec"
+            },
+            {
+                "email": "gaetanleclercq.formateur@gmail.com",
+                "firstname": "Gaetan",
+                "id": "186931",
+                "lastname": "LECLERCQ"
+            },
+            {
+                "email": "contact@so-safe.fr",
+                "firstname": "Sophie",
+                "id": "120759",
+                "lastname": "Totain"
+            },
+            {
+                "email": "daria.bondar87@gmail.com",
+                "firstname": "Daria",
+                "id": "181563",
+                "lastname": "BONDAR"
+            },
+            {
+                "email": "guillaume.decormeille.pro@gmail.com",
+                "firstname": "Guillaume",
+                "id": "180872",
+                "lastname": "DECORMEILLE"
+            }
+        ],
+        "programCategories": [
+            {
+                "id": "536809",
+                "name": "AFGSU"
+            },
+            {
+                "id": "536811",
+                "name": "Hypnose"
+            },
+            {
+                "id": "536812",
+                "name": "IDE / IPA"
+            },
+            {
+                "id": "536813",
+                "name": "Urgences"
+            },
+            {
+                "id": "536815",
+                "name": "P\u00e9diatrie"
+            },
+            {
+                "id": "536816",
+                "name": "Simulation"
+            },
+            {
+                "id": "536817",
+                "name": "Sant\u00e9 mentale"
+            },
+            {
+                "id": "536818",
+                "name": "Kin\u00e9"
+            },
+            {
+                "id": "571572",
+                "name": "Hygi\u00e8ne"
+            },
+            {
+                "id": "571573",
+                "name": "G\u00e9riatrie"
+            },
+            {
+                "id": "574364",
+                "name": "EUSIM"
+            }
+        ]
+    },
+    "errors": [
+        {
+            "message": "Cannot return null for non-nullable field",
+            "path": [
+                "academy",
+                "academyExtranetAvatar",
+                "url"
+            ],
+            "locations": [
+                {
+                    "line": 1,
+                    "column": 65
+                }
+            ]
+        }
+    ]
+}

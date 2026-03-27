@@ -1056,6 +1056,7 @@ export async function registerRoutes(
   app.use("/api/email-templates", requireAuth, requirePermission("manage_templates"));
   app.use("/api/email-logs", requireAuth, requirePermission("manage_templates"));
   app.use("/api/document-templates", requireAuth, requirePermission("manage_documents"));
+  app.use("/api/document-header-footers", requireAuth, requirePermission("manage_documents"));
   app.use("/api/generated-documents", requireAuth, requirePermission("manage_documents"));
   app.use("/api/documents", requireAuth, requirePermission("manage_documents"));
   app.use("/api/prospects", requireAuth, requirePermission("manage_prospects"));
@@ -2487,6 +2488,15 @@ export async function registerRoutes(
       "{telephone_organisme}": "01 23 45 67 89",
     };
 
+    // Override with real org settings if available
+    const orgSettings = await storage.getOrganizationSettings();
+    const orgMap = Object.fromEntries(orgSettings.map(s => [s.key, s.value]));
+    if (orgMap["org_name"]) exampleValues["{nom_organisme}"] = orgMap["org_name"];
+    if (orgMap["org_address"]) exampleValues["{adresse_organisme}"] = orgMap["org_address"];
+    if (orgMap["org_siret"]) exampleValues["{siret_organisme}"] = orgMap["org_siret"];
+    if (orgMap["org_email"]) exampleValues["{email_organisme}"] = orgMap["org_email"];
+    if (orgMap["org_phone"]) exampleValues["{telephone_organisme}"] = orgMap["org_phone"];
+
     let renderedSubject = template.subject;
     let renderedBody = template.body;
     for (const [key, value] of Object.entries(exampleValues)) {
@@ -2557,6 +2567,28 @@ export async function registerRoutes(
 
   app.delete("/api/document-templates/:id", async (req, res) => {
     await storage.deleteDocumentTemplate(req.params.id);
+    res.status(204).send();
+  });
+
+  // ---- Document Header/Footer blocks (reusable) ----
+  app.get("/api/document-header-footers", async (_req, res) => {
+    const items = await storage.getDocumentHeaderFooters();
+    res.json(items);
+  });
+
+  app.post("/api/document-header-footers", async (req, res) => {
+    const item = await storage.createDocumentHeaderFooter(req.body);
+    res.status(201).json(item);
+  });
+
+  app.patch("/api/document-header-footers/:id", async (req, res) => {
+    const item = await storage.updateDocumentHeaderFooter(req.params.id, req.body);
+    if (!item) return res.status(404).json({ message: "Bloc introuvable" });
+    res.json(item);
+  });
+
+  app.delete("/api/document-header-footers/:id", async (req, res) => {
+    await storage.deleteDocumentHeaderFooter(req.params.id);
     res.status(204).send();
   });
 
@@ -2985,6 +3017,18 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
     replacements["{nda_organisme}"] = settingsMap["org_nda"] || "";
     replacements["{email_organisme}"] = settingsMap["org_email"] || "";
     replacements["{telephone_organisme}"] = settingsMap["org_phone"] || "";
+
+    // Logo: replace {logo_organisme} variable and prepend logo header
+    const logoUrl = settingsMap["org_logo_url"];
+    const logoHtml = logoUrl
+      ? `<div style="text-align:center;margin-bottom:1rem;"><img src="${logoUrl}" alt="${replacements["{nom_organisme}"]}" style="max-height:80px;max-width:250px;object-fit:contain;" /></div>`
+      : "";
+    replacements["{logo_organisme}"] = logoHtml;
+
+    // If the content doesn't already contain {logo_organisme} placeholder, prepend logo
+    if (logoUrl && !template.content.includes("{logo_organisme}")) {
+      content = logoHtml + content;
+    }
 
     for (const [key, value] of Object.entries(replacements)) {
       content = content.replaceAll(key, value);
@@ -7804,10 +7848,11 @@ Le contenu doit être en français, clair et bien structuré.`;
   // Seed ALL templates (emails, SMS, documents, surveys, automation rules)
   app.post("/api/settings/seed-all-templates", async (_req, res) => {
     try {
-      const { seedAllTemplates } = await import("./seed-templates");
+      const { seedAllTemplates, seedDigiformaPrograms } = await import("./seed-templates");
       const { DOCUMENT_DEFAULTS } = await import("../client/src/lib/document-templates-defaults");
       const results = await seedAllTemplates(DOCUMENT_DEFAULTS);
-      res.json({ success: true, ...results });
+      const programResults = await seedDigiformaPrograms(false);
+      res.json({ success: true, ...results, programs: programResults });
     } catch (err: any) {
       console.error("Error seeding templates:", err);
       res.status(500).json({ success: false, error: err.message });
@@ -8166,6 +8211,17 @@ Le contenu doit être en français, clair et bien structuré.`;
     }
 
     let content = template.content;
+
+    // Logo injection
+    const logoUrl = settingsMap["org_logo_url"];
+    const logoHtml = logoUrl
+      ? `<div style="text-align:center;margin-bottom:1rem;"><img src="${logoUrl}" alt="${replacements["{nom_organisme}"]}" style="max-height:80px;max-width:250px;object-fit:contain;" /></div>`
+      : "";
+    replacements["{logo_organisme}"] = logoHtml;
+    if (logoUrl && !template.content.includes("{logo_organisme}")) {
+      content = logoHtml + content;
+    }
+
     for (const [key, value] of Object.entries(replacements)) {
       content = content.replaceAll(key, value);
     }
@@ -8657,6 +8713,16 @@ Le contenu doit être en français, clair et bien structuré.`;
             replacements["{siret_organisme}"] = settingsMap["org_siret"] || "";
             replacements["{email_organisme}"] = settingsMap["org_email"] || "";
             replacements["{telephone_organisme}"] = settingsMap["org_phone"] || "";
+
+            // Logo injection
+            const autoLogoUrl = settingsMap["org_logo_url"];
+            const autoLogoHtml = autoLogoUrl
+              ? `<div style="text-align:center;margin-bottom:1rem;"><img src="${autoLogoUrl}" alt="${replacements["{nom_organisme}"]}" style="max-height:80px;max-width:250px;object-fit:contain;" /></div>`
+              : "";
+            replacements["{logo_organisme}"] = autoLogoHtml;
+            if (autoLogoUrl && !docTemplate.content.includes("{logo_organisme}")) {
+              content = autoLogoHtml + content;
+            }
 
             for (const [key, value] of Object.entries(replacements)) {
               content = content.replaceAll(key, value);

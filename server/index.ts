@@ -17,7 +17,16 @@ async function runMigrations() {
   try {
     await pool.query(`ALTER TABLE programs ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT false`);
     await pool.query(`ALTER TABLE programs ADD COLUMN IF NOT EXISTS featured_order INTEGER DEFAULT 0`);
-    console.log("Migrations: featured columns ensured");
+    await pool.query(`CREATE TABLE IF NOT EXISTS document_header_footers (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'header',
+      content TEXT NOT NULL,
+      is_default BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    console.log("Migrations: all columns/tables ensured");
   } catch (err) {
     console.error("Migration error:", err);
   } finally {

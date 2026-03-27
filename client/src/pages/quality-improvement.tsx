@@ -991,6 +991,395 @@ function IncidentDetailDialog({ incident, onClose, onUpdate }: any) {
 }
 
 // =============================================
+// ACTIONS CORRECTIVES TAB (vue transversale Digiforma)
+// =============================================
+
+function ActionsCorrectivesTab() {
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const { data: incidents = [], isLoading } = useQuery({
+    queryKey: ["/api/quality-incidents"],
+    queryFn: () => apiRequest("GET", "/api/quality-incidents").then(r => r.json()),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/quality-incidents/${id}`, data).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quality-incidents"] });
+    },
+  });
+
+  // Flatten all corrective actions across incidents
+  const allActions: any[] = [];
+  incidents.forEach((inc: any) => {
+    const actions = Array.isArray(inc.correctiveActions) ? inc.correctiveActions : [];
+    actions.forEach((a: any) => {
+      allActions.push({ ...a, incidentId: inc.id, incidentRef: inc.reference, incidentTitle: inc.title, incidentActions: actions });
+    });
+  });
+
+  const filtered = allActions.filter(a => {
+    if (filterStatus !== "all" && a.status !== filterStatus) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return a.description?.toLowerCase().includes(s) || a.responsible?.toLowerCase().includes(s) || a.incidentRef?.toLowerCase().includes(s);
+    }
+    return true;
+  });
+
+  const stats = {
+    total: allActions.length,
+    pending: allActions.filter(a => a.status === "pending").length,
+    inProgress: allActions.filter(a => a.status === "in_progress").length,
+    done: allActions.filter(a => a.status === "done").length,
+  };
+
+  const toggleStatus = (action: any, newStatus: string) => {
+    const incident = incidents.find((i: any) => i.id === action.incidentId);
+    if (!incident) return;
+    const actions = Array.isArray(incident.correctiveActions) ? incident.correctiveActions : [];
+    const updated = actions.map((a: any) =>
+      a.id === action.id
+        ? { ...a, status: newStatus, completedAt: newStatus === "done" ? new Date().toISOString() : undefined }
+        : a
+    );
+    updateMutation.mutate({ id: incident.id, data: { correctiveActions: updated } });
+  };
+
+  if (isLoading) return <Skeleton className="h-96 w-full" />;
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold">{stats.total}</div><div className="text-sm text-muted-foreground">Total actions</div></CardContent></Card>
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold text-red-600">{stats.pending}</div><div className="text-sm text-muted-foreground">À faire</div></CardContent></Card>
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold text-amber-600">{stats.inProgress}</div><div className="text-sm text-muted-foreground">En cours</div></CardContent></Card>
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold text-green-600">{stats.done}</div><div className="text-sm text-muted-foreground">Réalisées</div></CardContent></Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-2 items-center flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder="Rechercher..." className="w-56" />
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Statut" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous statuts</SelectItem>
+            <SelectItem value="pending">À faire</SelectItem>
+            <SelectItem value="in_progress">En cours</SelectItem>
+            <SelectItem value="done">Réalisées</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Statut</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Incident lié</TableHead>
+              <TableHead>Responsable</TableHead>
+              <TableHead>Échéance</TableHead>
+              <TableHead>Réalisé le</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Aucune action corrective</TableCell></TableRow>
+            ) : filtered.map((a: any) => {
+              const isOverdue = a.status !== "done" && a.deadline && new Date(a.deadline) < new Date();
+              return (
+                <TableRow key={a.id}>
+                  <TableCell>
+                    <Badge variant={a.status === "done" ? "default" : a.status === "in_progress" ? "secondary" : "outline"}>
+                      {a.status === "done" ? "Fait" : a.status === "in_progress" ? "En cours" : "À faire"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="max-w-64">{a.description}</TableCell>
+                  <TableCell>
+                    <span className="font-mono text-xs">{a.incidentRef}</span>
+                    <div className="text-xs text-muted-foreground truncate max-w-32">{a.incidentTitle}</div>
+                  </TableCell>
+                  <TableCell>{a.responsible || "-"}</TableCell>
+                  <TableCell>
+                    {a.deadline ? (
+                      <span className={isOverdue ? "text-red-600 font-medium" : ""}>
+                        {new Date(a.deadline).toLocaleDateString("fr-FR")}
+                        {isOverdue && " ⚠"}
+                      </span>
+                    ) : "-"}
+                  </TableCell>
+                  <TableCell>{a.completedAt ? new Date(a.completedAt).toLocaleDateString("fr-FR") : "-"}</TableCell>
+                  <TableCell>
+                    <Select value={a.status} onValueChange={v => toggleStatus(a, v)}>
+                      <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">À faire</SelectItem>
+                        <SelectItem value="in_progress">En cours</SelectItem>
+                        <SelectItem value="done">Fait</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+}
+
+// =============================================
+// AXES D'AMÉLIORATION TAB (Digiforma style)
+// =============================================
+
+function AxesAmeliorationTab() {
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [editingAxis, setEditingAxis] = useState<any>(null);
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  const { data: incidents = [], isLoading } = useQuery({
+    queryKey: ["/api/quality-incidents"],
+    queryFn: () => apiRequest("GET", "/api/quality-incidents").then(r => r.json()),
+  });
+
+  // Collect all improvement axes from incidents + standalone axes from quality actions
+  const { data: qualityActions = [] } = useQuery({
+    queryKey: ["/api/quality-actions"],
+    queryFn: () => apiRequest("GET", "/api/quality-actions").then(r => r.json()),
+  });
+
+  // Flatten axes from incidents
+  const incidentAxes: any[] = [];
+  incidents.forEach((inc: any) => {
+    const axes = Array.isArray(inc.improvementAxes) ? inc.improvementAxes : [];
+    axes.forEach((a: any) => {
+      // Count related incidents for this axis
+      const relatedIncidents = incidents.filter((i: any) =>
+        Array.isArray(i.improvementAxes) && i.improvementAxes.some((ax: any) => ax.axis === a.axis)
+      ).length;
+      incidentAxes.push({ ...a, source: "incident", incidentId: inc.id, incidentRef: inc.reference, relatedIncidents });
+    });
+  });
+
+  // Deduplicate axes by name
+  const axesMap = new Map<string, any>();
+  incidentAxes.forEach(a => {
+    const key = a.axis.toLowerCase().trim();
+    if (!axesMap.has(key)) {
+      axesMap.set(key, { ...a, incidents: [a.incidentRef] });
+    } else {
+      const existing = axesMap.get(key);
+      if (!existing.incidents.includes(a.incidentRef)) {
+        existing.incidents.push(a.incidentRef);
+      }
+      existing.relatedIncidents = existing.incidents.length;
+    }
+  });
+
+  // Also add quality actions as axes
+  qualityActions.forEach((qa: any) => {
+    const key = qa.title?.toLowerCase().trim();
+    if (key && !axesMap.has(key)) {
+      axesMap.set(key, {
+        id: qa.id,
+        axis: qa.title,
+        description: qa.description,
+        priority: qa.priority || "medium",
+        status: qa.status === "completed" ? "optimise" : qa.status === "in_progress" ? "en_cours" : "a_adresser",
+        source: "quality_action",
+        incidents: [],
+        relatedIncidents: 0,
+      });
+    }
+  });
+
+  const allAxes = Array.from(axesMap.values());
+
+  // Map statuses to Digiforma style
+  const mapStatus = (s: string) => {
+    if (s === "implemented" || s === "optimise") return "optimise";
+    if (s === "in_progress" || s === "en_cours") return "en_cours";
+    return "a_adresser";
+  };
+
+  const filtered = allAxes.filter(a => {
+    const status = mapStatus(a.status);
+    if (filterStatus !== "all" && status !== filterStatus) return false;
+    return true;
+  });
+
+  const stats = {
+    total: allAxes.length,
+    aAdresser: allAxes.filter(a => mapStatus(a.status) === "a_adresser").length,
+    enCours: allAxes.filter(a => mapStatus(a.status) === "en_cours").length,
+    optimise: allAxes.filter(a => mapStatus(a.status) === "optimise").length,
+  };
+
+  const statusLabel = (s: string) => {
+    const mapped = mapStatus(s);
+    if (mapped === "optimise") return "Optimisé";
+    if (mapped === "en_cours") return "En cours";
+    return "À adresser";
+  };
+
+  const statusColor = (s: string) => {
+    const mapped = mapStatus(s);
+    if (mapped === "optimise") return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+    if (mapped === "en_cours") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+    return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+  };
+
+  if (isLoading) return <Skeleton className="h-96 w-full" />;
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold">{stats.total}</div><div className="text-sm text-muted-foreground">Total axes</div></CardContent></Card>
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold text-amber-600">{stats.aAdresser}</div><div className="text-sm text-muted-foreground">À adresser</div></CardContent></Card>
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold text-blue-600">{stats.enCours}</div><div className="text-sm text-muted-foreground">En cours</div></CardContent></Card>
+        <Card><CardContent className="pt-4 pb-4"><div className="text-2xl font-bold text-green-600">{stats.optimise}</div><div className="text-sm text-muted-foreground">Optimisé</div></CardContent></Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-2 items-center justify-between">
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Statut" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous statuts</SelectItem>
+            <SelectItem value="a_adresser">À adresser</SelectItem>
+            <SelectItem value="en_cours">En cours</SelectItem>
+            <SelectItem value="optimise">Optimisé</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={() => setShowForm(true)}>
+          <Plus className="h-4 w-4 mr-2" /> Ajouter un axe
+        </Button>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Axe d'amélioration</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Statut</TableHead>
+              <TableHead>Priorité</TableHead>
+              <TableHead>Incidents liés</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Aucun axe d'amélioration</TableCell></TableRow>
+            ) : filtered.map((a: any, idx: number) => (
+              <TableRow key={a.id || idx}>
+                <TableCell className="font-medium">{a.axis}</TableCell>
+                <TableCell className="max-w-64 text-sm text-muted-foreground">{a.description || "-"}</TableCell>
+                <TableCell><Badge className={statusColor(a.status)}>{statusLabel(a.status)}</Badge></TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    {a.priority === "high" ? "Haute" : a.priority === "medium" ? "Moyenne" : "Basse"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {a.incidents && a.incidents.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {a.incidents.map((ref: string) => (
+                        <Badge key={ref} variant="outline" className="font-mono text-xs">{ref}</Badge>
+                      ))}
+                    </div>
+                  ) : "-"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {/* Add axis form dialog */}
+      <Dialog open={showForm} onOpenChange={() => setShowForm(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Ajouter un axe d'amélioration</DialogTitle></DialogHeader>
+          <AddAxisForm
+            onSubmit={(data: any) => {
+              // Create as quality action
+              apiRequest("POST", "/api/quality-actions", {
+                title: data.axis,
+                description: data.description,
+                type: "improvement",
+                status: data.status === "en_cours" ? "in_progress" : data.status === "optimise" ? "completed" : "open",
+                priority: data.priority,
+              }).then(() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/quality-actions"] });
+                setShowForm(false);
+                toast({ title: "Axe d'amélioration créé" });
+              });
+            }}
+            onCancel={() => setShowForm(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function AddAxisForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; onCancel: () => void }) {
+  const [axis, setAxis] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [status, setStatus] = useState("a_adresser");
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label>Nom de l'axe</Label>
+        <Input value={axis} onChange={e => setAxis(e.target.value)} placeholder="Ex: Amélioration des supports pédagogiques" />
+      </div>
+      <div>
+        <Label>Description</Label>
+        <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Décrivez l'axe d'amélioration..." rows={3} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label>Statut</Label>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="a_adresser">À adresser</SelectItem>
+              <SelectItem value="en_cours">En cours</SelectItem>
+              <SelectItem value="optimise">Optimisé</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Priorité</Label>
+          <Select value={priority} onValueChange={setPriority}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Basse</SelectItem>
+              <SelectItem value="medium">Moyenne</SelectItem>
+              <SelectItem value="high">Haute</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onCancel}>Annuler</Button>
+        <Button onClick={() => onSubmit({ axis, description, priority, status })} disabled={!axis}>Ajouter</Button>
+      </div>
+    </div>
+  );
+}
+
+// =============================================
 // VEILLE TAB
 // =============================================
 
@@ -1412,27 +1801,39 @@ export default function QualityImprovement() {
     <PageLayout>
       <PageHeader
         title="Amélioration continue"
-        subtitle="Suivi des non-conformités et actions correctives"
+        subtitle="Incidents qualité, actions correctives et axes d'amélioration"
       />
 
-      <Tabs defaultValue="absences" className="space-y-4">
+      <Tabs defaultValue="incidents" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="absences" className="flex items-center gap-2">
-            <UserX className="h-4 w-4" /> Absences & Anomalies
-          </TabsTrigger>
           <TabsTrigger value="incidents" className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" /> Incidents Qualité
+            <AlertTriangle className="h-4 w-4" /> Incidents qualité
+          </TabsTrigger>
+          <TabsTrigger value="actions" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" /> Actions correctives
+          </TabsTrigger>
+          <TabsTrigger value="axes" className="flex items-center gap-2">
+            <Radar className="h-4 w-4" /> Axes d'amélioration
+          </TabsTrigger>
+          <TabsTrigger value="absences" className="flex items-center gap-2">
+            <UserX className="h-4 w-4" /> Absences
           </TabsTrigger>
           <TabsTrigger value="veille" className="flex items-center gap-2">
-            <Radar className="h-4 w-4" /> Veille
+            <Eye className="h-4 w-4" /> Veille
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="absences">
-          <AbsencesTab />
-        </TabsContent>
         <TabsContent value="incidents">
           <IncidentsTab />
+        </TabsContent>
+        <TabsContent value="actions">
+          <ActionsCorrectivesTab />
+        </TabsContent>
+        <TabsContent value="axes">
+          <AxesAmeliorationTab />
+        </TabsContent>
+        <TabsContent value="absences">
+          <AbsencesTab />
         </TabsContent>
         <TabsContent value="veille">
           <VeilleTab />
