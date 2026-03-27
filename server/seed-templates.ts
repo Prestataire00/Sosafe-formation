@@ -698,7 +698,24 @@ export async function seedAllTemplates(documentDefaults?: Record<string, string>
 }
 
 /**
- * Seed all 23 So'Safe / Digiforma training programs.
+ * Convert Digiforma array-of-objects fields to plain text.
+ */
+function textsToString(arr: Array<{ text?: string }> | null | undefined, separator = "\n"): string {
+  if (!arr || !Array.isArray(arr)) return "";
+  return arr.map(item => (typeof item === "string" ? item : item?.text || "")).filter(Boolean).join(separator);
+}
+
+function stepsToString(steps: Array<{ text?: string; substeps?: Array<{ text?: string }> }> | null | undefined): string {
+  if (!steps || !Array.isArray(steps)) return "";
+  return steps.map(step => {
+    const title = step.text || "";
+    const subs = (step.substeps || []).map(s => `  - ${s.text || ""}`).join("\n");
+    return subs ? `${title}\n${subs}` : title;
+  }).filter(Boolean).join("\n");
+}
+
+/**
+ * Seed So'Safe / Digiforma training programs from the exported JSON.
  * @param reset - if true, delete ALL existing programs first
  */
 export async function seedDigiformaPrograms(reset = false) {
@@ -715,7 +732,43 @@ export async function seedDigiformaPrograms(reset = false) {
   let created = 0;
   let skipped = 0;
 
-  const programs = [
+  // Try to load from Digiforma JSON export first
+  let digiformaPrograms: any[] | null = null;
+  try {
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.resolve(__dirname, "../scripts/digiforma-data/programs.json");
+    if (fs.existsSync(filePath)) {
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      digiformaPrograms = raw?.data?.programs || null;
+    }
+  } catch { /* fallback to hardcoded */ }
+
+  // Convert Digiforma data to our program format
+  const programs: any[] = digiformaPrograms
+    ? digiformaPrograms.filter((p: any) => p.onSale).map((p: any) => ({
+        title: (p.name || "").trim(),
+        subtitle: p.subtitle || null,
+        description: (p.description || "").replace(/\r\n/g, "\n").trim(),
+        categories: [p.category?.name, ...(p.tags || []).map((t: any) => t.name)].filter(Boolean),
+        duration: p.durationInHours || 0,
+        price: 0, // prices not in Digiforma export, set via admin
+        level: "all_levels",
+        objectives: textsToString(p.goals, "\n"),
+        prerequisites: textsToString(p.prerequisites, "\n") || "Aucun prérequis.",
+        modality: p.remote ? "distanciel" : "presentiel",
+        status: "published" as const,
+        certifying: !!p.cpf,
+        targetAudience: textsToString(p.targets, "\n"),
+        teachingMethods: textsToString(p.pedagogicalResources, "\n"),
+        evaluationMethods: textsToString(p.assessments, "\n"),
+        accessibilityInfo: (p.handicappedAccessibility || "").replace(/\r\n/g, "\n").trim(),
+        programContent: stepsToString(p.steps),
+        imageUrl: p.image?.url || null,
+        fundingTypes: p.cpf ? ["cpf", "opco", "entreprise"] : ["opco", "entreprise"],
+        maxParticipants: p.capacity?.max || 12,
+      }))
+    : [
     // === AFGSU ===
     {
       title: "AFGSU 1",
@@ -1175,11 +1228,24 @@ export async function seedDigiformaPrograms(reset = false) {
   let updated = 0;
   for (const prog of programs) {
     if (existingTitles.has(prog.title.toLowerCase())) {
-      // Update imageUrl if the existing program doesn't have one
-      if (prog.imageUrl) {
-        const match = existing.find((p: any) => p.title.toLowerCase() === prog.title.toLowerCase());
-        if (match && !match.imageUrl) {
-          await storage.updateProgram(match.id, { imageUrl: prog.imageUrl } as any);
+      // Update existing program with fresh Digiforma data
+      const match = existing.find((p: any) => p.title.toLowerCase() === prog.title.toLowerCase());
+      if (match) {
+        const updates: Record<string, any> = {};
+        // Always sync these fields from Digiforma
+        if (prog.description && prog.description !== match.description) updates.description = prog.description;
+        if (prog.objectives && prog.objectives !== match.objectives) updates.objectives = prog.objectives;
+        if (prog.prerequisites && prog.prerequisites !== match.prerequisites) updates.prerequisites = prog.prerequisites;
+        if (prog.targetAudience && prog.targetAudience !== match.targetAudience) updates.targetAudience = prog.targetAudience;
+        if (prog.teachingMethods && prog.teachingMethods !== match.teachingMethods) updates.teachingMethods = prog.teachingMethods;
+        if (prog.evaluationMethods && prog.evaluationMethods !== match.evaluationMethods) updates.evaluationMethods = prog.evaluationMethods;
+        if (prog.programContent && prog.programContent !== (match as any).programContent) updates.programContent = prog.programContent;
+        if (prog.accessibilityInfo && prog.accessibilityInfo !== match.accessibilityInfo) updates.accessibilityInfo = prog.accessibilityInfo;
+        if (prog.imageUrl && !match.imageUrl) updates.imageUrl = prog.imageUrl;
+        if (prog.duration && prog.duration !== match.duration) updates.duration = prog.duration;
+        if (prog.categories && JSON.stringify(prog.categories) !== JSON.stringify(match.categories)) updates.categories = prog.categories;
+        if (Object.keys(updates).length > 0) {
+          await storage.updateProgram(match.id, updates as any);
           updated++;
         }
       }

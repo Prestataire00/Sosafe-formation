@@ -407,10 +407,180 @@ function LocationForm({
   );
 }
 
+function LocationDetailSheet({
+  location,
+  onClose,
+  onEdit,
+}: {
+  location: TrainingLocation;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  const loc = location as any;
+  const fullAddress = [
+    [loc.roadNumber, loc.roadRepetition, loc.roadType, loc.roadLabel].filter(Boolean).join(" ") || loc.address,
+    loc.addressExtra,
+    [loc.postalCode, loc.city].filter(Boolean).join(" "),
+    loc.country !== "France" ? loc.country : null,
+  ].filter(Boolean).join(", ");
+
+  const cf = (loc.customFields || {}) as Record<string, any>;
+
+  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <div className="space-y-2">
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</h4>
+      {children}
+    </div>
+  );
+
+  const InfoRow = ({ icon: Icon, label, value }: { icon?: any; label: string; value: string | number | null | undefined }) => {
+    if (!value) return null;
+    return (
+      <div className="flex items-start gap-2 text-sm">
+        {Icon && <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />}
+        <div>
+          <span className="text-muted-foreground">{label} : </span>
+          <span>{value}</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative ml-auto w-full max-w-lg bg-background shadow-xl overflow-y-auto">
+        <div className="sticky top-0 bg-background border-b p-4 flex items-center justify-between z-10">
+          <div>
+            <h2 className="text-lg font-semibold">{loc.name}</h2>
+            {!loc.isActive && <Badge variant="outline" className="mt-1">Inactif</Badge>}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              <Pencil className="w-4 h-4 mr-1" /> Modifier
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {/* Adresse */}
+          {fullAddress && (
+            <Section title="Adresse">
+              <p className="text-sm flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                {fullAddress}
+              </p>
+            </Section>
+          )}
+
+          {/* Description */}
+          {loc.description && (
+            <Section title="Description">
+              <p className="text-sm whitespace-pre-wrap">{loc.description}</p>
+            </Section>
+          )}
+
+          {/* Capacité & Tarifs */}
+          <Section title="Capacité & Tarifs">
+            <InfoRow icon={Users} label="Capacité" value={loc.capacity ? `${loc.capacity} places` : null} />
+            <InfoRow icon={Euro} label="Prix journée" value={loc.pricePerDay ? `${loc.pricePerDay} €` : null} />
+            <InfoRow icon={Euro} label="Prix demi-journée" value={loc.pricePerHalfDay ? `${loc.pricePerHalfDay} €` : null} />
+          </Section>
+
+          {/* Salles */}
+          {loc.rooms && loc.rooms.length > 0 && (
+            <Section title="Salles">
+              <div className="flex flex-wrap gap-1.5">
+                {loc.rooms.map((room: string, i: number) => (
+                  <Badge key={i} variant="secondary">{room}</Badge>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Équipement */}
+          {(loc.equipment || cf.paperboard || cf.projector || cf.printer || cf.blackboard) && (
+            <Section title="Équipement">
+              {loc.equipment && <p className="text-sm">{loc.equipment}</p>}
+              <div className="flex flex-wrap gap-2 mt-1">
+                {cf.paperboard && <Badge variant="outline" className="text-xs"><CheckCircle className="w-3 h-3 mr-1" /> Paperboard</Badge>}
+                {cf.projector && <Badge variant="outline" className="text-xs"><Monitor className="w-3 h-3 mr-1" /> Projecteur</Badge>}
+                {cf.printer && <Badge variant="outline" className="text-xs"><CheckCircle className="w-3 h-3 mr-1" /> Imprimante</Badge>}
+                {cf.blackboard && <Badge variant="outline" className="text-xs"><CheckCircle className="w-3 h-3 mr-1" /> Tableau</Badge>}
+              </div>
+            </Section>
+          )}
+
+          {/* Wi-Fi */}
+          {(cf.wifiBorne || cf.wifiCode) && (
+            <Section title="Wi-Fi">
+              <InfoRow icon={Wifi} label="Réseau" value={cf.wifiBorne} />
+              <InfoRow label="Code" value={cf.wifiCode} />
+            </Section>
+          )}
+
+          {/* Accessibilité */}
+          <Section title="Accessibilité PMR">
+            <div className="flex items-center gap-2 text-sm">
+              {loc.accessibilityCompliant ? (
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <CheckCircle className="w-3 h-3 mr-1" /> Conforme PMR
+                </Badge>
+              ) : (
+                <Badge variant="outline">Non renseigné</Badge>
+              )}
+            </div>
+            <InfoRow icon={Accessibility} label="Accès" value={loc.accessInstructions} />
+            <InfoRow label="Infos accessibilité" value={loc.accessibilityInfo} />
+            <InfoRow icon={Car} label="Parking" value={loc.parkingInfo} />
+            <InfoRow icon={Train} label="Transports" value={loc.transportInfo} />
+          </Section>
+
+          {/* Contact */}
+          {(loc.contactName || loc.contactPhone || loc.contactEmail) && (
+            <Section title="Contact">
+              <InfoRow label="Nom" value={loc.contactName} />
+              <InfoRow icon={Phone} label="Téléphone" value={loc.contactPhone} />
+              <InfoRow icon={Mail} label="Email" value={loc.contactEmail} />
+            </Section>
+          )}
+
+          {/* Documents */}
+          {loc.documents && loc.documents.length > 0 && (
+            <Section title="Documents">
+              <div className="space-y-1.5">
+                {loc.documents.map((doc: any, i: number) => (
+                  <a key={i} href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 rounded border hover:bg-muted/50 text-sm text-primary">
+                    <FileText className="w-4 h-4 shrink-0" />
+                    {doc.fileName || doc.title}
+                  </a>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Admin */}
+          {(loc.siret || loc.notes) && (
+            <Section title="Administration">
+              <InfoRow icon={Building2} label="SIRET" value={loc.siret} />
+              {loc.notes && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{loc.notes}</p>}
+            </Section>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TrainingLocations() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editLocation, setEditLocation] = useState<TrainingLocation | undefined>();
+  const [viewLocation, setViewLocation] = useState<TrainingLocation | undefined>();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -511,7 +681,7 @@ export default function TrainingLocations() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((loc) => (
-            <Card key={loc.id} className="hover:shadow-md transition-shadow">
+            <Card key={loc.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setViewLocation(loc)}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -531,7 +701,7 @@ export default function TrainingLocations() {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <MoreHorizontal className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -604,6 +774,18 @@ export default function TrainingLocations() {
           />
         </DialogContent>
       </Dialog>
+
+      {viewLocation && (
+        <LocationDetailSheet
+          location={viewLocation}
+          onClose={() => setViewLocation(undefined)}
+          onEdit={() => {
+            setEditLocation(viewLocation);
+            setViewLocation(undefined);
+            setDialogOpen(true);
+          }}
+        />
+      )}
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
         <AlertDialogContent>

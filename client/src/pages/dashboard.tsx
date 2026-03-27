@@ -157,7 +157,7 @@ export default function Dashboard() {
   const { data: enrollments, isLoading: loadingEnrollments } = useQuery<Enrollment[]>({
     queryKey: ["/api/enrollments"],
   });
-  const { data: invoiceStats } = useQuery<{ total: number; paid: number; pending: number; overdue: number; count: number }>({
+  const { data: invoiceStats } = useQuery<{ totalAmount: number; paidAmount: number; pendingAmount: number; overdueAmount: number; totalCount: number; paidCount: number; pendingCount: number; overdueCount: number }>({
     queryKey: ["/api/invoices/stats"],
   });
   const { data: surveyStats } = useQuery<{ totalResponses: number; averageRating: number; ratingsCount: number }>({
@@ -224,10 +224,10 @@ export default function Dashboard() {
         {user?.role === "admin" ? (
           <StatCard
             title="Chiffre d'affaires"
-            value={invoiceStats ? `${(invoiceStats.paid / 100).toLocaleString("fr-FR")} €` : "0 €"}
+            value={invoiceStats ? `${(invoiceStats.paidAmount / 100).toLocaleString("fr-FR")} €` : "0 €"}
             icon={Euro}
             color="orange"
-            subtitle={invoiceStats ? `${invoiceStats.count} facture${invoiceStats.count > 1 ? "s" : ""}` : ""}
+            subtitle={invoiceStats ? `${invoiceStats.totalCount} facture${invoiceStats.totalCount > 1 ? "s" : ""}` : ""}
             loading={loading}
             testId="card-stat-revenue"
           />
@@ -266,10 +266,10 @@ export default function Dashboard() {
           />
           <StatCard
             title="Impayés"
-            value={invoiceStats ? `${((invoiceStats.pending + invoiceStats.overdue) / 100).toLocaleString("fr-FR")} €` : "0 €"}
+            value={invoiceStats ? `${((invoiceStats.pendingAmount + invoiceStats.overdueAmount) / 100).toLocaleString("fr-FR")} €` : "0 €"}
             icon={CreditCard}
             color="destructive"
-            subtitle={invoiceStats?.overdue ? `dont ${(invoiceStats.overdue / 100).toLocaleString("fr-FR")} € en retard` : ""}
+            subtitle={invoiceStats?.overdueAmount ? `dont ${(invoiceStats.overdueAmount / 100).toLocaleString("fr-FR")} € en retard` : ""}
             loading={loading}
             testId="card-stat-unpaid"
           />
