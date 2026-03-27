@@ -4019,11 +4019,19 @@ Reponds UNIQUEMENT avec le HTML du document, sans backticks, sans explication.`;
 
   app.get("/api/invoices/stats", async (_req, res) => {
     const allInvoices = await storage.getInvoices();
-    const total = allInvoices.reduce((sum, inv) => sum + inv.total, 0);
-    const paid = allInvoices.filter(i => i.status === "paid").reduce((sum, inv) => sum + inv.total, 0);
-    const pending = allInvoices.filter(i => i.status === "sent" || i.status === "partial").reduce((sum, inv) => sum + inv.total - inv.paidAmount, 0);
-    const overdue = allInvoices.filter(i => i.status === "overdue").reduce((sum, inv) => sum + inv.total - inv.paidAmount, 0);
-    res.json({ total, paid, pending, overdue, count: allInvoices.length });
+    const paidInvoices = allInvoices.filter(i => i.status === "paid");
+    const pendingInvoices = allInvoices.filter(i => i.status === "sent" || i.status === "partial" || i.status === "draft");
+    const overdueInvoices = allInvoices.filter(i => i.status === "overdue");
+    res.json({
+      totalAmount: allInvoices.reduce((sum, inv) => sum + inv.total, 0),
+      totalCount: allInvoices.length,
+      paidAmount: paidInvoices.reduce((sum, inv) => sum + inv.total, 0),
+      paidCount: paidInvoices.length,
+      pendingAmount: pendingInvoices.reduce((sum, inv) => sum + inv.total - inv.paidAmount, 0),
+      pendingCount: pendingInvoices.length,
+      overdueAmount: overdueInvoices.reduce((sum, inv) => sum + inv.total - inv.paidAmount, 0),
+      overdueCount: overdueInvoices.length,
+    });
   });
 
   app.get("/api/invoices/:id", async (req, res) => {

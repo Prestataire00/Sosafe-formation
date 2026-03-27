@@ -205,6 +205,17 @@ app.get("/widget/sosafe-catalog.js", async (_req, res) => {
 });
 app.use("/widget", express.static(path.resolve(process.cwd(), "public/widget")));
 
+// Widget preview page for admin catalog config
+app.get("/widget-preview", (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;padding:20px;font-family:system-ui;background:#fff}</style>
+</head><body>
+<div id="sosafe-catalog"></div>
+<script src="/widget/sosafe-catalog.js"></script>
+</body></html>`);
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

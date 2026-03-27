@@ -102,6 +102,7 @@ import AdvancedFeatures from "@/pages/advanced-features";
 import TaskListsPage from "@/pages/task-lists";
 import TrainingLocations from "@/pages/training-locations";
 import IntegrationWebsite from "@/pages/integration-website";
+import CatalogConfig from "@/pages/catalog-config";
 import DataMigration from "@/pages/data-migration";
 import CommandPalette from "@/components/CommandPalette";
 import NotificationBell from "@/components/NotificationBell";
@@ -156,6 +157,7 @@ function Router() {
       <Route path="/quiz-manager">{() => <RoleGuard allowedRoles={["admin"]}><QuizManager /></RoleGuard>}</Route>
       <Route path="/quiz/presenter/:id" component={QuizPresenter} />
       <Route path="/integration">{() => <RoleGuard allowedRoles={["admin"]}><IntegrationWebsite /></RoleGuard>}</Route>
+      <Route path="/catalog-config">{() => <RoleGuard allowedRoles={["admin"]}><CatalogConfig /></RoleGuard>}</Route>
       <Route path="/data-migration">{() => <RoleGuard allowedRoles={["admin"]}><DataMigration /></RoleGuard>}</Route>
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
