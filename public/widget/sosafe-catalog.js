@@ -666,6 +666,24 @@
     }
   }
 
+  function renderBundle(bundle) {
+    var config = bundle.config || {};
+    var programs = bundle.programs || [];
+    widgetStats = bundle.stats || null;
+    if (widgetStats) {
+      widgetStats.totalPrograms = programs.length;
+    }
+    allPrograms = programs;
+    var style = document.createElement("style");
+    style.textContent = buildStyles(config.theme);
+    shadow.innerHTML = "";
+    shadow.appendChild(style);
+    var wrapper = document.createElement("div");
+    wrapper.innerHTML = renderCatalog(programs, config.theme, config);
+    shadow.appendChild(wrapper);
+    setupInteractions(shadow);
+  }
+
   function fetchData() {
     var headers = { "X-API-Key": apiKey };
     var bundleUrl = baseUrl + "/api/v1/widget/bundle";
@@ -677,21 +695,7 @@
         return r.json();
       })
       .then(function (bundle) {
-        var config = bundle.config || {};
-        var programs = bundle.programs || [];
-        widgetStats = bundle.stats || null;
-        if (widgetStats) {
-          widgetStats.totalPrograms = programs.length;
-        }
-        allPrograms = programs;
-        var style = document.createElement("style");
-        style.textContent = buildStyles(config.theme);
-        shadow.innerHTML = "";
-        shadow.appendChild(style);
-        var wrapper = document.createElement("div");
-        wrapper.innerHTML = renderCatalog(programs, config.theme, config);
-        shadow.appendChild(wrapper);
-        setupInteractions(shadow);
+        renderBundle(bundle);
       })
       .catch(function (err) {
         shadow.innerHTML = "";
@@ -705,6 +709,11 @@
       });
   }
 
-  shadow.innerHTML = '<div style="text-align:center;padding:3rem;color:#9ca3af;font-size:.9rem">Chargement des formations...</div>';
-  fetchData();
+  // If data is pre-embedded by the server (SSR), render instantly. Otherwise fetch.
+  if (window.__SOSAFE_WIDGET_DATA__) {
+    renderBundle(window.__SOSAFE_WIDGET_DATA__);
+  } else {
+    shadow.innerHTML = '<div style="text-align:center;padding:3rem;color:#9ca3af;font-size:.9rem">Chargement des formations...</div>';
+    fetchData();
+  }
 })();

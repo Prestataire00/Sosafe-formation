@@ -84,7 +84,95 @@ app.get("/uploads/:filename", (req, res) => {
 // SCORM extracted packages served statically
 app.use("/uploads/scorm", express.static(path.resolve(process.cwd(), "uploads/scorm")));
 
-// Widget JS served statically
+// Widget JS — dynamic route serves pre-embedded data for instant render
+// Falls back to static file for other widget assets
+let widgetJsCache: { js: string; data: string; timestamp: number } | null = null;
+const WIDGET_JS_PATH = path.resolve(process.cwd(), "public/widget/sosafe-catalog.js");
+const WIDGET_SSR_TTL = 5 * 60 * 1000; // 5 min
+
+app.get("/widget/sosafe-catalog.js", async (_req, res) => {
+  try {
+    res.set("Content-Type", "application/javascript; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600");
+
+    // Read widget JS (cache the file content)
+    if (!widgetJsCache || Date.now() - widgetJsCache.timestamp > WIDGET_SSR_TTL) {
+      const widgetJs = fs.readFileSync(WIDGET_JS_PATH, "utf-8");
+
+      // Build bundle data server-side
+      const { storage } = await import("./storage");
+      const today = new Date().toISOString().split("T")[0];
+      const [programs, sessions, sessionTrainers, trainers, enrollments, surveyResponses, allTrainees] = await Promise.all([
+        storage.getPrograms(),
+        storage.getSessions(),
+        storage.getAllSessionTrainers(),
+        storage.getTrainers(),
+        storage.getEnrollments(),
+        storage.getSurveyResponses(),
+        storage.getTrainees(),
+      ]);
+
+      const activePrograms = programs.filter((p: any) => p.status === "published");
+      const catalogPrograms = await Promise.all(activePrograms.map(async (p: any) => {
+        const programSessions = sessions
+          .filter((s: any) => s.programId === p.id && (s.status === "planned" || s.status === "ongoing") && s.endDate >= today)
+          .sort((a: any, b: any) => a.startDate.localeCompare(b.startDate));
+        const upcomingSessions = [];
+        for (const s of programSessions) {
+          const enrollmentCount = await storage.getEnrollmentCount(s.id);
+          upcomingSessions.push({
+            id: s.id, startDate: s.startDate, endDate: s.endDate,
+            location: s.location, locationAddress: s.locationAddress, locationRoom: s.locationRoom,
+            maxParticipants: s.maxParticipants || 12,
+            remainingSpots: (s.maxParticipants || 12) - enrollmentCount,
+            isFull: ((s.maxParticipants || 12) - enrollmentCount) <= 0,
+          });
+        }
+        const sessionIds = programSessions.map((s: any) => s.id);
+        const trainerIds = [...new Set(sessionTrainers.filter((st: any) => sessionIds.includes(st.sessionId)).map((st: any) => st.trainerId))];
+        const uniqueTrainers = trainers.filter((t: any) => trainerIds.includes(t.id));
+        return {
+          id: p.id, title: p.title, description: p.description, categories: p.categories,
+          duration: p.duration, objectives: p.objectives, prerequisites: p.prerequisites,
+          modality: p.modality, price: p.price, certifying: p.certifying || false,
+          targetAudience: p.targetAudience, teachingMethods: p.teachingMethods,
+          evaluationMethods: p.evaluationMethods, accessibilityInfo: p.accessibilityInfo,
+          accessDelay: p.accessDelay, programContent: p.programContent,
+          imageUrl: p.imageUrl || null, subtitle: (p as any).subtitle || null,
+          sessions: upcomingSessions,
+          trainers: uniqueTrainers.map((t: any) => ({ firstName: t.firstName, lastName: t.lastName, specialty: t.specialty, avatarUrl: t.avatarUrl || null })),
+        };
+      }));
+
+      const completedEnrollments = enrollments.filter((e: any) => e.status === "completed");
+      const satisfactionScores = surveyResponses.filter((r: any) => r.satisfactionScore != null).map((r: any) => r.satisfactionScore);
+      const satisfactionRate = satisfactionScores.length > 0 ? Math.round(satisfactionScores.reduce((a: number, b: number) => a + b, 0) / satisfactionScores.length) : 99;
+      const recommendScores = surveyResponses.filter((r: any) => r.recommendScore != null).map((r: any) => r.recommendScore);
+      const recommendationRate = recommendScores.length > 0 ? Math.round((recommendScores.filter((s: number) => s >= 4).length / recommendScores.length) * 100) : 99;
+      const successCount = completedEnrollments.filter((e: any) => e.result === "success" || e.result === "validated").length;
+      const successRate = completedEnrollments.length > 0 ? Math.round((successCount / completedEnrollments.length) * 100) : 100;
+
+      const bundleData = {
+        programs: catalogPrograms,
+        stats: { totalTrainees: allTrainees.length, totalPrograms: catalogPrograms.length, successRate, satisfactionRate, recommendationRate },
+        config: {},
+      };
+
+      widgetJsCache = {
+        js: widgetJs,
+        data: JSON.stringify(bundleData),
+        timestamp: Date.now(),
+      };
+    }
+
+    // Serve JS with data pre-embedded
+    const output = "window.__SOSAFE_WIDGET_DATA__=" + widgetJsCache.data + ";\n" + widgetJsCache.js;
+    res.send(output);
+  } catch (error) {
+    // Fallback to static file
+    res.sendFile(WIDGET_JS_PATH);
+  }
+});
 app.use("/widget", express.static(path.resolve(process.cwd(), "public/widget")));
 
 export function log(message: string, source = "express") {
