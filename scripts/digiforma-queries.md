@@ -84,6 +84,21 @@ query { academy { id contactEmail vatExempted academyExtranetAvatar name address
 
 ---
 
+## 10. Modules e-learning (→ modules.json)
+
+```graphql
+query { modules(pagination: {page: 0, size: 50}) { id name description sequenceType visible forum showScore visibilityMode image { url } documents { id filename type url } embeds { id url name } scorms { id name url } sequence { id name description resourceType resourceId durationMin } } }
+```
+
+Pour récupérer le contenu HTML d'un module spécifique :
+```graphql
+query { module(id: "MODULE_ID") { htmlDocs { id html css } } }
+```
+
+Types de `ModuleSequenceItem.resourceType` : `html_doc`, `evaluation`
+
+---
+
 ## Champs NON disponibles dans l'API Digiforma
 
 - Factures : `totalHT`, `totalTTC`, `totalVAT`, `status`, `type`, `paidAmount`, `remainingAmount` → n'existent pas
