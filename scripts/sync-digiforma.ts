@@ -660,6 +660,94 @@ async function syncQuotations(client: pg.PoolClient) {
 }
 
 // ============================================================
+// 9. E-LEARNING MODULES
+// ============================================================
+async function syncModules(client: pg.PoolClient) {
+  let modulesData: any;
+  try {
+    modulesData = loadJson("modules.json");
+  } catch {
+    console.log("\n=== Modules e-learning: fichier modules.json absent, ignoré ===");
+    return;
+  }
+  const modules = modulesData.data?.modules || [];
+  console.log(`\n=== Modules e-learning: ${modules.length} ===`);
+
+  // Map block types from Digiforma to LMS
+  const blockTypeMap: Record<string, string> = {
+    html_doc: "text",
+    evaluation: "quiz",
+  };
+
+  let syncedModules = 0;
+  let syncedBlocks = 0;
+
+  for (const mod of modules) {
+    const moduleId = `digiforma-mod-${mod.id}`;
+
+    // Upsert module
+    const existing = await client.query(
+      `SELECT id FROM elearning_modules WHERE id = $1`,
+      [moduleId]
+    );
+
+    if (existing.rows.length > 0) {
+      await client.query(
+        `UPDATE elearning_modules SET title = $1, description = $2, status = $3, require_sequential = $4 WHERE id = $5`,
+        [
+          mod.name?.trim() || "Module sans titre",
+          mod.description || null,
+          mod.visible ? "published" : "draft",
+          mod.sequenceType === "ELEARNING",
+          moduleId,
+        ]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO elearning_modules (id, title, description, status, require_sequential, order_index, path_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          moduleId,
+          mod.name?.trim() || "Module sans titre",
+          mod.description || null,
+          mod.visible ? "published" : "draft",
+          mod.sequenceType === "ELEARNING",
+          0,
+          "combined",
+        ]
+      );
+    }
+    syncedModules++;
+
+    // Sync sequence items as elearning_blocks
+    const sequence = mod.sequence || [];
+    // Remove old blocks for this module before re-inserting
+    await client.query(`DELETE FROM elearning_blocks WHERE module_id = $1`, [moduleId]);
+
+    for (let i = 0; i < sequence.length; i++) {
+      const step = sequence[i];
+      const blockType = blockTypeMap[step.resourceType] || "text";
+
+      await client.query(
+        `INSERT INTO elearning_blocks (id, module_id, type, title, content, order_index)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          `digiforma-blk-${step.id}`,
+          moduleId,
+          blockType,
+          step.name?.trim() || `Étape ${i + 1}`,
+          step.description || null,
+          i,
+        ]
+      );
+      syncedBlocks++;
+    }
+  }
+
+  console.log(`  ✓ ${syncedModules} modules, ${syncedBlocks} blocs synchronisés`);
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 async function main() {
@@ -725,6 +813,7 @@ async function main() {
     await syncEnrollments(client);
     await syncInvoices(client);
     await syncQuotations(client);
+    await syncModules(client);
 
     // Summary
     console.log("\n╔══════════════════════════════════════════════╗");
