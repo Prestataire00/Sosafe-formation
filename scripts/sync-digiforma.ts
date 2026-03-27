@@ -241,6 +241,65 @@ async function syncTrainees(client: pg.PoolClient) {
 // Map every Digiforma program ID to a canonical LMS program ID
 const digiProgramToCanonical = new Map<string, string>();
 
+// Known prices HT per person — Digiforma doesn't expose them via API
+const PROGRAM_PRICES: Record<string, number> = {
+  "afgsu 1": 750,
+  "afgsu 2": 750,
+  "afgsu2": 750,
+  "recyclage afgsu 1": 250,
+  "recyclage afgsu 2": 250,
+  "recyclage afgsu2": 250,
+  "formation nouveaux actes ambulanciers": 710,
+  "nouveaux actes ambulanciers": 710,
+  "hypnose": 1000,
+  "eusim": 1920,
+  "eusim 1": 1920,
+  "eusim 2": 1920,
+  "eusim niveau 1": 1920,
+  "eusim niveau 2": 1920,
+  "premiers secours en santé mentale": 250,
+  "pssm": 250,
+  "escape game": 1200,
+  "damage control": 1200,
+  "débriefing difficile": 3200,
+  "certibiocide": 490,
+  "démence": 750,
+  "accompagner autrement": 750,
+  "sim\u2019coach": 5000,
+  "sim'coach": 5000,
+  "simcoach": 5000,
+  "peer-coaching": 1500,
+  "peer coaching": 1500,
+  "initiation premiers secours": 150,
+  "certificat de décès": 350,
+  "céphalées": 750,
+  "cervicalgies": 750,
+  "urgences pédiatriques": 750,
+  "situation sanitaire exceptionnelle": 750,
+  "violence et de l'agressivité": 750,
+  "défibrillateur": 350,
+  "milieu nautique": 750,
+  "formateur en simulation": 2500,
+  "formation formateur": 2500,
+};
+
+function lookupPrice(title: string): number {
+  const t = title.toLowerCase().normalize("NFC").trim();
+  let best = 0;
+  let bestLen = 0;
+  for (const [key, val] of Object.entries(PROGRAM_PRICES)) {
+    const k = key.normalize("NFC");
+    if ((t.includes(k) || k.includes(t)) && k.length > bestLen) {
+      bestLen = k.length;
+      best = val;
+    }
+  }
+  // Recyclage override
+  if (t.startsWith("recyclage") && best > 250) best = 250;
+  if (!t.startsWith("recyclage") && t.includes("afgsu") && best === 250) best = 750;
+  return best;
+}
+
 async function syncPrograms(client: pg.PoolClient) {
   const { data } = loadJson("programs.json");
   const allPrograms = data.programs || [];
@@ -285,7 +344,7 @@ async function syncPrograms(client: pg.PoolClient) {
         p.description || null,
         JSON.stringify(p.category?.name ? [p.category.name] : []),
         p.durationInHours || 0,
-        p.costsInter?.[0]?.cost || 0,
+        p.costsInter?.[0]?.cost || lookupPrice(p.name || "") || 0,
         "all_levels",
         // Format arrays as readable text for the LMS
         (p.goals || []).map((g: string) => `• ${g}`).join("\n") || null,
@@ -446,14 +505,15 @@ async function syncInvoices(client: pg.PoolClient) {
         number,
         title: inv.freeText && inv.freeText.startsWith("Avoir") ? `Avoir ${number}` : `Facture ${number}`,
         invoice_type: inv.freeText && inv.freeText.startsWith("Avoir") ? "credit_note" : "standard",
-        status: inv.locked ? "sent" : "draft",
+        status: inv.status === "paid" ? "paid" : inv.status === "partially_paid" ? "partially_paid" : inv.locked ? "sent" : "draft",
         due_date: inv.date || null,
         notes: [inv.reference, inv.freeText].filter(Boolean).join("\n") || null,
-        subtotal: 0,
-        tax_rate: 0,
-        tax_amount: 0,
-        total: 0,
-        paid_amount: 0,
+        subtotal: parseFloat(inv.totalHT) || 0,
+        tax_rate: inv.totalHT > 0 ? Math.round((parseFloat(inv.totalVAT) / parseFloat(inv.totalHT)) * 10000) / 100 : 0,
+        tax_amount: parseFloat(inv.totalVAT) || 0,
+        total: parseFloat(inv.totalTTC) || 0,
+        paid_amount: parseFloat(inv.paidAmount) || 0,
+        enterprise_id: inv.customer?.id ? idMaps.enterprises.get(inv.customer.id) || null : null,
         client_address: inv.roadAddress || null,
         client_city: inv.city || null,
         client_postal_code: inv.cityCode?.trim() || null,
@@ -500,10 +560,10 @@ async function syncQuotations(client: pg.PoolClient) {
         number,
         title: `Devis ${number}`,
         status,
-        subtotal: 0,
-        tax_rate: 0,
-        tax_amount: 0,
-        total: 0,
+        subtotal: parseFloat(q.totalHT) || 0,
+        tax_rate: q.totalHT > 0 ? Math.round((parseFloat(q.totalVAT) / parseFloat(q.totalHT)) * 10000) / 100 : 0,
+        tax_amount: parseFloat(q.totalVAT) || 0,
+        total: parseFloat(q.totalTTC) || 0,
         notes: null,
       });
       synced++;
