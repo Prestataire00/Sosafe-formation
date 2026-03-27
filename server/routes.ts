@@ -7848,11 +7848,11 @@ Le contenu doit être en français, clair et bien structuré.`;
   // Seed ALL templates (emails, SMS, documents, surveys, automation rules)
   app.post("/api/settings/seed-all-templates", async (_req, res) => {
     try {
-      const { seedAllTemplates, seedDigiformaPrograms } = await import("./seed-templates");
+      const { seedAllTemplates } = await import("./seed-templates");
       const { DOCUMENT_DEFAULTS } = await import("../client/src/lib/document-templates-defaults");
       const results = await seedAllTemplates(DOCUMENT_DEFAULTS);
-      const programResults = await seedDigiformaPrograms(false);
-      res.json({ success: true, ...results, programs: programResults });
+      // Programs are now managed by scripts/sync-digiforma.ts — skip seed
+      res.json({ success: true, ...results });
     } catch (err: any) {
       console.error("Error seeding templates:", err);
       res.status(500).json({ success: false, error: err.message });

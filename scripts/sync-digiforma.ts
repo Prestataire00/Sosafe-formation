@@ -235,73 +235,82 @@ async function syncTrainees(client: pg.PoolClient) {
 }
 
 // ============================================================
-// 5. PROGRAMS
+// 5. PROGRAMS — dédupliqués (1 par nom, onSale prioritaire)
 // ============================================================
+
+// Map every Digiforma program ID to a canonical LMS program ID
+const digiProgramToCanonical = new Map<string, string>();
+
 async function syncPrograms(client: pg.PoolClient) {
   const { data } = loadJson("programs.json");
-  const programs = data.programs || [];
-  console.log(`\n=== Programmes: ${programs.length} ===`);
+  const allPrograms = data.programs || [];
 
-  // Load categories from misc
-  const misc = loadJson("misc.json");
-  const categoryMap = new Map<string, string>();
-  for (const cat of misc.data?.programCategories || []) {
-    categoryMap.set(cat.id, cat.name);
+  // Group by trimmed name
+  const byName: Record<string, any[]> = {};
+  for (const p of allPrograms) {
+    const key = p.name.trim();
+    if (!byName[key]) byName[key] = [];
+    byName[key].push(p);
   }
 
-  for (const p of programs) {
-    // Build text fields from arrays
-    const objectives = (p.goals || []).map((g: any) => g.text).join("\n");
-    const prerequisites = (p.prerequisites || []).map((pr: any) => pr.text).join("\n");
-    const targetAudience = (p.targets || []).map((t: any) => t.text).join("\n");
-    const evaluationMethods = (p.assessments || []).map((a: any) => a.text).join("\n");
-    const teachingMethods = (p.pedagogicalResources || []).map((r: any) => r.text).join("\n");
+  // Pick canonical: onSale=true first, then highest ID (most recent)
+  const canonical: any[] = [];
+  for (const [, variants] of Object.entries(byName)) {
+    const onSale = variants.find((v: any) => v.onSale);
+    const picked = onSale || variants.sort((a: any, b: any) => parseInt(b.id) - parseInt(a.id))[0];
+    canonical.push({ picked, allIds: variants.map((v: any) => v.id) });
+  }
 
-    // Build program content from steps
-    const programContent = (p.steps || [])
-      .map((s: any) => {
-        const substeps = (s.substeps || []).map((ss: any) => `  - ${ss.text}`).join("\n");
-        return substeps ? `${s.text}\n${substeps}` : s.text;
-      })
-      .join("\n\n");
+  console.log(`\n=== Programmes: ${canonical.length} uniques (sur ${allPrograms.length} dans Digiforma) ===`);
 
-    // Categories
-    const categories: string[] = [];
-    if (p.category?.name) categories.push(p.category.name);
-    if (p.tags) {
-      for (const tag of p.tags) {
-        if (tag.name && !categories.includes(tag.name)) categories.push(tag.name);
-      }
+  // Delete all existing programs, sessions, enrollments for clean import
+  await client.query("DELETE FROM enrollments");
+  await client.query("DELETE FROM session_trainers");
+  await client.query("DELETE FROM sessions");
+  await client.query("DELETE FROM programs");
+  console.log("  ✓ Tables programs/sessions/enrollments nettoyées");
+
+  for (const { picked: p, allIds } of canonical) {
+    // Store raw Digiforma data — no transformation
+    const result = await client.query(
+      `INSERT INTO programs (
+        digiforma_id, title, description, categories, duration, price, level,
+        objectives, prerequisites, modality, status, certifying,
+        program_content, target_audience, teaching_methods, evaluation_methods,
+        accessibility_info, image_url, funding_types
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+      [
+        p.id,
+        p.name || "Sans titre",
+        p.description || null,
+        JSON.stringify(p.category?.name ? [p.category.name] : []),
+        p.durationInHours || 0,
+        0,
+        "all_levels",
+        // Raw Digiforma arrays stored as JSON
+        JSON.stringify(p.goals || []),
+        JSON.stringify(p.prerequisites || []),
+        "presentiel",
+        p.onSale ? "active" : "draft",
+        p.cpf || false,
+        JSON.stringify(p.steps || []),
+        JSON.stringify(p.targets || []),
+        JSON.stringify(p.pedagogicalResources || []),
+        JSON.stringify(p.assessments || []),
+        p.handicappedAccessibility || null,
+        p.image?.url || null,
+        JSON.stringify(p.cpf ? ["cpf"] : []),
+      ]
+    );
+    const lmsId = result.rows[0].id;
+
+    // Map ALL variant IDs to this single canonical program
+    for (const variantId of allIds) {
+      digiProgramToCanonical.set(variantId, lmsId);
     }
-
-    // Status
-    let status = "active";
-    if (!p.onSale) status = "draft";
-
-    const lmsId = await upsert(client, "programs", {
-      digiforma_id: p.id,
-      title: p.name || "Sans titre",
-      description: p.description || null,
-      categories: JSON.stringify(categories),
-      duration: p.durationInHours || 0,
-      price: 0, // Digiforma n'expose pas le prix dans le programme
-      level: "all_levels",
-      objectives: objectives || null,
-      prerequisites: prerequisites || null,
-      modality: "presentiel",
-      status,
-      certifying: p.cpf || false,
-      program_content: programContent || null,
-      target_audience: targetAudience || null,
-      teaching_methods: teachingMethods || null,
-      evaluation_methods: evaluationMethods || null,
-      accessibility_info: p.handicappedAccessibility || null,
-      image_url: p.image?.url || null,
-      funding_types: JSON.stringify(p.cpf ? ["cpf"] : []),
-    });
     idMaps.programs.set(p.id, lmsId);
   }
-  console.log(`  ✓ ${programs.length} programmes synchronisés`);
+  console.log(`  ✓ ${canonical.length} programmes importés`);
 }
 
 // ============================================================
@@ -315,8 +324,8 @@ async function syncSessions(client: pg.PoolClient) {
   let synced = 0;
   let skipped = 0;
   for (const s of sessions) {
-    // Require program mapping and dates
-    const programId = s.program?.id ? idMaps.programs.get(s.program.id) : null;
+    // Require program mapping and dates — use canonical program map
+    const programId = s.program?.id ? digiProgramToCanonical.get(s.program.id) : null;
     if (!programId) {
       skipped++;
       continue;
@@ -394,8 +403,8 @@ async function syncInvoices(client: pg.PoolClient) {
       await upsert(client, "invoices", {
         digiforma_id: inv.id,
         number,
-        title: `Facture ${number}`,
-        invoice_type: "standard",
+        title: inv.freeText && inv.freeText.startsWith("Avoir") ? `Avoir ${number}` : `Facture ${number}`,
+        invoice_type: inv.freeText && inv.freeText.startsWith("Avoir") ? "credit_note" : "standard",
         status: inv.locked ? "sent" : "draft",
         due_date: inv.date || null,
         notes: [inv.reference, inv.freeText].filter(Boolean).join("\n") || null,
@@ -404,6 +413,15 @@ async function syncInvoices(client: pg.PoolClient) {
         tax_amount: 0,
         total: 0,
         paid_amount: 0,
+        client_address: inv.roadAddress || null,
+        client_city: inv.city || null,
+        client_postal_code: inv.cityCode?.trim() || null,
+        client_country_code: inv.countryCode || "FR",
+        file_url: inv.fileUrl || null,
+        order_form: inv.orderForm || null,
+        payment_limit_days: inv.paymentLimitDays || null,
+        is_payment_limit_end_month: inv.isPaymentLimitEndMonth || false,
+        reference: inv.reference || null,
       });
       synced++;
     } catch (err: any) {
@@ -497,6 +515,16 @@ async function main() {
       "CREATE UNIQUE INDEX idx_training_locations_digiforma_id ON training_locations(digiforma_id) WHERE digiforma_id IS NOT NULL",
       "CREATE UNIQUE INDEX idx_invoices_digiforma_id ON invoices(digiforma_id) WHERE digiforma_id IS NOT NULL",
       "CREATE UNIQUE INDEX idx_quotes_digiforma_id ON quotes(digiforma_id) WHERE digiforma_id IS NOT NULL",
+      // Digiforma invoice fields
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS client_address TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS client_city TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS client_postal_code TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS client_country_code TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS file_url TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS order_form TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_limit_days INTEGER",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS is_payment_limit_end_month BOOLEAN DEFAULT false",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS reference TEXT",
     ];
 
     console.log("\nMigration des colonnes digiforma_id...");
